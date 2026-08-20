@@ -1,0 +1,89 @@
+# CI：Go 测试/vet + 前端 lint/build + sqlc 生成一致性校验
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+jobs:
+  go-test:
+    name: Go test + vet
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: teammate
+          POSTGRES_DB: teammate
+        ports:
+          - "15432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "16379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Create test database
+        run: PGPASSWORD=teammate psql -h localhost -p 15432 -U postgres -c "CREATE DATABASE teammate_test;"
+      - name: Migrate (server)
+        run: go run ./cmd/teammate-server migrate ./internal/db/migrations
+      - name: Vet (server)
+        run: go vet ./...
+      - name: Test (server)
+        run: go test ./... -count=1
+      - name: Vet (agentd)
+        working-directory: agentd
+        run: go vet ./...
+      - name: Test (agentd)
+        working-directory: agentd
+        run: go test ./... -count=1
+
+  web-checks:
+    name: Web lint + build + unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  sqlc-check:
+    name: sqlc generate drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+      - name: Generate
+        run: sqlc generate
+      - name: Check no drift
+        run: git diff --exit-code internal/db/generated/

@@ -1,0 +1,73 @@
+# ==============================================================
+# Teammate Web — Next.js 多阶段 Docker 构建
+#
+# 构建：
+#   docker build -f product/Dockerfile.web -t teammate-web:latest .
+#
+# 国内镜像加速构建：
+#   docker build -f product/Dockerfile.web -t teammate-web:latest \
+#     --build-arg NPM_REGISTRY=https://registry.npmmirror.com .
+#
+# 运行：
+#   docker run -p 3000:3000 -e NEXT_PUBLIC_API_BASE_URL=http://api:8080 teammate-web:latest
+# ==============================================================
+
+# ---- 构建参数 ----
+ARG NODE_IMAGE=node:22-alpine
+
+# ---- 依赖安装阶段 ----
+FROM $NODE_IMAGE AS deps
+
+ARG NPM_REGISTRY
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+
+WORKDIR /app
+
+# 一并复制 pnpm-workspace.yaml：pnpm v11 靠其中的 allowBuilds 放行 esbuild/sharp/unrs-resolver 构建脚本
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# ---- 构建阶段 ----
+FROM $NODE_IMAGE AS builder
+
+ARG NPM_REGISTRY
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY web/ .
+
+# API 地址在构建时注入（rewrites 在 build 时求值）
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
+# WebSocket 地址在构建时注入（Next.js 构建期硬化进客户端包）
+ARG NEXT_PUBLIC_WS_URL=
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+
+RUN corepack enable && pnpm build
+
+# ---- 运行阶段 ----
+FROM $NODE_IMAGE AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# 复制构建产物
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

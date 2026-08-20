@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.test
+*.test.exe
+*.out
+vendor/
+
+# 测试（生产 server 不需要）
+test/
+
+# Node / Frontend（不需要在 Go 构建中出现）
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local
+
+# Docker
+product/.jwt_secret
+product/.encryption_key
+
+# CI / Plan / Docs
+.github/
+plan/
+*.md
+
+# 编译产物（本地构建的）
+teammate
+teammate-agentd

@@ -1,0 +1,237 @@
+/* globals.css 全局样式：主题变量、动画、滚动条等。 */
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── 动画关键帧 ─────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── 动画工具类 ───────────────────────────── */
+.animate-fade-in { animation: fade-in 0.3s ease-out both; }
+.animate-fade-in-up { animation: fade-in-up 0.35s ease-out both; }
+.animate-fade-in-down { animation: fade-in-down 0.3s ease-out both; }
+.animate-scale-in { animation: scale-in 0.25s ease-out both; }
+.animate-slide-in-right { animation: slide-in-right 0.3s ease-out both; }
+.animate-slide-in-left { animation: slide-in-left 0.3s ease-out both; }
+.animate-shimmer { animation: shimmer 1.8s ease-in-out infinite; }
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+.animate-spin-slow { animation: spin-slow 3s linear infinite; }
+
+/* 子元素错落动画 */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 280ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 360ms; }
+
+/* ── 过渡工具类（替代全局 * 过渡） ─── */
+.transition-colors-fast { transition: color 0.15s, background-color 0.15s, border-color 0.15s; }
+.transition-colors-normal { transition: color 0.2s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
+.transition-all-normal { transition: all 0.2s ease; }
+.transition-transform-fast { transition: transform 0.15s ease; }
+
+/* ── 骨架屏加载 ────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(100,116,139,0.08) 25%, rgba(100,116,139,0.18) 50%, rgba(100,116,139,0.08) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ── 卡片悬停浮起效果 ──────────────────────────────── */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+/* ── 按钮按压效果 ─────────────────────────────────── */
+.btn-press {
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+/* ── 弹窗遮罩与内容 ─────────────────────────────── */
+.modal-overlay {
+  animation: fade-in 0.2s ease-out both;
+}
+.modal-content {
+  animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── 页面进入动画 ────────────────────────────────── */
+.page-enter {
+  animation: fade-in-up 0.4s ease-out both;
+}
+
+/* ── 滚动条 ───────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* ── 聚焦环 ──────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+/* ── 文本选中 ───────────────────────────────────────────── */
+::selection {
+  background-color: rgba(59, 130, 246, 0.25);
+}
+
+/* ── 浅色模式调色板覆盖 ────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+  --color-slate-950: #f8fafc;
+  --color-slate-900: #ffffff;
+  --color-slate-800: #f1f5f9;
+  --color-slate-700: #e2e8f0;
+  --color-slate-600: #cbd5e1;
+  --color-slate-500: #94a3b8;
+  --color-slate-400: #64748b;
+  --color-slate-300: #475569;
+  --color-slate-200: #334155;
+  --color-white: #0f172a;
+  --color-black: #ffffff;
+  --tw-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+[data-theme="light"] select.bg-transparent {
+  color: #1e293b !important;
+}
+
+[data-theme="light"] ::placeholder {
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] thead,
+[data-theme="light"] th {
+  background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .bg-black\/60 {
+  background-color: rgba(241, 245, 249, 0.85) !important;
+}
+
+[data-theme="light"] .terminal-bg {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .terminal-titlebar {
+  background-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .chart-grid-line {
+  stroke: #e2e8f0 !important;
+}
+
+[data-theme="light"] .chart-axis-text {
+  fill: #64748b !important;
+}
+
+[data-theme="light"] .chart-ring-bg {
+  stroke: #e2e8f0 !important;
+}
+
+[data-theme="light"] .node-glow {
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25) !important;
+}
+
+[data-theme="light"] .cursor-blink {
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4) !important;
+}
+
+[data-theme="light"] .panel-shadow {
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .status-glow-green {
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4) !important;
+}
+
+[data-theme="light"] .login-bg-glow-blue {
+  background-color: rgba(59, 130, 246, 0.06) !important;
+}
+
+[data-theme="light"] .login-bg-glow-indigo {
+  background-color: rgba(99, 102, 241, 0.06) !important;
+}
+
+[data-theme="light"] .skeleton {
+  background: linear-gradient(90deg, rgba(148,163,184,0.1) 25%, rgba(148,163,184,0.25) 50%, rgba(148,163,184,0.1) 75%);
+  background-size: 200% 100%;
+}
+
+[data-theme="light"] .card-hover:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}

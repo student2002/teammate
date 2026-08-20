@@ -1,0 +1,6 @@
+# pnpm v11 通过 allowBuilds 按包放行依赖的安装后构建脚本。
+# esbuild（vitest/vite）、sharp（Next.js 图片优化）、unrs-resolver（ESLint 引入解析）。
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

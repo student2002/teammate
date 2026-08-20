@@ -1,0 +1,39 @@
+.atomcode/
+node_modules/
+.claude/
+.trae/
+
+# Go
+*.test
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+bin/
+web/.env.local
+
+# Secrets
+product/.jwt_secret
+product/.encryption_key
+product/.env
+/teammate
+/teammate.exe
+/teammate-agentd
+/teammate-agentd.exe
+/teammate-server
+/teammate-server.exe
+/*.test.exe
+# agentd 独立子模块
+/agentd/teammate-agentd
+/agentd/teammate-agentd.exe
+# agentd 本地工作目录（冒烟/执行用，不入库）
+/.agentd-workspace/
+# 冒烟用本地 git 仓库（测试数据，不入库）
+/.smoke-repo/
+/.smoke-repo.git/
+.workbuddy/
+CLAUDE.md
+plan/
+.zcode/
+docs/

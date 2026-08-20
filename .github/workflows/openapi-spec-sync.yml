@@ -1,0 +1,147 @@
+# CI 校验:gen-openapi 反射生成的 OpenAPI spec 必须与代码同步。
+#
+# 防漂移原理:
+#   - routes_*.go 中的路由注册是唯一真相源
+#   - gen-openapi 通过 chi.Walk 反射路由树生成 spec
+#   - 若开发者改了路由但忘跑 gen-openapi,git diff --exit-code 会失败
+#   - 强制开发者在 PR 中包含重新生成的 spec,杜绝文档与代码漂移
+#
+# 触发条件:
+#   - 任何 push 到 master/develop
+#   - 任何针对 master 的 PR
+#   - 路由相关文件变更时(通过 paths 过滤)
+name: OpenAPI Spec Sync Check
+
+on:
+  push:
+    branches: [master, develop]
+    paths:
+      - 'internal/server/routes*.go'
+      - 'internal/server/handler/*.go'
+      - 'internal/server/openapi_*.go'
+      - 'cmd/teammate/gen_openapi.go'
+      - 'docs/apifox/teammate-openapi.json'
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'internal/server/routes*.go'
+      - 'internal/server/handler/*.go'
+      - 'internal/server/openapi_*.go'
+      - 'cmd/teammate/gen_openapi.go'
+      - 'docs/apifox/teammate-openapi.json'
+
+jobs:
+  spec-sync:
+    name: gen-openapi drift check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Build gen-openapi
+        run: go build -o /tmp/teammate ./cmd/teammate
+
+      - name: Regenerate OpenAPI spec
+        run: /tmp/teammate gen-openapi -o docs/apifox/teammate-openapi.json
+
+      - name: Verify spec in sync (zero drift)
+        run: git diff --exit-code docs/apifox/teammate-openapi.json
+
+      - name: Validate spec structure
+        run: |
+          python3 -c "
+          import json, re, sys
+          with open('docs/apifox/teammate-openapi.json', encoding='utf-8') as f:
+              spec = json.load(f)
+
+          # 1. 基本结构校验
+          assert spec['openapi'] == '3.1.0', f'expected 3.1.0, got {spec[\"openapi\"]}'
+          assert len(spec['paths']) > 0, 'no paths generated'
+          assert 'BearerAuth' in spec['components']['securitySchemes'], 'missing BearerAuth'
+          assert 'ApiKeyAuth' in spec['components']['securitySchemes'], 'missing ApiKeyAuth'
+          assert 'Error' in spec['components']['schemas'], 'missing Error schema'
+
+          total = 0
+          methods = ['get','post','put','delete','patch','head','options']
+          bad_star_paths = []
+          bad_trailing_slash = []
+          bad_operation_ids = []
+          from collections import Counter
+          tag_counts = Counter()
+
+          op_id_pattern = re.compile(r'^[a-zA-Z0-9_-]+\$')
+
+          for path, pi in spec['paths'].items():
+              # 问题 1:path 模板不得含通配符 *(OpenAPI 3.1 仅允许 {param})
+              if '*' in path:
+                  bad_star_paths.append(path)
+              # 问题 2:不得有 trailing slash(根 / 除外)
+              if path.endswith('/') and path != '/':
+                  bad_trailing_slash.append(path)
+
+              for m in methods:
+                  op = pi.get(m)
+                  if not op:
+                      continue
+                  total += 1
+                  # 问题 4:operationId 必须匹配 ^[a-zA-Z0-9_-]+\$ (不含 *)
+                  op_id = op.get('operationId', '')
+                  if not op_id_pattern.match(op_id):
+                      bad_operation_ids.append((m, path, op_id))
+                  # 问题 3:统计 tag 分布,通用 tag 占比应 < 50%
+                  for t in op.get('tags', []):
+                      tag_counts[t] += 1
+
+          # 硬断言:问题 1/2/4 �容忍
+          assert not bad_star_paths, f'P1: paths contain * (violates OpenAPI 3.1): {bad_star_paths[:5]}'
+          assert not bad_trailing_slash, f'P2: trailing slash paths: {bad_trailing_slash[:5]}'
+          assert not bad_operation_ids, f'P4: invalid operationId (must match ^[a-zA-Z0-9_-]+\$): {bad_operation_ids[:5]}'
+
+          # 问题 3:通用 tag 占比应 < 50%(否则 pathToTag 剥离 /api 失效)
+          general_count = tag_counts.get('通用', 0)
+          general_ratio = general_count / total if total > 0 else 0
+          assert general_ratio < 0.5, f'P3: 通用 tag 占比 {general_ratio:.0%} ({general_count}/{total}) 过高,pathToTag 前缀剥离失效'
+
+          # 业务 schema \$ref 校验(问题 8):应至少有 Error + 1 个业务 Response schema
+          schemas = set(spec['components']['schemas'].keys())
+          assert 'Error' in schemas, 'missing Error schema'
+          response_schemas = [s for s in schemas if s.endswith('Response')]
+          assert len(response_schemas) >= 1, f'P8: no business Response schema registered (expected *Response DTOs)'
+
+          # 安全方案校验(问题 6):Agent 端点应有 per-operation ApiKeyAuth
+          agent_hints = ['/runtimes','token-exchange','/messages','/logs','git-branch','token-usage','rotate-token','in-progress-nodes','execution']
+          agent_with_sec = 0
+          agent_without_sec = []
+          for path, pi in spec['paths'].items():
+              if not any(h in path for h in agent_hints):
+                  continue
+              for m in ['get','post','put','delete','patch']:
+                  op = pi.get(m)
+                  if not op:
+                      continue
+                  if op.get('security'):
+                      agent_with_sec += 1
+                  else:
+                      agent_without_sec.append((m, path))
+          assert not agent_without_sec, f'P6: agent endpoints without per-op security: {agent_without_sec[:5]}'
+
+          print(f'OK: {len(spec[\"paths\"])} paths, {total} endpoints, {len(schemas)} schemas')
+          print(f'OK: tag dist: {dict(tag_counts.most_common(5))}, 通用占比 {general_ratio:.0%}')
+          print(f'OK: {agent_with_sec} agent endpoints with per-op ApiKeyAuth security')
+          print(f'OK: business Response schemas: {response_schemas}')
+          "
+        if: success()
+
+      - name: Upload spec artifact on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: teammate-openapi-drift
+          path: docs/apifox/teammate-openapi.json
+          retention-days: 7
