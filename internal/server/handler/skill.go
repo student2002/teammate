@@ -1,6 +1,6 @@
-// skill.go 提供技能（Skill）的创建、列表查询、更新和删除等 HTTP API 端点。
+// skill.go provides HTTP API endpoints for creating, listing, updating, and deleting skills.
 //
-// 技能是 AI 代理可执行的特定能力，包含提示模板和分类信息。
+// A skill is a specific capability that an AI agent can execute, containing a prompt template and category information.
 
 package handler
 
@@ -19,17 +19,17 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// SkillHandler 处理技能管理的 HTTP 请求，包括创建、查询、更新和删除技能。
+// SkillHandler handles HTTP requests for skill management, including creating, querying, updating, and deleting skills.
 type SkillHandler struct {
 	Svc *service.Service
 }
 
-// NewSkillHandler 创建 SkillHandler 实例。
+// NewSkillHandler creates a SkillHandler instance.
 func NewSkillHandler(svc *service.Service) *SkillHandler {
 	return &SkillHandler{Svc: svc}
 }
 
-// Routes 返回技能的完整路由表（包含读写操作）。
+// Routes returns the complete route table for skills (including read and write operations).
 func (h *SkillHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -41,7 +41,7 @@ func (h *SkillHandler) Routes() chi.Router {
 	return r
 }
 
-// ReadRoutes 返回技能的只读路由表。
+// ReadRoutes returns the read-only route table for skills.
 func (h *SkillHandler) ReadRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -50,7 +50,7 @@ func (h *SkillHandler) ReadRoutes() chi.Router {
 	return r
 }
 
-// WriteRoutes 返回技能的写入路由表。
+// WriteRoutes returns the write route table for skills.
 func (h *SkillHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -61,33 +61,33 @@ func (h *SkillHandler) WriteRoutes() chi.Router {
 	return r
 }
 
-// createSkillRequest 创建技能请求体。
+// createSkillRequest create skill request body.
 type createSkillRequest struct {
-	Name           string `json:"name"`            // 技能名称
-	Description    string `json:"description"`     // 技能描述
-	Category       string `json:"category"`        // 技能分类
-	PromptTemplate string `json:"prompt_template"` // 提示模板
+	Name           string `json:"name"`            // skill name
+	Description    string `json:"description"`     // skill description
+	Category       string `json:"category"`        // skill category
+	PromptTemplate string `json:"prompt_template"` // prompt template
 }
 
-// CreateSkill 处理 POST /workspaces/{workspaceId}/skills 端点，创建新的技能条目。
+// CreateSkill handles the POST /workspaces/{workspaceId}/skills endpoint, creating a new skill entry.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，技能名称（必填）
-//   - description: string，技能描述
-//   - category: string，技能分类
-//   - prompt_template: string，提示模板
+// Request body:
+//   - name: string, skill name (required)
+//   - description: string, skill description
+//   - category: string, skill category
+//   - prompt_template: string, prompt template
 //
-// 响应：
-//   - 201: 成功创建技能
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
+// Response:
+//   - 201: skill created successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
 func (h *SkillHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -98,27 +98,27 @@ func (h *SkillHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req createSkillRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 输入校验
+	// input validation
 	if err := validateCreateSkill(req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 创建技能
+	// call service to create the skill
 	skillSvc := service.NewSkillService(h.Svc)
 	skill, err := skillSvc.Create(r.Context(), buildCreateSkillParams(
 		workspaceID, req.Name, req.Description, req.Category, req.PromptTemplate,
@@ -132,15 +132,15 @@ func (h *SkillHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, skillResponse(skill))
 }
 
-// ListSkills 处理 GET /workspaces/{workspaceId}/skills 端点，列出工作区下的所有技能。
+// ListSkills handles the GET /workspaces/{workspaceId}/skills endpoint, listing all skills under the workspace.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回技能列表
-//   - 400: 工作区 ID 无效
+// Response:
+//   - 200: successfully returns the skill list
+//   - 400: invalid workspace ID
 func (h *SkillHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -148,7 +148,7 @@ func (h *SkillHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 调用 service 查询技能
+	// call service to query skills
 	skillSvc := service.NewSkillService(h.Svc)
 	skills, err := skillSvc.List(r.Context(), workspaceID)
 	if err != nil {
@@ -163,20 +163,20 @@ func (h *SkillHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, items)
 }
 
-// DeleteSkill 处理 DELETE /workspaces/{workspaceId}/skills/{id} 端点，删除指定的技能条目。
+// DeleteSkill handles the DELETE /workspaces/{workspaceId}/skills/{id} endpoint, deleting the specified skill entry.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功删除
-//   - 400: 技能 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 技能不存在
+// Response:
+//   - 204: deleted successfully
+//   - 400: invalid skill ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: skill does not exist
 func (h *SkillHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -187,19 +187,19 @@ func (h *SkillHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析技能 ID
+	// parse skill ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid skill id")
 		return
 	}
 
-	// 验证技能属于当前工作区
+	// verify the skill belongs to the current workspace
 	if checkSkillWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
 
-	// 调用 service 删除技能
+	// call service to delete the skill
 	skillSvc := service.NewSkillService(h.Svc)
 	if err := skillSvc.Delete(r.Context(), id); err != nil {
 		response.InternalServerError(w, err)
@@ -209,34 +209,34 @@ func (h *SkillHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// updateSkillRequest 更新技能请求体。
+// updateSkillRequest update skill request body.
 type updateSkillRequest struct {
-	Name           *string `json:"name,omitempty"`            // 技能名称（nil=保持）
-	Description    *string `json:"description,omitempty"`     // 技能描述（nil=保持）
-	Category       *string `json:"category,omitempty"`        // 技能分类（nil=保持）
-	PromptTemplate *string `json:"prompt_template,omitempty"` // 提示模板（nil=保持）
+	Name           *string `json:"name,omitempty"`            // skill name (nil=keep)
+	Description    *string `json:"description,omitempty"`     // skill description (nil=keep)
+	Category       *string `json:"category,omitempty"`        // skill category (nil=keep)
+	PromptTemplate *string `json:"prompt_template,omitempty"` // prompt template (nil=keep)
 }
 
-// UpdateSkill 处理 PUT /workspaces/{workspaceId}/skills/{id} 端点，更新技能的配置信息。
+// UpdateSkill handles the PUT /workspaces/{workspaceId}/skills/{id} endpoint, updating the skill's configuration info.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，技能名称
-//   - description: string，技能描述
-//   - category: string，技能分类
-//   - prompt_template: string，提示模板
+// Request body:
+//   - name: string, skill name
+//   - description: string, skill description
+//   - category: string, skill category
+//   - prompt_template: string, prompt template
 //
-// 响应：
-//   - 200: 成功返回更新后的技能信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 技能不存在
+// Response:
+//   - 200: successfully returns the updated skill info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: skill does not exist
 func (h *SkillHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -247,32 +247,32 @@ func (h *SkillHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析技能 ID
+	// parse skill ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid skill id")
 		return
 	}
 
-	// 验证技能属于当前工作区
+	// verify the skill belongs to the current workspace
 	if checkSkillWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req updateSkillRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 输入校验
+	// input validation
 	if err := validateUpdateSkill(req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 更新技能
+	// call service to update the skill
 	skillSvc := service.NewSkillService(h.Svc)
 	skill, err := skillSvc.Update(r.Context(), id, req.Name, req.Description, req.Category, req.PromptTemplate)
 	if err != nil {
@@ -283,9 +283,9 @@ func (h *SkillHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, skillResponse(skill))
 }
 
-// ---- 输入校验函数 ----
+// ---- input validation functions ----
 
-// validateCreateSkill 验证创建技能请求的输入合法性。
+// validateCreateSkill validates the input legality of the create skill request.
 func validateCreateSkill(req createSkillRequest) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return fmt.Errorf("name is required")
@@ -299,7 +299,7 @@ func validateCreateSkill(req createSkillRequest) error {
 	return nil
 }
 
-// validateUpdateSkill 验证更新技能请求的输入合法性。
+// validateUpdateSkill validates the input legality of the update skill request.
 func validateUpdateSkill(req updateSkillRequest) error {
 	if req.Name != nil {
 		if strings.TrimSpace(*req.Name) == "" {

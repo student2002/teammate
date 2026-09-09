@@ -1,7 +1,7 @@
-// routes_workspace.go 注册工作区级路由：工作区 CRUD、成员管理、工作流、技能、MCP、运行时、通知。
+// routes_workspace.go registers workspace-level routes: workspace CRUD, member management, workflows, skills, MCP, runtimes, notifications.
 //
-// 读写边界在路由层显式声明：viewer+ 可访问读路由，member+ 可访问写路由。
-// handler 层仍有二次校验作为兜底。
+// The read/write boundary is declared explicitly at the route layer: viewer+ can access read routes, member+ can access write routes.
+// The handler layer still performs a secondary check as a fallback.
 package server
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// registerWorkspaceRoutes 注册工作区作用域的路由。
+// registerWorkspaceRoutes registers workspace-scoped routes.
 func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 	svc := reg.svc
 
@@ -26,7 +26,7 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 
 		r.Get("/", wsHandler.GetWorkspace)
 
-		// 写操作需要 Owner/Admin（仅限人类用户，Agent 被拒绝）
+		// Write operations require Owner/Admin (human users only; Agents are rejected)
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin"}, "", reg.agentPerm))
 			r.Put("/", wsHandler.UpdateWorkspace)
@@ -36,60 +36,60 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 			r.Put("/members/{memberId}/role", wsHandler.UpdateMemberRole)
 		})
 
-		// 读操作：viewer 可查看成员列表（仅限人类用户，Agent 被拒绝）
+		// Read operations: viewer can view the member list (human users only; Agents are rejected)
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member", "viewer"}, "", reg.agentPerm))
 			r.Get("/members", wsHandler.ListMembers)
 		})
 
-		// 搜索 — 工作区作用域内只读
+		// Search — read-only within the workspace scope
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member", "viewer"}, types.PermTaskExecute, reg.agentPerm))
 			r.Mount("/search", handler.NewSearchHandler(svc).Routes())
 		})
 
-		// 读写分离：viewer+ 可读，member+ 可写
+		// Read/write separation: viewer+ can read, member+ can write
 		readPerm := svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member", "viewer"}, types.PermTaskExecute, reg.agentPerm)
 		writePerm := svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member"}, types.PermTaskExecute, reg.agentPerm)
 		permByMethod := methodBasedPerm(readPerm, writePerm)
 
-		// 工作流 — 读写分离
+		// Workflows — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/workflows", handler.NewWorkflowHandler(svc).Routes())
 		})
 
-		// 项目 — 读写分离
+		// Projects — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/projects", handler.NewProjectHandler(svc).Routes())
 		})
 
-		// 代理 — 读写分离
+		// Agents — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/agents", handler.NewAgentHandler(svc).Routes())
 		})
 
-		// 技能 — 读写分离
+		// Skills — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/skills", handler.NewSkillHandler(svc).Routes())
 		})
 
-		// MCP 服务器 — 读写分离
+		// MCP servers — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/mcp-servers", handler.NewMcpHandler(svc).Routes())
 		})
 
-		// 运行时 — 读写分离
+		// Runtimes — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
 			r.Mount("/runtimes", handler.NewRuntimeHandler(svc).Routes())
 		})
 
-		// 通知（仅 member+ 访问，Agent 被拒绝）
+		// Notifications (member+ access only; Agents are rejected)
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member"}, "", reg.agentPerm))
 			r.Mount("/notifications", handler.NewNotificationHandler(svc).Routes())
@@ -97,8 +97,8 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 	})
 }
 
-// methodBasedPerm 返回一个中间件，对安全方法（GET、HEAD、OPTIONS）应用 readPerm，
-// 对变更方法（POST、PUT、PATCH、DELETE）应用 writePerm。
+// methodBasedPerm returns a middleware that applies readPerm to safe methods (GET, HEAD, OPTIONS)
+// and writePerm to mutating methods (POST, PUT, PATCH, DELETE).
 func methodBasedPerm(readPerm, writePerm func(http.Handler) http.Handler) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		readHandler := readPerm(next)

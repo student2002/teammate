@@ -1,11 +1,11 @@
-// desensitize.go 提供日志内容脱敏功能，在发布前对敏感数据进行自动替换。
-// 支持脱敏的数据类型包括：API Key、Bearer Token、JWT、密码、电子邮件地址。
-// 脱敏规则在保护安全的同时保留足够的调试信息：
-//   - API Key 保留前缀（sk-/tm_/key_），其余替换为 ****
-//   - Bearer Token 全部替换为 "Bearer ****"
-//   - JWT 保留段首字符，其余替换为 ****
-//   - 密码保留键名，密码值替换为 ****
-//   - 邮箱保留首字符和域名
+// desensitize.go provides log-content masking, automatically replacing sensitive data before publishing.
+// Supported sensitive data types include: API Key, Bearer Token, JWT, password, and email address.
+// The masking rules preserve enough debugging information while protecting security:
+//   - API Key keeps the prefix (sk-/tm_/key_), the rest is replaced with ****
+//   - Bearer Token is fully replaced with "Bearer ****"
+//   - JWT keeps the first character of each segment, the rest is replaced with ****
+//   - Password keeps the key name, the password value is replaced with ****
+//   - Email keeps the first character and the domain
 package ws
 
 import (
@@ -14,42 +14,42 @@ import (
 )
 
 var (
-	// reAPIKey 匹配 API Key 格式：sk-...、tm_...、key_...
-	// 这些是 Teammate 系统中使用的令牌前缀。
+	// reAPIKey matches the API Key format: sk-..., tm_..., key_...
+	// These are the token prefixes used in the Teammate system.
 	reAPIKey = regexp.MustCompile(`(?i)(sk-|tm_|key_)[\w\-]{8,}`)
 
-	// reBearer 匹配 Bearer Token，格式为 "Bearer <token>"
+	// reBearer matches a Bearer Token, in the format "Bearer <token>"
 	reBearer = regexp.MustCompile(`(?i)Bearer\s+\S+`)
 
-	// reJWT 匹配 JWT 格式的令牌（三个 base64url 段用点分隔，以 eyJ 开头）
+	// reJWT matches JWT-format tokens (three base64url segments separated by dots, starting with eyJ)
 	reJWT = regexp.MustCompile(`eyJ[\w\-]+\.eyJ[\w\-]+\.[\w\-]+`)
 
-	// rePassword 匹配 password=、pass=、pwd= 后面的密码值
+	// rePassword matches the password value following password=, pass=, pwd=
 	rePassword = regexp.MustCompile(`(?i)(password|pass|pwd)\s*[=:]\s*\S+`)
 
-	// reEmail 匹配电子邮件地址格式
+	// reEmail matches the email address format
 	reEmail = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 )
 
-// Desensitize 在发布前对日志内容中的敏感数据进行脱敏处理。
-// 脱敏规则在保护安全的同时保留足够的调试信息，便于定位问题。
+// Desensitize masks sensitive data in the log content before publishing.
+// The masking rules preserve enough debugging information while protecting security, to help locate issues.
 //
-// 脱敏规则：
-//   - API Key：保留前缀（sk-/tm_/key_），其余替换为 ****
-//   - Bearer Token：全部替换为 "Bearer ****"
-//   - JWT：保留三段的首字符，其余替换为 ****
-//   - 密码：保留键名（如 password=），密码值替换为 ****
-//   - 邮箱：保留首字符和域名（如 j***@example.com）
+// Masking rules:
+//   - API Key: keep the prefix (sk-/tm_/key_), replace the rest with ****
+//   - Bearer Token: fully replaced with "Bearer ****"
+//   - JWT: keep the first character of each of the three segments, replace the rest with ****
+//   - Password: keep the key name (e.g. password=), replace the password value with ****
+//   - Email: keep the first character and the domain (e.g. j***@example.com)
 //
-// 参数：
-//   - content: 原始日志内容
+// Parameters:
+//   - content: the original log content
 //
-// 返回：
-//   - string: 脱敏后的日志内容
+// Returns:
+//   - string: the desensitized log content
 func Desensitize(content string) string {
 	s := content
 
-	// 脱敏 API Key — 保留前缀，其余替换为 ****
+	// Mask API Key — keep the prefix, replace the rest with ****
 	s = reAPIKey.ReplaceAllStringFunc(s, func(match string) string {
 		var prefix string
 		if strings.HasPrefix(match, "sk-") {
@@ -62,15 +62,15 @@ func Desensitize(content string) string {
 		return prefix + "****"
 	})
 
-	// 脱敏 Bearer Token
+	// Mask Bearer Token
 	s = reBearer.ReplaceAllString(s, "Bearer ****")
 
-	// 脱敏 JWT Token
+	// Mask JWT Token
 	s = reJWT.ReplaceAllString(s, "eyJ****.eyJ****.****")
 
-	// 脱敏密码 — 保留键名，密码值替换为 ****
+	// Mask password — keep the key name, replace the password value with ****
 	s = rePassword.ReplaceAllStringFunc(s, func(match string) string {
-		// 找到分隔符位置
+		// Find the separator position
 		for i, sep := range match {
 			if sep == '=' || sep == ':' {
 				key := strings.TrimSpace(match[:i])
@@ -80,7 +80,7 @@ func Desensitize(content string) string {
 		return "****"
 	})
 
-	// 脱敏邮箱 — 保留首字符和域名
+	// Mask email — keep the first character and the domain
 	s = reEmail.ReplaceAllStringFunc(s, func(match string) string {
 		parts := strings.SplitN(match, "@", 2)
 		if len(parts) == 2 && len(parts[0]) > 1 {

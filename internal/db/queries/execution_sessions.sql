@@ -1,4 +1,4 @@
--- 执行会话查询
+-- Execution session queries
 
 -- name: CreateExecutionSession :one
 INSERT INTO execution_sessions (runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, claude_session_id)

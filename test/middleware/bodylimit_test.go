@@ -1,4 +1,4 @@
-// bodylimit_test.go 覆盖请求体大小限制中间件的测试。
+// bodylimit_test.go covers tests for the request body size limit middleware.
 package middleware_test
 
 import (

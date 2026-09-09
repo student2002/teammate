@@ -1,4 +1,4 @@
-// community.go 提供社区工作流的数据访问操作。
+// community.go provides data access operations for community workflows.
 package store
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateCommunityWorkflow 创建一个社区工作流。
+// CreateCommunityWorkflow creates a community workflow.
 func (s *Store) CreateCommunityWorkflow(ctx context.Context, params types.CreateCommunityWorkflowParams) (types.CommunityWorkflow, error) {
 	dbParams, err := FromDomainCreateCommunityWorkflowParams(params)
 	if err != nil {
@@ -23,7 +23,7 @@ func (s *Store) CreateCommunityWorkflow(ctx context.Context, params types.Create
 	return ToDomainCommunityWorkflow(wf)
 }
 
-// ListCommunityWorkflows 列出所有社区工作流。
+// ListCommunityWorkflows lists all community workflows.
 func (s *Store) ListCommunityWorkflows(ctx context.Context) ([]types.CommunityWorkflow, error) {
 	wfs, err := s.q.ListCommunityWorkflows(ctx)
 	if err != nil {
@@ -32,7 +32,7 @@ func (s *Store) ListCommunityWorkflows(ctx context.Context) ([]types.CommunityWo
 	return ToDomainCommunityWorkflowSlice(wfs)
 }
 
-// GetCommunityWorkflow 根据 ID 获取社区工作流。
+// GetCommunityWorkflow gets a community workflow by ID.
 func (s *Store) GetCommunityWorkflow(ctx context.Context, id uuid.UUID) (types.CommunityWorkflow, error) {
 	wf, err := s.q.GetCommunityWorkflow(ctx, id)
 	if err != nil {

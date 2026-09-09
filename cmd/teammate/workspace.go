@@ -1,4 +1,4 @@
-// workspace.go 实现工作区子命令，管理工作区的增删改查和成员。
+// workspace.go implements the workspace subcommand, managing workspace CRUD operations and members.
 package main
 
 import (

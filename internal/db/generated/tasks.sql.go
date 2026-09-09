@@ -28,7 +28,7 @@ WHERE task_nodes.id = $1
   AND (reserved_for_agent_id IS NULL OR reserved_for_agent_id = $2)
   AND task_nodes.version = $3
   AND (
-    -- 线性前驱检查：首节点（任务内最小 sort_order，兼容 0 或 1 起始编号）或排序在前的最近节点已完成
+    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
     (SELECT sort_order FROM task_nodes WHERE id = $1) =
       (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
     OR EXISTS (
@@ -44,7 +44,7 @@ WHERE task_nodes.id = $1
     )
   )
   AND (
-    -- DAG 依赖检查：所有 depends_on 节点必须已完成
+    -- DAG dependency check: all depends_on nodes must have completed
     depends_on = '{}'
     OR NOT EXISTS (
       SELECT 1 FROM unnest(depends_on) AS dep_id
@@ -107,7 +107,7 @@ WHERE task_nodes.id = $1
   AND assignee_type = 'human'
   AND task_nodes.version = $3
   AND (
-    -- 线性前驱检查：首节点（任务内最小 sort_order，兼容 0 或 1 起始编号）或排序在前的最近节点已完成
+    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
     (SELECT sort_order FROM task_nodes WHERE id = $1) =
       (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
     OR EXISTS (
@@ -254,7 +254,7 @@ type CountTasksByStatusParams struct {
 	SearchQuery sql.NullString `db:"search_query" json:"search_query"`
 }
 
-// 统计指定项目和状态下的任务数量（支持搜索），用于历史任务页面分页计算。
+// Counts tasks under a given project and status (supports search), used for pagination calculation on the historical-tasks page.
 func (q *Queries) CountTasksByStatus(ctx context.Context, arg CountTasksByStatusParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countTasksByStatus, arg.ProjectID, arg.Status, arg.SearchQuery)
 	var count int64
@@ -391,7 +391,7 @@ type CreateTaskParams struct {
 	WorkflowName string         `db:"workflow_name" json:"workflow_name"`
 }
 
-// 任务查询
+// Task queries
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, createTask,
 		arg.ProjectID,
@@ -703,8 +703,8 @@ type GetInProgressNodesByAgentRow struct {
 	ProjectID            uuid.UUID             `db:"project_id" json:"project_id"`
 }
 
-// 查询指定 Agent 在指定工作区中认领但未完成（in_progress）的节点，
-// 用于 Agent 重启后恢复未完成的执行。
+// Queries the in_progress nodes claimed but not yet completed by a given Agent in a given workspace,
+// used to resume unfinished execution after an Agent restart.
 func (q *Queries) GetInProgressNodesByAgent(ctx context.Context, arg GetInProgressNodesByAgentParams) ([]GetInProgressNodesByAgentRow, error) {
 	rows, err := q.db.QueryContext(ctx, getInProgressNodesByAgent, arg.AssigneeID, arg.WorkspaceID)
 	if err != nil {
@@ -1710,7 +1710,7 @@ type ListTasksPaginatedParams struct {
 	Limit       int32          `db:"limit" json:"limit"`
 }
 
-// 分页查询指定项目内的任务（支持状态过滤和搜索），不过滤历史任务，供历史任务页面使用。
+// Paginated query for tasks within a given project (supports status filtering and search); does not filter out historical tasks, for use by the historical-tasks page.
 func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, listTasksPaginated,
 		arg.ProjectID,

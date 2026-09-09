@@ -34,7 +34,7 @@ type CreateMemoryParams struct {
 	Metadata     pqtype.NullRawMessage `db:"metadata" json:"metadata"`
 }
 
-// 记忆查询
+// Memory queries
 func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (Memory, error) {
 	row := q.db.QueryRowContext(ctx, createMemory,
 		arg.WorkspaceID,

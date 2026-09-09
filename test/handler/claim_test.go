@@ -1,4 +1,4 @@
-// claim_test.go 覆盖节点认领接口的测试。
+// claim_test.go tests covering the node claim API.
 package handler_test
 
 import (
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestClaimSelfReview 验证代理不能认领自己编写的前一个标准节点的审核节点（自审预防）。
+// TestClaimSelfReview verifies that an agent cannot claim a review node for a previous standard node it authored (self-review prevention).
 func TestClaimSelfReview(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -18,7 +18,7 @@ func TestClaimSelfReview(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 准备：项目、包含 code + review 节点的工作流
+	// Setup: project, workflow with code + review nodes
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
 	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
@@ -30,7 +30,7 @@ func TestClaimSelfReview(t *testing.T) {
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent1ID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
 
-	// 创建任务
+	// Create task
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 nodes, got %d", len(nodes))
@@ -40,7 +40,7 @@ func TestClaimSelfReview(t *testing.T) {
 	codeNodeID := nodes[0]["id"].(string)
 	reviewNodeID := nodes[1]["id"].(string)
 
-	// Agent 1 认领并完成 code 节点
+	// Agent 1 claims and completes the code node
 	claimedCode := claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
 	if claimedCode["status"] != "in_progress" {
 		t.Fatalf("code node: expected status 'in_progress', got %v", claimedCode["status"])
@@ -51,7 +51,7 @@ func TestClaimSelfReview(t *testing.T) {
 		t.Fatalf("code node: expected status 'completed' after approve, got %v", approvedCode["status"])
 	}
 
-	// 同一 Agent 尝试认领 review 节点 → 应返回 403（自我审查）
+	// Same agent attempts to claim review node → should return 403 (self-review)
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	claimBody := map[string]interface{}{
 		"agent_id": agent1ID,
@@ -62,7 +62,7 @@ func TestClaimSelfReview(t *testing.T) {
 	}
 	t.Logf("Self-review correctly blocked with 403, body: %s", respBody)
 
-	// 不同 Agent 尝试认领 review 节点 → 应成功
+	// Different agent attempts to claim review node → should succeed
 	claimBody2 := map[string]interface{}{
 		"agent_id": agent2ID,
 	}

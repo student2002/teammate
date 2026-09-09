@@ -1,4 +1,4 @@
-// workflow_trigger_test.go 覆盖工作流触发器业务逻辑的测试。
+// workflow_trigger_test.go covers tests for workflow trigger business logic.
 package service_test
 
 import (
@@ -19,7 +19,7 @@ func TestWorkflowTriggerService_ProcessDueSchedulesCreatesTask(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 6, 29, 9, 30, 0, 0, time.UTC)
 
-	config := json.RawMessage(`{"project_id":"` + env.projectID + `","interval_minutes":30,"title":"每日巡检","description":"检查项目状态"}`)
+	config := json.RawMessage(`{"project_id":"` + env.projectID + `","interval_minutes":30,"title":"Daily Inspection","description":"Check project status"}`)
 	dueAt := now.Add(-time.Minute)
 	tpl, _, err := svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID:    env.workspaceID,
@@ -30,7 +30,7 @@ func TestWorkflowTriggerService_ProcessDueSchedulesCreatesTask(t *testing.T) {
 		TriggerEnabled: true,
 		NextRunAt:      &dueAt,
 	}, []types.CreateTemplateNodeParams{
-		{Name: "执行巡检", SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60, MaxRejectCycles: 3},
+		{Name: "Perform Inspection", SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60, MaxRejectCycles: 3},
 	})
 	if err != nil {
 		t.Fatalf("create scheduled template: %v", err)
@@ -44,8 +44,8 @@ func TestWorkflowTriggerService_ProcessDueSchedulesCreatesTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAllTasks: %v", err)
 	}
-	if !hasTaskTitle(tasks, "每日巡检") {
-		t.Fatalf("expected task title 每日巡检 in tasks: %#v", tasks)
+	if !hasTaskTitle(tasks, "Daily Inspection") {
+		t.Fatalf("expected task title Daily Inspection in tasks: %#v", tasks)
 	}
 
 	updated, err := svc.Store.GetWorkflowTemplate(ctx, uuid.MustParse(tpl.ID))
@@ -73,7 +73,7 @@ func TestWorkflowTriggerService_GitHubIssueCreatesTaskAndDedupes(t *testing.T) {
 		TriggerConfig:  config,
 		TriggerEnabled: true,
 	}, []types.CreateTemplateNodeParams{
-		{Name: "处理 Issue", SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60, MaxRejectCycles: 3},
+		{Name: "Handle Issue", SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60, MaxRejectCycles: 3},
 	})
 	if err != nil {
 		t.Fatalf("create github template: %v", err)
@@ -84,8 +84,8 @@ func TestWorkflowTriggerService_GitHubIssueCreatesTaskAndDedupes(t *testing.T) {
 		Owner:      "acme",
 		Repo:       "rocket",
 		Number:     42,
-		Title:      "修复登录失败",
-		Body:       "用户无法登录",
+		Title:      "Fix login failure",
+		Body:       "User cannot log in",
 		URL:        "https://github.com/acme/rocket/issues/42",
 		Author:     "octocat",
 		Labels:     []string{"bug", "login"},
@@ -106,7 +106,7 @@ func TestWorkflowTriggerService_GitHubIssueCreatesTaskAndDedupes(t *testing.T) {
 	}
 	var matching int
 	for _, task := range tasks {
-		if strings.Contains(task.Title, "修复登录失败") {
+		if strings.Contains(task.Title, "Fix login failure") {
 			matching++
 			if !strings.Contains(task.Description, "https://github.com/acme/rocket/issues/42") {
 				t.Fatalf("task description %q does not include issue URL", task.Description)

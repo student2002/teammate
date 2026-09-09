@@ -1,19 +1,19 @@
-// auth.go 实现认证和授权的业务逻辑，包括登录、注册、JWT 令牌管理。
+// auth.go implements the business logic for authentication and authorization, including login, registration, and JWT token management.
 //
-// 本文件包含：
-//   - AuthService 结构体：认证服务，封装 JWT 令牌管理、登录/注册流程、会话交换等
-//   - Login：通过邮箱和密码进行认证，使用 Redis 做失败计数和账户锁定
-//   - Register：创建新成员账户并返回 JWT 令牌，密码 bcrypt 哈希存储
-//   - GenerateToken：为指定用户生成 JWT 令牌
-//   - ExchangeAPITokenForSession：将长期 API 令牌交换为短期会话令牌
-//   - Logout：吊销会话令牌使其立即失效
-//   - Whoami：获取当前已认证用户的信息
-//   - UpdateRuntimePublicKey/GetRuntimeByID/GetLatestPublicKeyForAgent：运行时公钥管理
-//   - CreateGitCredential/UpdateGitCredential/GetGitCredential：Git 凭据管理（不允许删除，保证任务分支可追溯）
-//   - ChangePassword/RequestPasswordReset/ResetPassword：密码管理
+// This file contains:
+//   - AuthService struct: the authentication service, encapsulating JWT token management, login/registration flows, and session exchange
+//   - Login: authenticates by email and password, using Redis for failure counting and account lockout
+//   - Register: creates a new member account and returns a JWT token, with passwords bcrypt-hashed
+//   - GenerateToken: generates a JWT token for the specified user
+//   - ExchangeAPITokenForSession: exchanges a long-lived API token for a short-lived session token
+//   - Logout: revokes the session token so it becomes invalid immediately
+//   - Whoami: retrieves information about the currently authenticated user
+//   - UpdateRuntimePublicKey/GetRuntimeByID/GetLatestPublicKeyForAgent: runtime public key management
+//   - CreateGitCredential/UpdateGitCredential/GetGitCredential: Git credential management (deletion is not allowed, ensuring task branches remain traceable)
+//   - ChangePassword/RequestPasswordReset/ResetPassword: password management
 //
-// 登录使用 Redis 做失败计数（5 次失败锁定 15 分钟）和 JWT jti 吊销支持。
-// JWT 令牌的 jti 存入 Redis，支持令牌吊销验证，TTL 与 JWT 过期时间一致。
+// Login uses Redis for failure counting (5 failures lock out for 15 minutes) and supports JWT jti revocation.
+// The JWT token's jti is stored in Redis, supporting token revocation verification, with a TTL matching the JWT expiration time.
 package service
 
 import (
@@ -34,14 +34,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ValidatePassword 校验密码强度。
-// 规则：8-128 位，至少包含一个大写字母、一个小写字母和一个数字。
+// ValidatePassword validates password strength.
+// Rules: 8-128 characters, must contain at least one uppercase letter, one lowercase letter, and one digit.
 //
-// 参数：
-//   - password: 待校验的密码
+// Parameters:
+//   - password: the password to validate
 //
-// 返回：
-//   - error: 密码不符合要求时返回描述性错误，符合时返回 nil
+// Returns:
+//   - error: a descriptive error when the password does not meet requirements, nil otherwise
 func ValidatePassword(password string) error {
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")
@@ -67,46 +67,46 @@ func ValidatePassword(password string) error {
 	return nil
 }
 
-// AuthService 提供认证和授权相关的业务逻辑。
-// 包含 JWT 令牌管理、登录/注册流程、会话令牌交换、密码重置等功能。
+// AuthService provides the business logic for authentication and authorization.
+// It includes JWT token management, login/registration flows, session token exchange, password reset, etc.
 type AuthService struct {
 	svc       *Service
-	JWTSecret string // JWT 签名密钥
+	JWTSecret string // JWT signing key
 }
 
-// NewAuthService 创建一个新的 AuthService 实例。
+// NewAuthService creates a new AuthService instance.
 func NewAuthService(svc *Service, jwtSecret string) *AuthService {
 	return &AuthService{svc: svc, JWTSecret: jwtSecret}
 }
 
-// LoginResult 保存登录操作的结果。
+// LoginResult holds the result of a login operation.
 type LoginResult struct {
-	Token       string        // JWT 令牌
-	ExpiresAt   time.Time     // 令牌过期时间
-	Member      types.Member  // 登录的成员信息（domain 幜格，不含 PasswordHash）
-	WorkspaceID uuid.UUID     // 默认工作区 ID
-	Role        string        // 成员在工作区中的角色
+	Token       string        // JWT token
+	ExpiresAt   time.Time     // token expiration time
+	Member      types.Member  // the logged-in member info (domain model, excluding PasswordHash)
+	WorkspaceID uuid.UUID     // default workspace ID
+	Role        string        // the member's role in the workspace
 }
 
-// Login 通过邮箱和密码进行成员认证登录。
-// 登录前检查账户是否因失败次数过多被锁定，
-// 登录成功后将 JWT jti 存入 Redis 以支持令牌吊销。
+// Login authenticates a member login by email and password.
+// Before login it checks whether the account is locked due to too many failures,
+// and on success stores the JWT jti in Redis to support token revocation.
 //
-// 步骤：
-//  1. 检查账户是否因失败尝试次数过多而被锁定（Redis 速率限制）
-//  2. 验证邮箱和密码，生成 JWT 令牌
-//  3. 登录失败时记录失败计数（Redis），达到阈值后锁定账户
-//  4. 登录成功时清除失败计数（Redis）
-//  5. 将 JWT jti 存入 Redis 用于令牌吊销验证（TTL 与 JWT 过期时间一致）
+// Steps:
+//  1. Check whether the account is locked due to too many failed attempts (Redis rate limiting)
+//  2. Verify the email and password, and generate a JWT token
+//  3. On login failure, record the failure count (Redis); lock the account once the threshold is reached
+//  4. On login success, clear the failure count (Redis)
+//  5. Store the JWT jti in Redis for token revocation verification (TTL matches the JWT expiration time)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱地址
-//   - password: 用户密码（明文，内部进行 bcrypt 验证）
+// Parameters:
+//   - ctx: request context
+//   - email: user email address
+//   - password: user password (plaintext; bcrypt verification is performed internally)
 //
-// 返回：
-//   - *LoginResult: 包含 JWT 令牌、过期时间、成员信息、工作区 ID 和角色
-//   - error: 可能的错误（账户锁定、密码错误、生成令牌失败）
+// Returns:
+//   - *LoginResult: contains the JWT token, expiration time, member info, workspace ID, and role
+//   - error: possible errors (account locked, wrong password, token generation failure)
 func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
 	if err := s.svc.Store.CheckLoginLockout(ctx, email, s.svc.Redis); err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 
 	s.svc.Store.RecordLoginSuccess(ctx, email, s.svc.Redis)
 
-	// 将 jti 存入 Redis 用于令牌验证（TTL 与 JWT 过期时间一致）
+	// Store the jti in Redis for token verification (TTL matches the JWT expiration time)
 	if s.svc.Redis != nil && result.JTI != "" {
 		ttl := time.Until(result.ExpiresAt)
 		if ttl > 0 {
@@ -139,32 +139,32 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 	}, nil
 }
 
-// RegisterResult 保存注册操作的结果。
+// RegisterResult holds the result of a registration operation.
 type RegisterResult struct {
-	Token       string        // JWT 令牌
-	ExpiresAt   time.Time     // 令牌过期时间
-	Member      types.Member  // 创建的成员信息（domain 幜格，不含 PasswordHash）
-	WorkspaceID uuid.UUID     // 默认工作区 ID
-	Role        string        // 成员在工作区中的角色
+	Token       string        // JWT token
+	ExpiresAt   time.Time     // token expiration time
+	Member      types.Member  // the created member info (domain model, excluding PasswordHash)
+	WorkspaceID uuid.UUID     // default workspace ID
+	Role        string        // the member's role in the workspace
 }
 
-// Register 创建一个新的成员账户并返回 JWT 令牌。
-// 注册成功后将 JWT jti 存入 Redis 以支持令牌吊销。
+// Register creates a new member account and returns a JWT token.
+// On success it stores the JWT jti in Redis to support token revocation.
 //
-// 步骤：
-//  1. 调用 Store 创建成员账户（密码 bcrypt 哈希存储）
-//  2. 生成 JWT 令牌
-//  3. 将 JWT jti 存入 Redis 用于令牌吊销验证
+// Steps:
+//  1. Call Store to create the member account (password is bcrypt-hashed)
+//  2. Generate a JWT token
+//  3. Store the JWT jti in Redis for token revocation verification
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - name: 用户名称
-//   - email: 用户邮箱地址（唯一）
-//   - password: 用户密码（明文，内部进行 bcrypt 哈希）
+// Parameters:
+//   - ctx: request context
+//   - name: user name
+//   - email: user email address (unique)
+//   - password: user password (plaintext; bcrypt hashing is performed internally)
 //
-// 返回：
-//   - *RegisterResult: 包含 JWT 令牌、过期时间、成员信息、工作区 ID 和角色
-//   - error: 可能的错误（邮箱已存在、数据库写入失败）
+// Returns:
+//   - *RegisterResult: contains the JWT token, expiration time, member info, workspace ID, and role
+//   - error: possible errors (email already exists, database write failure)
 func (s *AuthService) Register(ctx context.Context, name, email, password string) (*RegisterResult, error) {
 	if err := ValidatePassword(password); err != nil {
 		return nil, err
@@ -192,17 +192,17 @@ func (s *AuthService) Register(ctx context.Context, name, email, password string
 	}, nil
 }
 
-// EnsureOAuthWorkspace 为 OAuth 登录创建工作区和成员关系。
-// 如果成员不存在，创建新工作区（以 workspaceName 命名）并将成员添加为 owner。
+// EnsureOAuthWorkspace creates a workspace and member relationship for OAuth login.
+// If the member does not exist, it creates a new workspace (named after workspaceName) and adds the member as owner.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 ID
-//   - workspaceName: 工作区名称
+// Parameters:
+//   - ctx: request context
+//   - memberID: member ID
+//   - workspaceName: workspace name
 //
-// 返回：
-//   - types.Workspace: 创建的工作区
-//   - error: 可能的错误（数据库操作失败）
+// Returns:
+//   - types.Workspace: the created workspace
+//   - error: possible errors (database operation failure)
 func (s *AuthService) EnsureOAuthWorkspace(ctx context.Context, memberID uuid.UUID, workspaceName string) (types.Workspace, error) {
 	descStr := "Personal workspace"
 	workspace, err := s.svc.Store.CreateWorkspaceWithOwnerInTx(ctx, memberID, types.CreateWorkspaceParams{
@@ -217,41 +217,41 @@ func (s *AuthService) EnsureOAuthWorkspace(ctx context.Context, memberID uuid.UU
 	return workspace, nil
 }
 
-// GenerateToken 为指定用户生成 JWT 令牌。
+// GenerateToken generates a JWT token for the specified user.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - userID: 用户 ID
-//   - userType: 用户类型（member 或 agent）
-//   - workspaceID: 工作区 ID
-//   - role: 用户在工作区中的角色
+// Parameters:
+//   - ctx: request context
+//   - userID: user ID
+//   - userType: user type (member or agent)
+//   - workspaceID: workspace ID
+//   - role: the user's role in the workspace
 //
-// 返回：
-//   - string: 生成的 JWT 令牌
-//   - time.Time: 令牌过期时间
-//   - error: 可能的错误（令牌生成失败）
+// Returns:
+//   - string: the generated JWT token
+//   - time.Time: token expiration time
+//   - error: possible errors (token generation failure)
 func (s *AuthService) GenerateToken(userID uuid.UUID, userType string, workspaceID uuid.UUID, role string) (string, time.Time, error) {
 	token, expiresAt, _, err := store.GenerateJWT(userID, userType, s.JWTSecret)
 	return token, expiresAt, err
 }
 
-// SessionTokenResult 保存会话令牌交换操作的结果。
+// SessionTokenResult holds the result of a session token exchange operation.
 type SessionTokenResult struct {
-	SessionToken string    // 会话令牌
-	ExpiresAt    time.Time // 会话令牌过期时间
-	AgentID      uuid.UUID // 关联的代理 ID
+	SessionToken string    // session token
+	ExpiresAt    time.Time // session token expiration time
+	AgentID      uuid.UUID // associated agent ID
 }
 
-// ExchangeAPITokenForSession 将 API 令牌交换为会话令牌。
-// API 令牌是长期有效的，会话令牌是短期的，用于 Agentd 守护进程的日常通信。
+// ExchangeAPITokenForSession exchanges an API token for a session token.
+// The API token is long-lived, while the session token is short-lived and used for the Agentd daemon's daily communication.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - apiToken: API 令牌
+// Parameters:
+//   - ctx: request context
+//   - apiToken: API token
 //
-// 返回：
-//   - *SessionTokenResult: 包含会话令牌、过期时间和代理 ID
-//   - error: 可能的错误（API 令牌无效或已过期）
+// Returns:
+//   - *SessionTokenResult: contains the session token, expiration time, and agent ID
+//   - error: possible errors (API token invalid or expired)
 func (s *AuthService) ExchangeAPITokenForSession(ctx context.Context, apiToken string) (*SessionTokenResult, error) {
 	result, err := s.svc.Store.ExchangeAPITokenForSession(ctx, apiToken)
 	if err != nil {
@@ -264,138 +264,138 @@ func (s *AuthService) ExchangeAPITokenForSession(ctx context.Context, apiToken s
 	}, nil
 }
 
-// Logout 吊销当前会话令牌，使其立即失效。
+// Logout revokes the current session token, making it invalid immediately.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - token: 要吊销的会话令牌
+// Parameters:
+//   - ctx: request context
+//   - token: the session token to revoke
 //
-// 返回：
-//   - error: 可能的错误（数据库删除失败）
+// Returns:
+//   - error: possible errors (database deletion failure)
 func (s *AuthService) Logout(ctx context.Context, token string) error {
 	return s.svc.Store.DeleteSessionToken(ctx, token)
 }
 
-// WhoamiInfo 是已认证用户的详细信息类型别名。
+// WhoamiInfo is a type alias for the detailed info of an authenticated user.
 type WhoamiInfo = store.WhoamiInfo
 
-// Whoami 获取当前已认证用户的信息，包括成员详情和工作区角色。
+// Whoami retrieves information about the currently authenticated user, including member details and workspace role.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - ownerType: 所有者类型（member 或 agent）
-//   - ownerID: 所有者 ID
+// Parameters:
+//   - ctx: request context
+//   - ownerType: owner type (member or agent)
+//   - ownerID: owner ID
 //
-// 返回：
-//   - *WhoamiInfo: 用户详细信息
-//   - error: 可能的错误（用户不存在）
+// Returns:
+//   - *WhoamiInfo: user detailed info
+//   - error: possible errors (user does not exist)
 func (s *AuthService) Whoami(ctx context.Context, ownerType string, ownerID uuid.UUID) (*WhoamiInfo, error) {
 	return s.svc.Store.GetWhoamiInfo(ctx, ownerType, ownerID)
 }
 
-// UpdateRuntimePublicKey 更新运行时的公钥，用于 Git 操作的 SSH 认证。
+// UpdateRuntimePublicKey updates the runtime's public key, used for SSH authentication in Git operations.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: 运行时 ID
-//   - publicKey: 新的 SSH 公钥
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: runtime ID
+//   - publicKey: the new SSH public key
 //
-// 返回：
-//   - error: 可能的错误（运行时不存在、数据库更新失败）
+// Returns:
+//   - error: possible errors (runtime does not exist, database update failure)
 func (s *AuthService) UpdateRuntimePublicKey(ctx context.Context, runtimeID uuid.UUID, publicKey string) error {
 	return s.svc.Store.UpdateRuntimePublicKey(ctx, runtimeID, publicKey)
 }
 
-// GetRuntimeByID 根据 ID 获取运行时信息。
+// GetRuntimeByID retrieves runtime info by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: 运行时 ID
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: runtime ID
 //
-// 返回：
-//   - types.Runtime: 运行时信息
-//   - error: 可能的错误（运行时不存在）
+// Returns:
+//   - types.Runtime: runtime info
+//   - error: possible errors (runtime does not exist)
 func (s *AuthService) GetRuntimeByID(ctx context.Context, runtimeID uuid.UUID) (types.Runtime, error) {
 	return s.svc.Store.GetRuntimeByID(ctx, runtimeID)
 }
 
-// GetLatestPublicKeyForAgent 获取指定代理的最新公钥。
+// GetLatestPublicKeyForAgent retrieves the latest public key for the specified agent.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: 代理 ID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent ID
 //
-// 返回：
-//   - string: 最新的 SSH 公钥
-//   - error: 可能的错误（代理不存在、无公钥记录）
+// Returns:
+//   - string: the latest SSH public key
+//   - error: possible errors (agent does not exist, no public key record)
 func (s *AuthService) GetLatestPublicKeyForAgent(ctx context.Context, agentID uuid.UUID) (string, error) {
 	return s.svc.Store.GetLatestPublicKeyForAgent(ctx, agentID)
 }
 
-// GetGitCredentialsByProject 获取指定项目的所有 Git 凭据。
-// 凭据中的 PAT（Personal Access Token）使用 RSA + AES 加密存储。
+// GetGitCredentialsByProject retrieves all Git credentials for the specified project.
+// PATs (Personal Access Tokens) in the credentials are stored using RSA + AES encryption.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - []types.GitCredential: Git 凭据列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.GitCredential: list of Git credentials
+//   - error: possible errors (database query failure)
 func (s *AuthService) GetGitCredentialsByProject(ctx context.Context, projectID uuid.UUID) ([]types.GitCredential, error) {
 	return s.svc.Store.GetGitCredentialsByProject(ctx, projectID)
 }
 
-// CreateGitCredential 创建一个新的 Git 凭据。
+// CreateGitCredential creates a new Git credential.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - arg: 创建 Git 凭据的参数
+// Parameters:
+//   - ctx: request context
+//   - arg: parameters for creating the Git credential
 //
-// 返回：
-//   - types.GitCredential: 创建的 Git 凭据
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.GitCredential: the created Git credential
+//   - error: possible errors (database write failure)
 func (s *AuthService) CreateGitCredential(ctx context.Context, arg types.CreateGitCredentialParams) (types.GitCredential, error) {
 	return s.svc.Store.CreateGitCredential(ctx, arg)
 }
 
-// UpdateGitCredential 更新一个已有的 Git 凭据。
+// UpdateGitCredential updates an existing Git credential.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - arg: 更新 Git 凭据的参数
+// Parameters:
+//   - ctx: request context
+//   - arg: parameters for updating the Git credential
 //
-// 返回：
-//   - types.GitCredential: 更新后的 Git 凭据
-//   - error: 可能的错误（凭据不存在、数据库更新失败）
+// Returns:
+//   - types.GitCredential: the updated Git credential
+//   - error: possible errors (credential does not exist, database update failure)
 func (s *AuthService) UpdateGitCredential(ctx context.Context, arg types.UpdateGitCredentialParams) (types.GitCredential, error) {
 	return s.svc.Store.UpdateGitCredential(ctx, arg)
 }
 
-// GetGitCredential 根据 ID 获取单个 Git 凭据。
+// GetGitCredential retrieves a single Git credential by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: Git 凭据 ID
+// Parameters:
+//   - ctx: request context
+//   - id: Git credential ID
 //
-// 返回：
-//   - types.GitCredential: Git 凭据信息
-//   - error: 可能的错误（凭据不存在）
+// Returns:
+//   - types.GitCredential: Git credential info
+//   - error: possible errors (credential does not exist)
 func (s *AuthService) GetGitCredential(ctx context.Context, id uuid.UUID) (types.GitCredential, error) {
 	return s.svc.Store.GetGitCredential(ctx, id)
 }
 
-// ChangePassword 在验证旧密码后修改成员密码。
-// 新密码使用 bcrypt 哈希存储。
+// ChangePassword changes the member's password after verifying the old password.
+// The new password is stored as a bcrypt hash.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 ID
-//   - oldPassword: 当前密码（用于验证）
-//   - newPassword: 新密码
+// Parameters:
+//   - ctx: request context
+//   - memberID: member ID
+//   - oldPassword: current password (for verification)
+//   - newPassword: new password
 //
-// 返回：
-//   - error: 可能的错误（旧密码错误、成员不存在）
+// Returns:
+//   - error: possible errors (wrong old password, member does not exist)
 func (s *AuthService) ChangePassword(ctx context.Context, memberID uuid.UUID, oldPassword, newPassword string) error {
 	if err := ValidatePassword(newPassword); err != nil {
 		return err
@@ -403,36 +403,36 @@ func (s *AuthService) ChangePassword(ctx context.Context, memberID uuid.UUID, ol
 	return s.svc.Store.ChangePassword(ctx, memberID, oldPassword, newPassword)
 }
 
-// RequestPasswordReset 为指定邮箱生成密码重置令牌。
-// 如果邮箱不存在或属于 OAuth 用户，返回空字符串且不报错（防止邮箱枚举攻击）。
+// RequestPasswordReset generates a password reset token for the specified email.
+// If the email does not exist or belongs to an OAuth user, it returns an empty string without error (to prevent email enumeration attacks).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱地址
+// Parameters:
+//   - ctx: request context
+//   - email: user email address
 //
-// 返回：
-//   - string: 密码重置令牌（邮箱不存在时返回空字符串）
-//   - error: 可能的错误（数据库操作失败）
+// Returns:
+//   - string: password reset token (empty string when the email does not exist)
+//   - error: possible errors (database operation failure)
 func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) (string, error) {
 	return s.svc.Store.CreatePasswordResetToken(ctx, email)
 }
 
-// APIKeyAuthResult 保存 API key 或会话令牌认证的结果。
+// APIKeyAuthResult holds the result of API key or session token authentication.
 type APIKeyAuthResult struct {
-	UserID   uuid.UUID // 用户 ID
-	UserType string    // 用户类型："member" 或 "agent"
+	UserID   uuid.UUID // user ID
+	UserType string    // user type: "member" or "agent"
 }
 
-// AuthenticateAPIKey 验证 API key 或会话令牌并返回认证结果。
-// 通过 SHA-256 哈希查询 auth_tokens 表，再用 bcrypt 验证令牌安全性。
+// AuthenticateAPIKey verifies an API key or session token and returns the authentication result.
+// It queries the auth_tokens table by SHA-256 hash, then uses bcrypt to verify token security.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - tokenStr: 待验证的令牌字符串（st_ 前缀为会话令牌，tm_ 前缀为 API 令牌）
+// Parameters:
+//   - ctx: request context
+//   - tokenStr: the token string to verify (st_ prefix for session tokens, tm_ prefix for API tokens)
 //
-// 返回：
-//   - APIKeyAuthResult: 认证结果，包含用户 ID 和类型
-//   - error: 令牌无效、过期或查询失败时返回错误
+// Returns:
+//   - APIKeyAuthResult: the authentication result, containing the user ID and type
+//   - error: returned when the token is invalid, expired, or the query fails
 func (s *AuthService) AuthenticateAPIKey(ctx context.Context, tokenStr string) (APIKeyAuthResult, error) {
 	lookupHash := sha256Hash(tokenStr)
 
@@ -465,22 +465,22 @@ func (s *AuthService) AuthenticateAPIKey(ctx context.Context, tokenStr string) (
 	}, nil
 }
 
-// sha256Hash 计算字符串的 SHA-256 哈希值并以十六进制返回。
+// sha256Hash computes the SHA-256 hash of a string and returns it in hexadecimal form.
 func sha256Hash(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
 }
 
-// ResetPassword 使用有效的重置令牌重置成员密码。
-// 令牌验证成功后立即作废，防止重复使用。
+// ResetPassword resets a member's password using a valid reset token.
+// After the token is successfully verified, it is invalidated immediately to prevent reuse.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - token: 密码重置令牌
-//   - newPassword: 新密码
+// Parameters:
+//   - ctx: request context
+//   - token: password reset token
+//   - newPassword: new password
 //
-// 返回：
-//   - error: 可能的错误（令牌无效或已过期、数据库更新失败）
+// Returns:
+//   - error: possible errors (token invalid or expired, database update failure)
 func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
 	if err := ValidatePassword(newPassword); err != nil {
 		return err

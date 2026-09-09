@@ -1,6 +1,6 @@
-// mcp.go 提供 MCP（Model Context Protocol）服务器的创建、查询、更新、删除、健康检查及状态管理等 HTTP API 端点。
+// mcp.go provides HTTP API endpoints for creating, querying, updating, deleting, health-checking, and managing the status of MCP (Model Context Protocol) servers.
 //
-// MCP 服务器是 AI 代理可调用的外部工具服务，支持多种认证方式（API Key、OAuth 等）。
+// MCP servers are external tool services that AI agents can call, supporting multiple authentication methods (API Key, OAuth, etc.).
 
 package handler
 
@@ -21,17 +21,17 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// McpHandler 处理 MCP 服务器管理的 HTTP 请求，包括创建、查询、更新、删除、健康检查及状态管理。
+// McpHandler handles HTTP requests for MCP server management, including creating, querying, updating, deleting, health-checking, and status management.
 type McpHandler struct {
 	Svc *service.Service
 }
 
-// NewMcpHandler 创建 McpHandler 实例。
+// NewMcpHandler creates an McpHandler instance.
 func NewMcpHandler(svc *service.Service) *McpHandler {
 	return &McpHandler{Svc: svc}
 }
 
-// Routes 返回 MCP 服务器的完整路由表（包含读写操作）。
+// Routes returns the complete route table for MCP servers (including read and write operations).
 func (h *McpHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -43,7 +43,7 @@ func (h *McpHandler) Routes() chi.Router {
 	return r
 }
 
-// ReadRoutes 返回 MCP 服务器的只读路由表。
+// ReadRoutes returns the read-only route table for MCP servers.
 func (h *McpHandler) ReadRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -52,7 +52,7 @@ func (h *McpHandler) ReadRoutes() chi.Router {
 	return r
 }
 
-// WriteRoutes 返回 MCP 服务器的写入路由表。
+// WriteRoutes returns the write route table for MCP servers.
 func (h *McpHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -63,27 +63,27 @@ func (h *McpHandler) WriteRoutes() chi.Router {
 	return r
 }
 
-// CreateMcpServer 处理 POST /workspaces/{workspaceId}/mcp-servers 端点，创建新的 MCP 服务器配置。
+// CreateMcpServer handles the POST /workspaces/{workspaceId}/mcp-servers endpoint, creating a new MCP server configuration.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，服务器名称（必填）
-//   - url: string，服务器 URL
-//   - type: string，服务器类型
-//   - auth_type: string，认证类型
-//   - env_vars: object，环境变量
-//   - status: string，初始状态，默认 "active"
+// Request body:
+//   - name: string, server name (required)
+//   - url: string, server URL
+//   - type: string, server type
+//   - auth_type: string, authentication type
+//   - env_vars: object, environment variables
+//   - status: string, initial status, default "active"
 //
-// 响应：
-//   - 201: 成功创建 MCP 服务器
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
+// Response:
+//   - 201: MCP server created successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
 func (h *McpHandler) CreateMcpServer(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -94,44 +94,44 @@ func (h *McpHandler) CreateMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req createMcpServerRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 输入校验
+	// input validation
 	if err := validateCreateMcpServer(req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 设置默认状态
+	// set default status
 	status := req.Status
 	if status == "" {
 		status = "active"
 	}
 
-	// 转换环境变量
+	// convert environment variables
 	var envVars pqtype.NullRawMessage
 	if req.EnvVars != nil {
 		envVars = pqtype.NullRawMessage{RawMessage: req.EnvVars, Valid: true}
-		// 验证 env_vars 是有效 JSON 对象
+		// validate that env_vars is a valid JSON object
 		if err := validateEnvVarsObject(req.EnvVars); err != nil {
 			response.BadRequest(w, err.Error())
 			return
 		}
 	}
 
-	// 调用 service 创建 MCP 服务器
+	// call service to create the MCP server
 	mcpSvc := service.NewMcpService(h.Svc)
 	server, err := mcpSvc.Create(r.Context(), buildCreateMcpServerParams(
 		workspaceID, req.Name, req.Url, req.Type, req.AuthType, envVars, status,
@@ -145,15 +145,15 @@ func (h *McpHandler) CreateMcpServer(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, mcpServerResponse(server))
 }
 
-// ListMcpServers 处理 GET /workspaces/{workspaceId}/mcp-servers 端点，列出工作区下的所有 MCP 服务器。
+// ListMcpServers handles the GET /workspaces/{workspaceId}/mcp-servers endpoint, listing all MCP servers under the workspace.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回 MCP 服务器列表
-//   - 400: 工作区 ID 无效
+// Response:
+//   - 200: successfully returns the MCP server list
+//   - 400: invalid workspace ID
 func (h *McpHandler) ListMcpServers(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -161,7 +161,7 @@ func (h *McpHandler) ListMcpServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 调用 service 查询 MCP 服务器
+	// call service to query MCP servers
 	mcpSvc := service.NewMcpService(h.Svc)
 	servers, err := mcpSvc.List(r.Context(), workspaceID)
 	if err != nil {
@@ -176,30 +176,30 @@ func (h *McpHandler) ListMcpServers(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, items)
 }
 
-// UpdateMcpServerStatus 处理 PUT /workspaces/{workspaceId}/mcp-servers/{id}/status 端点，更新 MCP 服务器的运行状态。
+// UpdateMcpServerStatus handles the PUT /workspaces/{workspaceId}/mcp-servers/{id}/status endpoint, updating the MCP server's running status.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - status: string，新状态（必填）
+// Request body:
+//   - status: string, new status (required)
 //
-// 响应：
-// DeleteMcpServer 处理 DELETE /workspaces/{workspaceId}/mcp-servers/{id} 端点，删除指定的 MCP 服务器。
+// Response:
+// DeleteMcpServer handles the DELETE /workspaces/{workspaceId}/mcp-servers/{id} endpoint, deleting the specified MCP server.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功删除
-//   - 400: 服务器 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: MCP 服务器不存在
+// Response:
+//   - 204: deleted successfully
+//   - 400: invalid server ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: MCP server does not exist
 func (h *McpHandler) DeleteMcpServer(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -210,19 +210,19 @@ func (h *McpHandler) DeleteMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析服务器 ID
+	// parse server ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid server id")
 		return
 	}
 
-	// 验证 MCP 服务器属于当前工作区
+	// verify the MCP server belongs to the current workspace
 	if checkMcpServerWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
 
-	// 调用 service 删除 MCP 服务器
+	// call service to delete the MCP server
 	mcpSvc := service.NewMcpService(h.Svc)
 	if err := mcpSvc.Delete(r.Context(), id); err != nil {
 		response.InternalServerError(w, err)
@@ -232,28 +232,28 @@ func (h *McpHandler) DeleteMcpServer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// UpdateMcpServer 处理 PUT /workspaces/{workspaceId}/mcp-servers/{id} 端点，更新 MCP 服务器的配置信息。
+// UpdateMcpServer handles the PUT /workspaces/{workspaceId}/mcp-servers/{id} endpoint, updating the MCP server's configuration info.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，服务器名称
-//   - url: string，服务器 URL
-//   - type: string，服务器类型
-//   - auth_type: string，认证类型
-//   - env_vars: object，环境变量
-//   - status: string，服务器状态，默认 "active"
+// Request body:
+//   - name: string, server name
+//   - url: string, server URL
+//   - type: string, server type
+//   - auth_type: string, authentication type
+//   - env_vars: object, environment variables
+//   - status: string, server status, default "active"
 //
-// 响应：
-//   - 200: 成功返回更新后的服务器信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: MCP 服务器不存在
+// Response:
+//   - 200: successfully returns the updated server info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: MCP server does not exist
 func (h *McpHandler) UpdateMcpServer(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -264,26 +264,26 @@ func (h *McpHandler) UpdateMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析服务器 ID
+	// parse server ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid server id")
 		return
 	}
 
-	// 验证 MCP 服务器属于当前工作区
+	// verify the MCP server belongs to the current workspace
 	if checkMcpServerWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req updateMcpServerRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 输入校验（所有指针字段：nil=保持，非 nil=替换）
+	// input validation (all pointer fields: nil=keep, non-nil=replace)
 	if err := validateUpdateMcpServer(req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
@@ -295,7 +295,7 @@ func (h *McpHandler) UpdateMcpServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 调用 service 更新 MCP 服务器（指针字段 nil=保持现有值）
+	// call service to update the MCP server (pointer fields nil=keep existing value)
 	mcpSvc := service.NewMcpService(h.Svc)
 	server, err := mcpSvc.Update(r.Context(), id, req.Name, req.Url, req.Type, req.AuthType, req.EnvVars, req.Status)
 	if err != nil {
@@ -306,9 +306,9 @@ func (h *McpHandler) UpdateMcpServer(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, mcpServerResponse(server))
 }
 
-// ---- 输入校验函数 ----
+// ---- input validation functions ----
 
-// validateCreateMcpServer 验证创建 MCP 服务器请求的输入合法性。
+// validateCreateMcpServer validates the input legality of the create MCP server request.
 func validateCreateMcpServer(req createMcpServerRequest) error {
 	if len(req.Name) == 0 {
 		return fmt.Errorf("name is required")
@@ -319,8 +319,8 @@ func validateCreateMcpServer(req createMcpServerRequest) error {
 	return validateMcpFields(req.Name, req.Url, req.Type, string(req.AuthType))
 }
 
-// validateUpdateMcpServer 验证更新 MCP 服务器请求的输入合法性（与 create 共用字段校验）。
-// 指针字段 non-nil 且为空字符串时拒绝（禁止显式写空值）。
+// validateUpdateMcpServer validates the input legality of the update MCP server request (shares field validation with create).
+// Pointer fields that are non-nil and empty string are rejected (explicitly writing empty values is forbidden).
 func validateUpdateMcpServer(req updateMcpServerRequest) error {
 	name := ""
 	if req.Name != nil {
@@ -344,8 +344,8 @@ func validateUpdateMcpServer(req updateMcpServerRequest) error {
 	return validateMcpFields(name, url, mcpType, authType)
 }
 
-// validateMcpFields 校验 MCP 服务器公共字段（名称、URL、类型、认证类型）。
-// name 为空时不校验长度（更新场景可为空，表示保持现有值）。
+// validateMcpFields validates the common MCP server fields (name, URL, type, auth type).
+// When name is empty, length is not validated (in the update scenario it can be empty, meaning keep the existing value).
 func validateMcpFields(name, url, mcpType, authType string) error {
 	if len(name) > 200 {
 		return fmt.Errorf("name must be at most 200 characters")
@@ -365,7 +365,7 @@ func validateMcpFields(name, url, mcpType, authType string) error {
 	return nil
 }
 
-// validateEnvVarsObject 验证 env_vars 是合法的 JSON 对象。
+// validateEnvVarsObject validates that env_vars is a valid JSON object.
 func validateEnvVarsObject(raw json.RawMessage) error {
 	var obj map[string]interface{}
 	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {

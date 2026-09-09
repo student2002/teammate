@@ -41,7 +41,7 @@ type CreateSubtaskParams struct {
 	ParentTaskID sql.NullInt32  `db:"parent_task_id" json:"parent_task_id"`
 }
 
-// 子任务查询
+// Subtask queries
 func (q *Queries) CreateSubtask(ctx context.Context, arg CreateSubtaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, createSubtask,
 		arg.ProjectID,

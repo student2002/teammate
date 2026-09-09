@@ -1,6 +1,6 @@
-// community.go 提供社区工作流模板的创建、列表查询和导入等 HTTP API 端点。
+// community.go provides HTTP API endpoints for creating, listing, and importing community workflow templates.
 //
-// 社区工作流模板是全局共享的，可被导入到任意工作区。
+// Community workflow templates are globally shared and can be imported into any workspace.
 
 package handler
 
@@ -18,17 +18,17 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// CommunityHandler 处理社区工作流模板的 HTTP 请求，包括创建、查询和导入社区工作流。
+// CommunityHandler handles HTTP requests related to community workflow templates, including creating, querying, and importing community workflows.
 type CommunityHandler struct {
 	Svc *service.Service
 }
 
-// NewCommunityHandler 创建 CommunityHandler 实例。
+// NewCommunityHandler creates a CommunityHandler instance.
 func NewCommunityHandler(svc *service.Service) *CommunityHandler {
 	return &CommunityHandler{Svc: svc}
 }
 
-// Routes 返回社区工作流的路由表。
+// Routes returns the route table for community workflows.
 func (h *CommunityHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -39,54 +39,54 @@ func (h *CommunityHandler) Routes() chi.Router {
 	return r
 }
 
-// createCommunityWorkflowRequest 创建社区工作流请求体。
+// createCommunityWorkflowRequest create community workflow request body.
 type createCommunityWorkflowRequest struct {
-	Name                         string          `json:"name"`                          // 工作流名称
-	Description                  string          `json:"description"`                   // 工作流描述
-	Author                       string          `json:"author"`                        // 作者
-	Version                      string          `json:"version"`                       // 版本号
-	WorkflowDefinition           json.RawMessage `json:"workflow_definition"`            // 工作流定义（JSON）
-	RequiredSkills               json.RawMessage `json:"required_skills"`               // 所需技能（JSON）
-	RequiredMcpServers           json.RawMessage `json:"required_mcp_servers"`           // 所需 MCP 服务器（JSON）
-	RecommendedAgentInstructions json.RawMessage `json:"recommended_agent_instructions"` // 推荐代理指令（JSON）
-	IsOfficial                   bool            `json:"is_official"`                   // 是否官方模板
+	Name                         string          `json:"name"`                          // workflow name
+	Description                  string          `json:"description"`                   // workflow description
+	Author                       string          `json:"author"`                        // author
+	Version                      string          `json:"version"`                       // version number
+	WorkflowDefinition           json.RawMessage `json:"workflow_definition"`            // workflow definition (JSON)
+	RequiredSkills               json.RawMessage `json:"required_skills"`               // required skills (JSON)
+	RequiredMcpServers           json.RawMessage `json:"required_mcp_servers"`           // required MCP servers (JSON)
+	RecommendedAgentInstructions json.RawMessage `json:"recommended_agent_instructions"` // recommended agent instructions (JSON)
+	IsOfficial                   bool            `json:"is_official"`                   // whether it is an official template
 }
 
-// CreateCommunityWorkflow 处理 POST /community-workflows 端点，创建新的社区工作流模板。
+// CreateCommunityWorkflow handles the POST /community-workflows endpoint, creating a new community workflow template.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，工作流名称（必填）
-//   - description: string，工作流描述
-//   - author: string，作者
-//   - version: string，版本号，默认 "1.0.0"
-//   - workflow_definition: object，工作流定义
-//   - required_skills: object，所需技能
-//   - required_mcp_servers: object，所需 MCP 服务器
-//   - recommended_agent_instructions: object，推荐代理指令
-//   - is_official: bool，是否官方模板
+// Request body:
+//   - name: string, workflow name (required)
+//   - description: string, workflow description
+//   - author: string, author
+//   - version: string, version number, default "1.0.0"
+//   - workflow_definition: object, workflow definition
+//   - required_skills: object, required skills
+//   - required_mcp_servers: object, required MCP servers
+//   - recommended_agent_instructions: object, recommended agent instructions
+//   - is_official: bool, whether it is an official template
 //
-// 响应：
-//   - 201: 成功创建社区工作流
-//   - 400: 参数错误
+// Response:
+//   - 201: community workflow created successfully
+//   - 400: parameter error
 func (h *CommunityHandler) CreateCommunityWorkflow(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req createCommunityWorkflowRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 设置默认版本
+	// set default version
 	version := req.Version
 	if version == "" {
 		version = "1.0.0"
 	}
 
-	// 转换可选的 JSON 字段
+	// convert optional JSON fields
 	var requiredSkills pqtype.NullRawMessage
 	if req.RequiredSkills != nil {
 		requiredSkills = pqtype.NullRawMessage{RawMessage: req.RequiredSkills, Valid: true}
@@ -100,7 +100,7 @@ func (h *CommunityHandler) CreateCommunityWorkflow(w http.ResponseWriter, r *htt
 		recommendedAgentInstructions = pqtype.NullRawMessage{RawMessage: req.RecommendedAgentInstructions, Valid: true}
 	}
 
-	// 调用 service 创建社区工作流
+	// call service to create the community workflow
 	commSvc := service.NewCommunityService(h.Svc)
 	workflow, err := commSvc.Create(r.Context(), buildCreateCommunityWorkflowParams(
 		req.Name, req.Description, req.Author, version, req.WorkflowDefinition,
@@ -115,16 +115,16 @@ func (h *CommunityHandler) CreateCommunityWorkflow(w http.ResponseWriter, r *htt
 	response.JSON(w, r, workflow)
 }
 
-// ListCommunityWorkflows 处理 GET /community-workflows 端点，列出所有社区工作流模板。
+// ListCommunityWorkflows handles the GET /community-workflows endpoint, listing all community workflow templates.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回社区工作流列表
+// Response:
+//   - 200: successfully returns the community workflow list
 func (h *CommunityHandler) ListCommunityWorkflows(w http.ResponseWriter, r *http.Request) {
-	// 调用 service 查询社区工作流
+	// call service to query community workflows
 	commSvc := service.NewCommunityService(h.Svc)
 	workflows, err := commSvc.List(r.Context())
 	if err != nil {
@@ -135,40 +135,40 @@ func (h *CommunityHandler) ListCommunityWorkflows(w http.ResponseWriter, r *http
 	response.JSON(w, r, workflows)
 }
 
-// importCommunityWorkflowRequest 导入社区工作流请求体。
+// importCommunityWorkflowRequest import community workflow request body.
 type importCommunityWorkflowRequest struct {
-	WorkspaceID uuid.UUID `json:"workspace_id"` // 目标工作区 ID
+	WorkspaceID uuid.UUID `json:"workspace_id"` // target workspace ID
 }
 
-// ImportCommunityWorkflow 处理 POST /community-workflows/{id}/import 端点，将社区工作流导入到指定工作区。
+// ImportCommunityWorkflow handles the POST /community-workflows/{id}/import endpoint, importing a community workflow into the specified workspace.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - workspace_id: UUID，目标工作区 ID（必填）
+// Request body:
+//   - workspace_id: UUID, target workspace ID (required)
 //
-// 响应：
-//   - 201: 成功导入，返回创建的模板和源工作流
-//   - 400: 参数错误
-//   - 404: 社区工作流不存在
+// Response:
+//   - 201: imported successfully, returns the created template and the source workflow
+//   - 400: parameter error
+//   - 404: community workflow does not exist
 func (h *CommunityHandler) ImportCommunityWorkflow(w http.ResponseWriter, r *http.Request) {
-	// 解析工作流 ID
+	// parse workflow ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid workflow id")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req importCommunityWorkflowRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 导入工作流
+	// call service to import the workflow
 	commSvc := service.NewCommunityService(h.Svc)
 	result, err := commSvc.ImportWorkflow(r.Context(), id, req.WorkspaceID)
 	if err != nil {
@@ -181,7 +181,7 @@ func (h *CommunityHandler) ImportCommunityWorkflow(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// 返回导入结果
+	// return import result
 	w.WriteHeader(http.StatusCreated)
 	response.JSON(w, r, map[string]interface{}{
 		"template":        result.Template,

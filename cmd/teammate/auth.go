@@ -1,4 +1,4 @@
-// auth.go 实现认证相关子命令，包括登录、注册、切换工作区等操作。
+// auth.go implements authentication-related subcommands, including login, registration, workspace switching, and other operations.
 package main
 
 import (
@@ -38,16 +38,16 @@ var authLoginCmd = &cobra.Command{
 			return err
 		}
 
-		// 持久化凭证
+		// Persist credentials
 		if err := saveCredentials(&Credentials{
 			Token:     result.Token,
 			ExpiresAt: parseTime(result.ExpiresAt),
 			Email:     email,
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "警告: 凭证保存失败: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to save credentials: %v\n", err)
 		}
 
-		fmt.Printf("登录成功，凭证已保存到 %s\n", credentialsPath())
+		fmt.Printf("Login successful, credentials saved to %s\n", credentialsPath())
 		return printOutput(result, getOutputFormat())
 	},
 }
@@ -79,16 +79,16 @@ var authRegisterCmd = &cobra.Command{
 			return err
 		}
 
-		// 持久化凭证
+		// Persist credentials
 		if err := saveCredentials(&Credentials{
 			Token:     result.Token,
 			ExpiresAt: parseTime(result.ExpiresAt),
 			Email:     email,
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "警告: 凭证保存失败: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to save credentials: %v\n", err)
 		}
 
-		fmt.Printf("注册成功，凭证已保存到 %s\n", credentialsPath())
+		fmt.Printf("Registration successful, credentials saved to %s\n", credentialsPath())
 		return printOutput(result, getOutputFormat())
 	},
 }
@@ -113,7 +113,7 @@ var authLogoutCmd = &cobra.Command{
 		if err := deleteCredentials(); err != nil {
 			return err
 		}
-		fmt.Println("已登出，凭证已清除")
+		fmt.Println("Logged out, credentials cleared")
 		return nil
 	},
 }

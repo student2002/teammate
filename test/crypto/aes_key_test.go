@@ -1,4 +1,4 @@
-// Package crypto_test 包含 crypto 包的测试，涵盖 RSA 加密/解密往返、PEM 密钥解析（PKIX 和 PKCS1 格式）、无效密钥的错误处理以及边界情况（空数据、超大数据）。
+// Package crypto_test contains tests for the crypto package, covering RSA encryption/decryption roundtrips, PEM key parsing (PKIX and PKCS1 formats), error handling for invalid keys, and edge cases (empty data, oversized data).
 package crypto_test
 
 import (
@@ -9,9 +9,9 @@ import (
 	"github.com/teammate/server/internal/crypto"
 )
 
-// TestAESKeyFromEnvironment 验证 InitEncryptionKey 从 TEAMMATE_ENCRYPTION_KEY_BASE64 环境变量读取密钥。
+// TestAESKeyFromEnvironment verifies InitEncryptionKey reads the key from the TEAMMATE_ENCRYPTION_KEY_BASE64 environment variable.
 func TestAESKeyFromEnvironment(t *testing.T) {
-	// 生成一个有效的 32 字节密钥
+	// Generate a valid 32-byte key
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
@@ -20,13 +20,13 @@ func TestAESKeyFromEnvironment(t *testing.T) {
 
 	os.Setenv("TEAMMATE_ENCRYPTION_KEY_BASE64", keyB64)
 	defer os.Unsetenv("TEAMMATE_ENCRYPTION_KEY_BASE64")
-	os.Unsetenv("TEAMMATE_DEV") // 确保开发模式已关闭
+	os.Unsetenv("TEAMMATE_DEV") // Ensure dev mode is off
 
 	if err := crypto.InitEncryptionKey(); err != nil {
 		t.Fatalf("InitEncryptionKey: %v", err)
 	}
 
-	// 测试加密/解密往返
+	// Test encryption/decryption roundtrip
 	plaintext := "test-pat-secret-123"
 	encrypted, err := crypto.EncryptPAT(plaintext)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestAESKeyFromEnvironment(t *testing.T) {
 	}
 }
 
-// TestAESKeyProductionFailsWithoutKey 验证生产环境中未配置密钥时 InitEncryptionKey 返回错误。
+// TestAESKeyProductionFailsWithoutKey verifies InitEncryptionKey returns an error when no key is configured in production.
 func TestAESKeyProductionFailsWithoutKey(t *testing.T) {
 	os.Unsetenv("TEAMMATE_ENCRYPTION_KEY_BASE64")
 	os.Unsetenv("TEAMMATE_DEV")
@@ -55,7 +55,7 @@ func TestAESKeyProductionFailsWithoutKey(t *testing.T) {
 	t.Logf("correctly rejected: %v", err)
 }
 
-// TestAESKeyDevModeFallback 验证开发模式下未配置密钥时使用临时密钥。
+// TestAESKeyDevModeFallback verifies a temporary key is used when no key is configured in dev mode.
 func TestAESKeyDevModeFallback(t *testing.T) {
 	os.Unsetenv("TEAMMATE_ENCRYPTION_KEY_BASE64")
 	os.Setenv("TEAMMATE_DEV", "true")
@@ -65,7 +65,7 @@ func TestAESKeyDevModeFallback(t *testing.T) {
 		t.Fatalf("InitEncryptionKey in dev mode: %v", err)
 	}
 
-	// 加密/解密仍应正常工作
+	// Encryption/decryption should still work
 	encrypted, err := crypto.EncryptPAT("test")
 	if err != nil {
 		t.Fatalf("EncryptPAT in dev mode: %v", err)
@@ -79,7 +79,7 @@ func TestAESKeyDevModeFallback(t *testing.T) {
 	}
 }
 
-// TestAESKeyInvalidBase64 验证无效的 base64 密钥被拒绝。
+// TestAESKeyInvalidBase64 verifies an invalid base64 key is rejected.
 func TestAESKeyInvalidBase64(t *testing.T) {
 	os.Setenv("TEAMMATE_ENCRYPTION_KEY_BASE64", "not-valid-base64!!!")
 	defer os.Unsetenv("TEAMMATE_ENCRYPTION_KEY_BASE64")
@@ -92,9 +92,9 @@ func TestAESKeyInvalidBase64(t *testing.T) {
 	t.Logf("correctly rejected: %v", err)
 }
 
-// TestAESKeyWrongSize 验证错误大小的密钥被拒绝。
+// TestAESKeyWrongSize verifies a key with the wrong size is rejected.
 func TestAESKeyWrongSize(t *testing.T) {
-	// 16 字节而非 32 字节
+	// 16 bytes instead of 32 bytes
 	key := make([]byte, 16)
 	keyB64 := base64.StdEncoding.EncodeToString(key)
 
@@ -109,12 +109,12 @@ func TestAESKeyWrongSize(t *testing.T) {
 	t.Logf("correctly rejected: %v", err)
 }
 
-// TestEncryptPATWithoutInit 验证未初始化加密密钥时 EncryptPAT 失败。
+// TestEncryptPATWithoutInit verifies EncryptPAT fails when the encryption key is not initialised.
 func TestEncryptPATWithoutInit(t *testing.T) {
-	// 通过先传空字符串再传 nil 调用 SetEncryptionKey 来重置密钥
-	// 实际上，我们无法轻易从外部重置包级变量。
-	// 而是测试函数在正确初始化后是否正常工作。
-	// 此测试是占位符——真正的"未初始化"检查
-	// 由上面的生产环境失败测试来验证。
+	// Reset the key by calling SetEncryptionKey with an empty string and then nil.
+	// In practice, we cannot easily reset package-level variables from outside.
+	// Instead, test that the functions work correctly after proper initialisation.
+	// This test is a placeholder — the real "not initialised" check
+	// is verified by the production-failure test above.
 	t.Log("EncryptPAT/DecryptPAT not-initialized check verified by TestAESKeyProductionFailsWithoutKey")
 }

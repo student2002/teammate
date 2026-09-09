@@ -1,9 +1,11 @@
-// cors.go 提供跨域资源共享（CORS）中间件，根据允许的源列表设置 Access-Control-Allow-* 响应头。
-// 处理浏览器的预检请求（OPTIONS），支持凭据模式（credentials）。
-// 安全说明：
-//   - 仅允许在允许列表中的源（Origin）发起跨域请求
-//   - 生产环境禁止使用通配符 "*"，必须显式配置允许的源
-//   - 预检请求结果缓存 86400 秒（24 小时），减少 OPTIONS 请求开销
+// cors.go provides the Cross-Origin Resource Sharing (CORS) middleware,
+// setting Access-Control-Allow-* response headers based on the allowed origins list.
+// It handles browser preflight requests (OPTIONS) and supports credentials mode.
+//
+// Security notes:
+//   - Only origins in the allowed list may initiate cross-origin requests
+//   - The wildcard "*" is forbidden in production; allowed origins must be configured explicitly
+//   - Preflight results are cached for 86400 seconds (24 hours) to reduce OPTIONS overhead
 package middleware
 
 import (
@@ -11,20 +13,21 @@ import (
 	"strings"
 )
 
-// CORS 返回一个 chi 兼容的跨域中间件，根据允许的源列表设置 Access-Control-Allow-* 响应头。
+// CORS returns a chi-compatible cross-origin middleware that sets Access-Control-Allow-* response headers
+// based on the allowed origins list.
 //
-// 处理逻辑：
-//  1. 解析允许的源列表（逗号分隔字符串），"*" 表示允许所有源
-//  2. 检查请求的 Origin 是否在允许列表中
-//  3. 匹配成功时设置 Allow-Origin 和 Allow-Credentials 响应头
-//  4. 始终设置 Allow-Methods、Allow-Headers 和 Max-Age 响应头
-//  5. 预检请求（OPTIONS）直接返回 204 No Content
+// Processing logic:
+//  1. Parse the allowed origins list (comma-separated string); "*" means all origins are allowed
+//  2. Check whether the request's Origin is in the allowed list
+//  3. On match, set the Allow-Origin and Allow-Credentials response headers
+//  4. Always set the Allow-Methods, Allow-Headers, and Max-Age response headers
+//  5. Preflight requests (OPTIONS) return 204 No Content directly
 //
-// 参数：
-//   - allowedOrigins: 逗号分隔的允许源列表，"*" 表示允许所有源
+// Parameters:
+//   - allowedOrigins: comma-separated list of allowed origins; "*" means all origins are allowed
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func CORS(allowedOrigins string) func(http.Handler) http.Handler {
 	origins := parseOrigins(allowedOrigins)
 
@@ -42,7 +45,7 @@ func CORS(allowedOrigins string) func(http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-API-Key")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 
-			// 处理预检请求（OPTIONS），直接返回 204
+			// Handle preflight requests (OPTIONS), return 204 directly
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
@@ -53,17 +56,17 @@ func CORS(allowedOrigins string) func(http.Handler) http.Handler {
 	}
 }
 
-// parseOrigins 将逗号分隔的字符串解析为去重的源列表。
-// 返回 nil 表示允许所有源（原始值为空或 "*"）。
+// parseOrigins parses a comma-separated string into a deduplicated list of origins.
+// Returning nil means all origins are allowed (the original value was empty or "*").
 //
-// 参数：
-//   - s: 逗号分隔的源字符串，如 "http://localhost:3000,https://app.example.com"
+// Parameters:
+//   - s: comma-separated origins string, e.g. "http://localhost:3000,https://app.example.com"
 //
-// 返回：
-//   - []string: 解析后的源列表，nil 表示允许所有源
+// Returns:
+//   - []string: the parsed origins list; nil means all origins are allowed
 func parseOrigins(s string) []string {
 	if s == "" || s == "*" {
-		return nil // nil 表示允许所有源
+		return nil // nil means all origins are allowed
 	}
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
@@ -76,15 +79,15 @@ func parseOrigins(s string) []string {
 	return out
 }
 
-// matchOrigin 检查请求的 Origin 是否在允许列表中。
-// origins 为 nil 时允许所有源（配置了 "*" 或未配置时）。
+// matchOrigin checks whether the request's Origin is in the allowed list.
+// When origins is nil, all origins are allowed (when configured as "*" or unset).
 //
-// 参数：
-//   - origin: 请求的 Origin 头值
-//   - origins: 允许的源列表，nil 表示允许所有源
+// Parameters:
+//   - origin: the request's Origin header value
+//   - origins: the allowed origins list; nil means all origins are allowed
 //
-// 返回：
-//   - bool: 是否匹配允许列表
+// Returns:
+//   - bool: whether the origin matches the allowed list
 func matchOrigin(origin string, origins []string) bool {
 	if origin == "" {
 		return false

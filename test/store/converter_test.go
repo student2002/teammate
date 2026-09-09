@@ -1,4 +1,4 @@
-// converter_test.go 覆盖 domain/db 类型转换函数的测试。
+// converter_test.go tests for domain/db type conversion functions.
 package store_test
 
 import (
@@ -15,16 +15,16 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// fixedTime 在所有 round-trip 测试中用作可预测的时间戳。
+// fixedTime is a predictable timestamp used in all round-trip tests.
 var fixedTime = time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 
-// fixedUUID 在所有 round-trip 测试中用作可预测的 UUID。
+// fixedUUID is a predictable UUID used in all round-trip tests.
 var fixedUUID = uuid.MustParse("12345678-1234-5678-1234-567812345678")
 
-// newUUIDString 返回一个 domain 风格的 UUID 字符串。
+// newUUIDString returns a domain-style UUID string.
 func newUUIDString() string { return fixedUUID.String() }
 
-// TestToDomainTask_RoundTrip 验证 db.Task → types.Task → db.CreateTaskParams 的字段保真度。
+// TestToDomainTask_RoundTrip verifies field fidelity for db.Task → types.Task → db.CreateTaskParams.
 func TestToDomainTask_RoundTrip(t *testing.T) {
 	dbTask := db.Task{
 		ID:           42,
@@ -52,7 +52,7 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 		t.Fatalf("ToDomainTask: %v", err)
 	}
 
-	// 逐字段验证
+	// Field-by-field verification
 	checks := []struct{ name, got, want string }{
 		{"ID", numToStr(domainTask.ID), "42"},
 		{"ProjectID", domainTask.ProjectID, newUUIDString()},
@@ -86,7 +86,7 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 		t.Errorf("Labels = %v, want [backend urgent]", domainTask.Labels)
 	}
 
-	// 反向校验：toDomainTask(dbTask) 的字段能被 fromDomainXxxParams 还原
+	// Reverse verification: fields from toDomainTask(dbTask) can be restored by fromDomainXxxParams
 	createParams := types.CreateTaskParams{
 		ProjectID:    domainTask.ProjectID,
 		Title:        domainTask.Title,
@@ -120,7 +120,7 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToDomainTaskNode_RoundTrip 验证 db.TaskNode → types.TaskNode 的字段保真度。
+// TestToDomainTaskNode_RoundTrip verifies field fidelity for db.TaskNode → types.TaskNode.
 func TestToDomainTaskNode_RoundTrip(t *testing.T) {
 	completedAt := fixedTime
 	completedBy := uuid.NullUUID{UUID: fixedUUID, Valid: true}
@@ -191,7 +191,7 @@ func TestToDomainTaskNode_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToDomainComment_RoundTrip 验证 db.Comment → types.Comment 的字段保真度。
+// TestToDomainComment_RoundTrip verifies field fidelity for db.Comment → types.Comment.
 func TestToDomainComment_RoundTrip(t *testing.T) {
 	nodeID := uuid.NullUUID{UUID: fixedUUID, Valid: true}
 	parentID := uuid.NullUUID{UUID: fixedUUID, Valid: true}
@@ -244,7 +244,7 @@ func TestToDomainComment_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToDomainAgent_RoundTrip 验证 db.Agent → types.Agent 的字段保真度。
+// TestToDomainAgent_RoundTrip verifies field fidelity for db.Agent → types.Agent.
 func TestToDomainAgent_RoundTrip(t *testing.T) {
 	wsID := fixedUUID
 	model := "claude-sonnet-4"
@@ -300,7 +300,7 @@ func TestToDomainAgent_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToDomainWorkspace_RoundTrip 验证 db.Workspace → types.Workspace 的字段保真度。
+// TestToDomainWorkspace_RoundTrip verifies field fidelity for db.Workspace → types.Workspace.
 func TestToDomainWorkspace_RoundTrip(t *testing.T) {
 	desc := "Primary workspace for team X"
 	dbWS := db.Workspace{
@@ -335,7 +335,7 @@ func TestToDomainWorkspace_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToDomainProject_RoundTrip 验证 db.Project → types.Project 的字段保真度。
+// TestToDomainProject_RoundTrip verifies field fidelity for db.Project → types.Project.
 func TestToDomainProject_RoundTrip(t *testing.T) {
 	wsID := fixedUUID
 	desc := "Project description"
@@ -395,7 +395,7 @@ func TestToDomainProject_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestFromDomainCreateTaskParams_InvalidUUID 验证无效 UUID 时返回错误。
+// TestFromDomainCreateTaskParams_InvalidUUID verifies that an error is returned for an invalid UUID.
 func TestFromDomainCreateTaskParams_InvalidUUID(t *testing.T) {
 	params := types.CreateTaskParams{
 		ProjectID: "not-a-uuid",
@@ -407,7 +407,7 @@ func TestFromDomainCreateTaskParams_InvalidUUID(t *testing.T) {
 	}
 }
 
-// TestToDomainTask_NullFields 验证 db.Task 的 NULL 字段正确映射到零值。
+// TestToDomainTask_NullFields verifies that NULL fields in db.Task correctly map to zero values.
 func TestToDomainTask_NullFields(t *testing.T) {
 	dbTask := db.Task{
 		ID:           1,
@@ -442,7 +442,7 @@ func TestToDomainTask_NullFields(t *testing.T) {
 	}
 }
 
-// numToStr 是一个简单的整数 → string 转换辅助，避免引入 strconv。
+// numToStr is a simple int → string conversion helper, avoiding the need for strconv.
 func numToStr(n interface{}) string {
 	switch v := n.(type) {
 	case int:

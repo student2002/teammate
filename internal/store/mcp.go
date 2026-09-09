@@ -1,4 +1,4 @@
-// mcp.go 提供 MCP 服务器管理的数据访问操作。
+// mcp.go provides data access operations for MCP server management.
 package store
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateMcpServer 创建一个新的 MCP 服务器记录。
+// CreateMcpServer creates a new MCP server record.
 func (s *Store) CreateMcpServer(ctx context.Context, params types.CreateMcpServerParams) (types.McpServer, error) {
 	dbParams, err := fromDomainCreateMcpServerParams(params)
 	if err != nil {
@@ -23,7 +23,7 @@ func (s *Store) CreateMcpServer(ctx context.Context, params types.CreateMcpServe
 	return ToDomainMcpServer(server)
 }
 
-// ListMcpServers 列出指定工作区的所有 MCP 服务器。
+// ListMcpServers lists all MCP servers for the specified workspace.
 func (s *Store) ListMcpServers(ctx context.Context, workspaceID uuid.UUID) ([]types.McpServer, error) {
 	servers, err := s.q.ListMcpServers(ctx, workspaceID)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *Store) ListMcpServers(ctx context.Context, workspaceID uuid.UUID) ([]ty
 	return out, nil
 }
 
-// GetMcpServer 根据 ID 获取 MCP 服务器信息。
+// GetMcpServer retrieves MCP server information by ID.
 func (s *Store) GetMcpServer(ctx context.Context, id uuid.UUID) (types.McpServer, error) {
 	server, err := s.q.GetMcpServer(ctx, id)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *Store) GetMcpServer(ctx context.Context, id uuid.UUID) (types.McpServer
 	return ToDomainMcpServer(server)
 }
 
-// UpdateMcpServerStatus 更新 MCP 服务器的连接状态。
+// UpdateMcpServerStatus updates the connection status of an MCP server.
 func (s *Store) UpdateMcpServerStatus(ctx context.Context, params types.UpdateMcpServerStatusParams) (types.McpServer, error) {
 	dbParams, err := fromDomainUpdateMcpServerStatusParams(params)
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *Store) UpdateMcpServerStatus(ctx context.Context, params types.UpdateMc
 	return ToDomainMcpServer(server)
 }
 
-// DeleteMcpServer 删除一个 MCP 服务器。
+// DeleteMcpServer deletes an MCP server.
 func (s *Store) DeleteMcpServer(ctx context.Context, id uuid.UUID) error {
 	if err := s.q.DeleteMcpServer(ctx, id); err != nil {
 		return fmt.Errorf("delete mcp server: %w", err)

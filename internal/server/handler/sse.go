@@ -1,7 +1,7 @@
-// sse.go 提供 Server-Sent Events（SSE）实时事件推送端点，用于 Agent 守护进程的事件订阅和断线重连补偿。
+// sse.go provides Server-Sent Events (SSE) real-time event push endpoints, used for Agent daemon event subscription and reconnection compensation.
 //
-// SSE 事件类型：node:pending、node:continuation_invite、task:interrupt、node:timeout 等。
-// 断线重连：Agent 重连时发送 Last-Event-ID，Server 从 Redis 缓冲回放丢失事件。
+// SSE event types: node:pending, node:continuation_invite, task:interrupt, node:timeout, etc.
+// Reconnection: when an Agent reconnects it sends Last-Event-ID, and the server replays lost events from the Redis buffer.
 
 package handler
 
@@ -22,18 +22,18 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// SSEHandler 处理 Server-Sent Events 实时事件推送的 HTTP 请求，支持断线重连补偿。
+// SSEHandler handles HTTP requests for Server-Sent Events real-time event push, supporting reconnection compensation.
 type SSEHandler struct {
 	Svc *service.Service
-	Hub *ws.Hub // SSE 事件 Hub
+	Hub *ws.Hub // SSE event Hub
 }
 
-// NewSSEHandler 创建 SSEHandler 实例。
+// NewSSEHandler creates an SSEHandler instance.
 func NewSSEHandler(svc *service.Service, hub *ws.Hub) *SSEHandler {
 	return &SSEHandler{Svc: svc, Hub: hub}
 }
 
-// Routes 返回 SSE 的路由表。
+// Routes returns the route table for SSE.
 func (h *SSEHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -42,37 +42,37 @@ func (h *SSEHandler) Routes() chi.Router {
 	return r
 }
 
-// Stream 处理 GET /workspaces/{workspaceId}/runtimes/{runtimeId}/events 端点，建立 SSE 长连接并实时推送事件给 Agent 守护进程，支持 Last-Event-ID 断线重连补偿。
+// Stream handles the GET /workspaces/{workspaceId}/runtimes/{runtimeId}/events endpoint, establishing a long-lived SSE connection and pushing events in real time to the Agent daemon, supporting Last-Event-ID reconnection compensation.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求头：
-//   - Last-Event-ID: string，上次接收的事件 ID（用于断线重连）
+// Request headers:
+//   - Last-Event-ID: string, the ID of the last received event (used for reconnection)
 //
-// 响应：
-//   - 200: SSE 事件流（text/event-stream）
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: Agent 只能订阅自己的运行时
-//   - 404: 运行时不存在
+// Response:
+//   - 200: SSE event stream (text/event-stream)
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: Agents can only subscribe to their own runtime
+//   - 404: runtime does not exist
 //
-// 处理流程：
-//  1. 验证认证和运行时归属
-//  2. 检查 Last-Event-ID 头进行断线重连
-//  3. 从 Redis 缓冲回放丢失事件
-//  4. 订阅事件频道
-//  5. 保持长连接并推送事件
+// Processing flow:
+//  1. verify authentication and runtime ownership
+//  2. check the Last-Event-ID header for reconnection
+//  3. replay lost events from the Redis buffer
+//  4. subscribe to the event channel
+//  5. keep the long connection alive and push events
 func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
-	// 解析运行时 ID
+	// parse runtime ID
 	runtimeID := chi.URLParam(r, "runtimeId")
 	if runtimeID == "" {
 		response.BadRequest(w, "missing runtimeId")
 		return
 	}
 
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceIDStr := chi.URLParam(r, "workspaceId")
 	if workspaceIDStr == "" {
 		response.BadRequest(w, "missing workspaceId")
@@ -84,14 +84,14 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证认证
+	// verify authentication
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 验证运行时归属
+	// verify runtime ownership
 	runtimeUUID, err := uuid.Parse(runtimeID)
 	if err != nil {
 		response.BadRequest(w, "invalid runtimeId")
@@ -103,7 +103,7 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证运行时的 Agent 属于 URL 工作区
+	// verify the runtime's Agent belongs to the URL workspace
 	runtimeAgentID, _ := uuid.Parse(runtime.AgentID)
 	agent, err := service.NewAgentService(h.Svc).Get(r.Context(), runtimeAgentID)
 	if err != nil || agent.WorkspaceID != workspaceID.String() {
@@ -111,7 +111,7 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Agent 只能订阅自己的运行时
+	// Agents can only subscribe to their own runtime
 	if claims.UserType == "agent" {
 		sseAgentID, _ := uuid.Parse(runtime.AgentID)
 		if sseAgentID != claims.UserID {
@@ -120,13 +120,13 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// chi 的 Timeout 中间件包装了 ResponseWriter，隐藏了 http.Flusher。
-	// 我们需要解包以获取底层的 Flusher。
+	// chi's Timeout middleware wraps the ResponseWriter and hides http.Flusher.
+	// We need to unwrap it to get the underlying Flusher.
 	var flusher http.Flusher
 	var flushOK bool
 	flusher, flushOK = w.(http.Flusher)
 	if !flushOK {
-		// 尝试 chi 的 wrapResponseWriter 接口
+		// try chi's wrapResponseWriter interface
 		type wrapResponseWriter interface {
 			http.ResponseWriter
 			Unwrap() http.ResponseWriter
@@ -140,43 +140,43 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 设置 SSE 响应头
+	// set SSE response headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// 禁用写入超时，防止服务器的 WriteTimeout 关闭长连接
+	// disable the write timeout to prevent the server's WriteTimeout from closing the long connection
 	rc := http.NewResponseController(w)
 	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
 		slog.Warn("failed to disable write deadline for SSE connection", "err", err)
 	}
 
-	// 检查 Last-Event-ID 头以支持断线重连
+	// check the Last-Event-ID header to support reconnection
 	lastEventID := r.Header.Get("Last-Event-ID")
 	if lastEventID != "" {
 		h.replayBufferedEvents(r.Context(), w, flusher, runtimeID, lastEventID)
 	}
 
-	// 订阅事件频道
+	// subscribe to the event channel
 	ch, unsub := h.Hub.Subscribe(runtimeID)
 	defer unsub()
 
-	// 发送初始注释以建立连接
+	// send an initial comment to establish the connection
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
-	// 启动保活定时器，防止空闲连接被关闭
+	// start a keepalive timer to prevent the idle connection from being closed
 	keepalive := time.NewTicker(30 * time.Second)
 	defer keepalive.Stop()
 
-	// 主循环：推送事件
+	// main loop: push events
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-keepalive.C:
-			// 发送 SSE 注释作为保活——客户端忽略注释，
-			// 但代理/负载均衡器看到活动不会关闭连接
+			// send an SSE comment as keepalive - clients ignore comments,
+			// but proxies/load balancers see activity and do not close the connection
 			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
 				return
 			}
@@ -190,15 +190,15 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// replayBufferedEvents 从 Redis 缓冲区获取丢失的事件并发送给客户端。
-// 如果缓冲区为空或已过期，则发送 sync:required 事件。
+// replayBufferedEvents fetches lost events from the Redis buffer and sends them to the client.
+// If the buffer is empty or expired, it sends a sync:required event.
 func (h *SSEHandler) replayBufferedEvents(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, runtimeID string, lastEventID string) {
 	events, err := h.Hub.GetBufferedEvents(ctx, runtimeID, lastEventID)
 	if err != nil {
 		slog.Error("get buffered events for replay", "runtime_id", runtimeID, "last_event_id", lastEventID, "err", err)
 	}
 
-	// 缓冲区为空或已过期——发送 sync:required
+	// buffer is empty or expired - send sync:required
 	if len(events) == 0 {
 		syncData, _ := json.Marshal(map[string]string{
 			"reason": "buffer_expired",
@@ -212,13 +212,13 @@ func (h *SSEHandler) replayBufferedEvents(ctx context.Context, w http.ResponseWr
 		return
 	}
 
-	// 回放缓冲的事件
+	// replay the buffered events
 	for _, event := range events {
 		writeSSEEvent(w, flusher, event)
 	}
 }
 
-// writeSSEEvent 将单个 SSE 事件写入响应写入器并刷新。
+// writeSSEEvent writes a single SSE event to the response writer and flushes.
 func writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, event ws.SSEEvent) {
 	if event.ID != "" {
 		fmt.Fprintf(w, "id: %s\n", event.ID)

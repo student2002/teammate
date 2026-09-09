@@ -1,8 +1,8 @@
-// memory.go 提供共享记忆（Memory）的创建、列表查询、删除和文本搜索等 HTTP API 端点。
+// memory.go provides HTTP API endpoints for creating, listing, deleting, and text-searching shared memories (Memory).
 //
-// 共享记忆是 Agent 之间共享的知识库，当前通过 ILIKE 文本搜索检索记忆。
-// 数据库已预留 embedding vector(1536) 字段，pgvector 语义检索待接入 embedding 生成服务后启用。
-// Agent 需要 memory:create 权限才能创建记忆，resource:delete 权限才能删除记忆。
+// Shared memories are a knowledge base shared among Agents; currently memories are retrieved via ILIKE text search.
+// The database has a reserved embedding vector(1536) field; pgvector semantic retrieval will be enabled once an embedding generation service is integrated.
+// Agents need the memory:create permission to create memories, and the resource:delete permission to delete memories.
 
 package handler
 
@@ -23,28 +23,28 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// MemoryHandler 处理共享记忆相关的 HTTP 请求，包括创建、列表查询、删除和语义搜索。
+// MemoryHandler handles HTTP requests related to shared memories, including creating, listing, deleting, and semantic search.
 type MemoryHandler struct {
 	Svc     *service.Service
-	Checker svcmw.WorkspaceAccessCheckerFunc // 工作区访问检查器（注入，非全局）
+	Checker svcmw.WorkspaceAccessCheckerFunc // workspace access checker (injected, not global)
 }
 
-// NewMemoryHandler 创建 MemoryHandler 实例。
+// NewMemoryHandler creates a MemoryHandler instance.
 func NewMemoryHandler(svc *service.Service, checker svcmw.WorkspaceAccessCheckerFunc) *MemoryHandler {
 	return &MemoryHandler{Svc: svc, Checker: checker}
 }
 
-// createMemoryRequest 创建记忆请求体。
+// createMemoryRequest create memory request body.
 type createMemoryRequest struct {
-	WorkspaceID  string          `json:"workspace_id"`   // 工作区 ID
-	SourceTaskID string          `json:"source_task_id"` // 来源任务 ID
-	Type         string          `json:"type"`           // 记忆类型
-	Title        string          `json:"title"`          // 记忆标题
-	Content      string          `json:"content"`        // 记忆内容
-	Tags         []string        `json:"tags"`           // 标签列表
-	Confidence   float32         `json:"confidence"`     // 置信度（0-1）
-	Verified     bool            `json:"verified"`       // 是否已验证
-	Metadata     json.RawMessage `json:"metadata"`       // 元数据（JSON）
+	WorkspaceID  string          `json:"workspace_id"`   // workspace ID
+	SourceTaskID string          `json:"source_task_id"` // source task ID
+	Type         string          `json:"type"`           // memory type
+	Title        string          `json:"title"`          // memory title
+	Content      string          `json:"content"`        // memory content
+	Tags         []string        `json:"tags"`           // tag list
+	Confidence   float32         `json:"confidence"`     // confidence (0-1)
+	Verified     bool            `json:"verified"`       // whether verified
+	Metadata     json.RawMessage `json:"metadata"`       // metadata (JSON)
 }
 
 func (h *MemoryHandler) resolveWorkspaceForRequest(w http.ResponseWriter, r *http.Request, workspaceIDStr string) (uuid.UUID, string, bool) {
@@ -70,36 +70,36 @@ func (h *MemoryHandler) resolveWorkspaceForRequest(w http.ResponseWriter, r *htt
 	return workspaceID, role, true
 }
 
-// CreateMemory 处理 POST /memories 端点，创建新的共享记忆条目，Agent 需要 memory:create 权限。
+// CreateMemory handles the POST /memories endpoint, creating a new shared memory entry; Agents need the memory:create permission.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - source_task_id: string，来源任务 ID
-//   - type: string，记忆类型
-//   - title: string，记忆标题
-//   - content: string，记忆内容
-//   - tags: string[]，标签列表
-//   - confidence: float，置信度（默认 0.5）
-//   - verified: bool，是否已验证（Agent 不能设置为 true）
-//   - metadata: object，元数据
+// Request body:
+//   - source_task_id: string, source task ID
+//   - type: string, memory type
+//   - title: string, memory title
+//   - content: string, memory content
+//   - tags: string[], tag list
+//   - confidence: float, confidence (default 0.5)
+//   - verified: bool, whether verified (Agents cannot set to true)
+//   - metadata: object, metadata
 //
-// 响应：
-//   - 201: 成功创建记忆
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 权限不足（Agent 需要 memory:create，人类需要 member+ 角色）
+// Response:
+//   - 201: memory created successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: insufficient permissions (Agents need memory:create, humans need member+ role)
 func (h *MemoryHandler) CreateMemory(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req createMemoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -111,26 +111,26 @@ func (h *MemoryHandler) CreateMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 权限检查：Agent 和人类用户使用不同的权限模型
+	// permission check: Agents and human users use different permission models
 	if claims.UserType == "agent" {
-		// Agent 必须具有 memory:create 权限
+		// Agents must have the memory:create permission
 		permSvc := service.NewAgentPermissionService(h.Svc)
 		has, err := permSvc.HasPermission(r.Context(), claims.UserID, types.PermMemoryCreate)
 		if err != nil || !has {
 			response.Forbidden(w, "agent lacks memory:create permission")
 			return
 		}
-		// Agent 不能设置 verified=true
+		// Agents cannot set verified=true
 		req.Verified = false
 	} else {
-		// 人类用户需要 member 及以上角色
+		// human users need member or higher role
 		if types.MemberRoleLevel(role) < 2 {
 			response.Forbidden(w, "insufficient permissions: member role or higher required")
 			return
 		}
 	}
 
-	// 转换来源任务 ID
+	// convert source task ID
 	var sourceTaskID sql.NullInt32
 	if req.SourceTaskID != "" {
 		var tid int32
@@ -139,19 +139,19 @@ func (h *MemoryHandler) CreateMemory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 设置默认标签
+	// set default tags
 	tags := req.Tags
 	if tags == nil {
 		tags = []string{}
 	}
 
-	// 设置默认置信度
+	// set default confidence
 	confidence := req.Confidence
 	if confidence == 0 {
 		confidence = 0.5
 	}
 
-	// 转换元数据
+	// convert metadata
 	var metadata pqtype.NullRawMessage
 	if req.Metadata != nil {
 		metadata = pqtype.NullRawMessage{RawMessage: req.Metadata, Valid: true}
@@ -159,7 +159,7 @@ func (h *MemoryHandler) CreateMemory(w http.ResponseWriter, r *http.Request) {
 		metadata = pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true}
 	}
 
-	// 调用 service 创建记忆
+	// call service to create the memory
 	memSvc := service.NewMemoryService(h.Svc)
 	memory, err := memSvc.Create(r.Context(), buildCreateMemoryParams(
 		workspaceID,
@@ -181,21 +181,21 @@ func (h *MemoryHandler) CreateMemory(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, memory)
 }
 
-// ListMemories 处理 GET /memories 端点，列出工作区下的所有共享记忆，支持按验证状态、置信度过滤。
+// ListMemories handles the GET /memories endpoint, listing all shared memories under the workspace, supporting filtering by verification status and confidence.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 查询参数：
-//   - verified: bool，按验证状态过滤
-//   - min_confidence: float，最小置信度过滤
-//   - limit: int，返回数量限制
+// Query parameters:
+//   - verified: bool, filter by verification status
+//   - min_confidence: float, minimum confidence filter
+//   - limit: int, return count limit
 //
-// 响应：
-//   - 200: 成功返回记忆列表
-//   - 400: 查询参数错误
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns the memory list
+//   - 400: query parameter error
+//   - 401: not authenticated
 func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 	workspaceID, _, ok := h.resolveWorkspaceForRequest(w, r, r.URL.Query().Get("workspace_id"))
 	if !ok {
@@ -204,12 +204,12 @@ func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 
 	memSvc := service.NewMemoryService(h.Svc)
 
-	// 解析可选的过滤参数
+	// parse optional filter parameters
 	var verified *bool
 	var minConfidence *float32
 	var limit *int32
 
-	// 解析 verified 参数
+	// parse the verified parameter
 	if v := r.URL.Query().Get("verified"); v != "" {
 		parsed, err := strconv.ParseBool(v)
 		if err != nil {
@@ -219,7 +219,7 @@ func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 		verified = &parsed
 	}
 
-	// 解析 min_confidence 参数
+	// parse the min_confidence parameter
 	if mc := r.URL.Query().Get("min_confidence"); mc != "" {
 		parsed, err := strconv.ParseFloat(mc, 32)
 		if err != nil {
@@ -230,7 +230,7 @@ func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 		minConfidence = &f
 	}
 
-	// 解析 limit 参数
+	// parse the limit parameter
 	if l := r.URL.Query().Get("limit"); l != "" {
 		parsed, err := strconv.ParseInt(l, 10, 32)
 		if err != nil {
@@ -241,7 +241,7 @@ func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 		limit = &n
 	}
 
-	// 调用 service 查询记忆
+	// call service to query memories
 	memories, err := memSvc.ListByWorkspace(r.Context(), workspaceID, verified, minConfidence, limit)
 	if err != nil {
 		response.InternalServerError(w, err)
@@ -250,20 +250,20 @@ func (h *MemoryHandler) ListMemories(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, memories)
 }
 
-// DeleteMemory 处理 DELETE /memories/{id} 端点，删除指定的共享记忆条目，Agent 需要 resource:delete 权限。
+// DeleteMemory handles the DELETE /memories/{id} endpoint, deleting the specified shared memory entry; Agents need the resource:delete permission.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功删除
-//   - 400: 记忆 ID 无效
-//   - 401: 未认证
-//   - 403: 权限不足（Agent 需要 resource:delete，人类需要 member+ 角色）
-//   - 404: 记忆不存在
+// Response:
+//   - 204: deleted successfully
+//   - 400: invalid memory ID
+//   - 401: not authenticated
+//   - 403: insufficient permissions (Agents need resource:delete, humans need member+ role)
+//   - 404: memory does not exist
 func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
-	// 解析记忆 ID
+	// parse memory ID
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -271,14 +271,14 @@ func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 验证记忆属于当前工作区
+	// verify the memory belongs to the current workspace
 	memSvc := service.NewMemoryService(h.Svc)
 	memory, err := memSvc.Get(r.Context(), id)
 	if err != nil {
@@ -289,7 +289,7 @@ func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
 		response.InternalServerError(w, fmt.Errorf("workspace access checker not configured"))
 		return
 	}
-	// workspace ID 是 domain 幜格 string，需解析回 uuid.UUID 传给 Checker
+	// workspace ID is a domain-model string, needs to be parsed back to uuid.UUID to pass to the Checker
 	memoryWsID, _ := uuid.Parse(memory.WorkspaceID)
 	role, err := h.Checker(r.Context(), claims.UserID, claims.UserType, memoryWsID)
 	if err != nil {
@@ -297,9 +297,9 @@ func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 权限检查：谁能删除这条记忆？
+	// permission check: who can delete this memory?
 	if claims.UserType == "agent" {
-		// Agent 必须具有 resource:delete 权限
+		// Agents must have the resource:delete permission
 		permSvc := service.NewAgentPermissionService(h.Svc)
 		has, err := permSvc.HasPermission(r.Context(), claims.UserID, types.PermResourceDelete)
 		if err != nil || !has {
@@ -307,14 +307,14 @@ func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// 人类用户需要 member 及以上角色（viewer 不能删除）
+		// human users need member or higher role (viewer cannot delete)
 		if types.MemberRoleLevel(role) < 2 {
 			response.Forbidden(w, "insufficient permissions: member role or higher required")
 			return
 		}
 	}
 
-	// 调用 service 删除记忆
+	// call service to delete the memory
 	if err := memSvc.Delete(r.Context(), id); err != nil {
 		response.InternalServerError(w, err)
 		return
@@ -323,20 +323,20 @@ func (h *MemoryHandler) DeleteMemory(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// SearchMemories 处理 GET /memories/search 端点，使用 pgvector 语义搜索匹配的共享记忆条目。
+// SearchMemories handles the GET /memories/search endpoint, using pgvector semantic search to match shared memory entries.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 查询参数：
-//   - q: string，搜索关键词
+// Query parameters:
+//   - q: string, search keyword
 //
-// 响应：
-//   - 200: 成功返回搜索结果
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns search results
+//   - 401: not authenticated
 func (h *MemoryHandler) SearchMemories(w http.ResponseWriter, r *http.Request) {
-	// 获取搜索关键词
+	// get the search keyword
 	q := r.URL.Query().Get("q")
 
 	workspaceID, _, ok := h.resolveWorkspaceForRequest(w, r, r.URL.Query().Get("workspace_id"))
@@ -344,7 +344,7 @@ func (h *MemoryHandler) SearchMemories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 如果有搜索关键词，执行语义搜索
+	// if there is a search keyword, perform semantic search
 	if q != "" {
 		memSvc := service.NewMemoryService(h.Svc)
 		results, err := memSvc.Search(r.Context(), q, workspaceID)
@@ -357,6 +357,6 @@ func (h *MemoryHandler) SearchMemories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 无搜索关键词时返回空列表
+	// return an empty list when there is no search keyword
 	response.JSON(w, r, []interface{}{})
 }

@@ -1,20 +1,20 @@
-// workspace.go 提供工作区的 CRUD 管理、成员邀请/移除/角色变更及所有权转移等 HTTP API 端点。
+// workspace.go provides HTTP API endpoints for workspace CRUD management, member invite/remove/role-change, and ownership transfer.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - POST /workspaces: 创建新的工作区
-//   - GET /workspaces: 列出所有工作区
-//   - GET /workspaces/{id}: 查询指定工作区的详细信息
-//   - PUT /workspaces/{id}: 更新工作区的名称和描述
-//   - DELETE /workspaces/{id}: 删除指定工作区（默认工作区不允许删除）
-//   - POST /workspaces/{id}/members: 邀请新成员加入工作区
-//   - GET /workspaces/{id}/members: 列出工作区的所有成员
-//   - DELETE /workspaces/{id}/members/{memberId}: 移除工作区成员
-//   - PUT /workspaces/{id}/members/{memberId}/role: 变更工作区成员的角色
-//   - POST /workspaces/{id}/transfer-ownership: 将工作区所有权转移给其他成员
+// This file provides the following HTTP API endpoints:
+//   - POST /workspaces: create a new workspace
+//   - GET /workspaces: list all workspaces
+//   - GET /workspaces/{id}: query the details of the specified workspace
+//   - PUT /workspaces/{id}: update the workspace name and description
+//   - DELETE /workspaces/{id}: delete the specified workspace (the default workspace cannot be deleted)
+//   - POST /workspaces/{id}/members: invite a new member to join the workspace
+//   - GET /workspaces/{id}/members: list all members of the workspace
+//   - DELETE /workspaces/{id}/members/{memberId}: remove a workspace member
+//   - PUT /workspaces/{id}/members/{memberId}/role: change the role of a workspace member
+//   - POST /workspaces/{id}/transfer-ownership: transfer workspace ownership to another member
 //
-// 成员角色层级为 owner > admin > member > viewer，操作权限遵循层级约束：
-// 只能创建/修改/删除比自身角色更低的成员，所有权转移仅限 Owner 操作。
-// 所有敏感操作（邀请、移除、角色变更、所有权转移）均记录审计日志。
+// The member role hierarchy is owner > admin > member > viewer, and operation permissions follow the hierarchy constraints:
+// you can only create/modify/delete members with a role lower than your own, and ownership transfer is restricted to the Owner.
+// All sensitive operations (invite, remove, role change, ownership transfer) are recorded in the audit log.
 
 package handler
 
@@ -32,7 +32,7 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// validRoles 是允许的成员角色白名单。
+// validRoles is the whitelist of allowed member roles.
 var validRoles = map[string]int{
 	"owner":  4,
 	"admin":  3,
@@ -40,26 +40,26 @@ var validRoles = map[string]int{
 	"viewer": 1,
 }
 
-// WorkspaceHandler 处理工作区管理的 HTTP 请求，包括工作区的 CRUD、成员管理及所有权转移。
+// WorkspaceHandler handles HTTP requests for workspace management, including workspace CRUD, member management, and ownership transfer.
 type WorkspaceHandler struct {
 	Svc *service.Service
 }
 
-// NewWorkspaceHandler 创建 WorkspaceHandler 实例。
+// NewWorkspaceHandler creates a WorkspaceHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供工作区和成员管理能力
+// Parameters:
+//   - svc: business logic service instance, provides workspace and member management capabilities
 //
-// 返回:
-//   - *WorkspaceHandler: 工作区处理器实例
+// Returns:
+//   - *WorkspaceHandler: workspace handler instance
 func NewWorkspaceHandler(svc *service.Service) *WorkspaceHandler {
 	return &WorkspaceHandler{Svc: svc}
 }
 
-// Routes 返回工作区的路由表。
+// Routes returns the route table for workspaces.
 //
-// 返回:
-//   - chi.Router: 包含工作区 CRUD、成员管理和所有权转移端点的路由
+// Returns:
+//   - chi.Router: routes containing workspace CRUD, member management, and ownership transfer endpoints
 func (h *WorkspaceHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -79,14 +79,14 @@ func (h *WorkspaceHandler) Routes() chi.Router {
 }
 
 
-// CreateWorkspace 处理 POST /workspaces 端点，创建新的工作区。
+// CreateWorkspace handles the POST /workspaces endpoint, creating a new workspace.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，请求体包含工作区名称、描述和 Issue 前缀
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, request body contains the workspace name, description, and issue prefix
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应（201 Created），包含创建的工作区或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w (201 Created), containing the created workspace or an error message
 func (h *WorkspaceHandler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -120,14 +120,14 @@ func (h *WorkspaceHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 	response.JSON(w, r, workspace)
 }
 
-// ListWorkspaces 处理 GET /workspaces 端点，列出所有工作区。
+// ListWorkspaces handles the GET /workspaces endpoint, listing all workspaces.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含工作区列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the workspace list or an error message
 func (h *WorkspaceHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -149,14 +149,14 @@ func (h *WorkspaceHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request
 	response.JSON(w, r, workspaces)
 }
 
-// GetWorkspace 处理 GET /workspaces/{id} 端点，查询指定工作区的详细信息。
+// GetWorkspace handles the GET /workspaces/{id} endpoint, querying the details of the specified workspace.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含工作区详情或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the workspace details or an error message
 func (h *WorkspaceHandler) GetWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -179,14 +179,14 @@ func (h *WorkspaceHandler) GetWorkspace(w http.ResponseWriter, r *http.Request) 
 }
 
 
-// UpdateWorkspace 处理 PUT /workspaces/{id} 端点，更新工作区的名称和描述。
+// UpdateWorkspace handles the PUT /workspaces/{id} endpoint, updating the workspace name and description.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，请求体包含更新后的名称和描述
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, request body contains the updated name and description
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含更新后的工作区或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the updated workspace or an error message
 func (h *WorkspaceHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -218,14 +218,14 @@ func (h *WorkspaceHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Reques
 	response.JSON(w, r, workspace)
 }
 
-// DeleteWorkspace 处理 DELETE /workspaces/{id} 端点，删除指定工作区（默认工作区不允许删除）。
+// DeleteWorkspace handles the DELETE /workspaces/{id} endpoint, deleting the specified workspace (the default workspace cannot be deleted).
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID
 //
-// 返回:
-//   - 无返回值，成功时返回 204 No Content，失败时返回错误信息
+// Returns:
+//   - no return value, returns 204 No Content on success, or an error message on failure
 func (h *WorkspaceHandler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -272,14 +272,14 @@ func (h *WorkspaceHandler) DeleteWorkspace(w http.ResponseWriter, r *http.Reques
 }
 
 
-// CreateMember 处理 POST /workspaces/{id}/members 端点，邀请新成员加入工作区，需要比目标角色更高的权限。
+// CreateMember handles the POST /workspaces/{id}/members endpoint, inviting a new member to join the workspace; requires a higher permission level than the target role.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，请求体包含成员姓名、邮箱和角色
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, request body contains the member name, email, and role
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应（201 Created），包含邀请信息和令牌或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w (201 Created), containing the invitation info and token or an error message
 func (h *WorkspaceHandler) CreateMember(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -299,14 +299,14 @@ func (h *WorkspaceHandler) CreateMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 校验角色是否在白名单中
+	// verify the role is in the whitelist
 	targetLevel, ok := validRoles[req.Role]
 	if !ok {
 		response.BadRequest(w, "invalid role: must be one of owner, admin, member, viewer")
 		return
 	}
 
-	// 只允许创建低于自己等级的角色
+	// only allow creating roles lower than your own level
 	actorLevel, ok := validRoles[claims.Role]
 	if !ok {
 		response.Forbidden(w, "invalid actor role")
@@ -345,14 +345,14 @@ func (h *WorkspaceHandler) CreateMember(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// ListMembers 处理 GET /workspaces/{id}/members 端点，列出工作区的所有成员。
+// ListMembers handles the GET /workspaces/{id}/members endpoint, listing all members of the workspace.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含成员列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the member list or an error message
 func (h *WorkspaceHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -370,14 +370,14 @@ func (h *WorkspaceHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, members)
 }
 
-// DeleteMember 处理 DELETE /workspaces/{id}/members/{memberId} 端点，移除工作区成员，不可移除 Owner 和自身。
+// DeleteMember handles the DELETE /workspaces/{id}/members/{memberId} endpoint, removing a workspace member; the Owner and yourself cannot be removed.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，memberId 为成员 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, memberId is the member UUID
 //
-// 返回:
-//   - 无返回值，成功时返回 204 No Content，失败时返回错误信息
+// Returns:
+//   - no return value, returns 204 No Content on success, or an error message on failure
 func (h *WorkspaceHandler) DeleteMember(w http.ResponseWriter, r *http.Request) {
 	memberID, err := uuid.Parse(chi.URLParam(r, "memberId"))
 	if err != nil {
@@ -391,7 +391,7 @@ func (h *WorkspaceHandler) DeleteMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 不能删除自己
+	// cannot delete yourself
 	if claims.UserID == memberID {
 		response.BadRequest(w, "cannot delete yourself")
 		return
@@ -404,7 +404,7 @@ func (h *WorkspaceHandler) DeleteMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 获取成员在该工作区中的角色
+	// get the member's role in this workspace
 	workspaceID, _ := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	wm, err := wsSvc.GetMembership(r.Context(), workspaceID, memberID)
 	if err != nil {
@@ -412,13 +412,13 @@ func (h *WorkspaceHandler) DeleteMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 不能删除 Owner
+	// cannot delete the Owner
 	if wm.Role == "owner" {
 		response.Forbidden(w, "cannot delete owner, transfer ownership first")
 		return
 	}
 
-	// 只允许删除角色等级低于自己的成员
+	// only allow deleting members with a role level lower than your own
 	actorLevel, ok := validRoles[claims.Role]
 	if !ok {
 		response.Forbidden(w, "invalid actor role")
@@ -458,14 +458,14 @@ func (h *WorkspaceHandler) DeleteMember(w http.ResponseWriter, r *http.Request) 
 }
 
 
-// UpdateMemberRole 处理 PUT /workspaces/{id}/members/{memberId}/role 端点，变更工作区成员的角色。
+// UpdateMemberRole handles the PUT /workspaces/{id}/members/{memberId}/role endpoint, changing the role of a workspace member.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，memberId 为成员 UUID，请求体包含新角色
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, memberId is the member UUID, request body contains the new role
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含更新后的成员角色信息或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the updated member role info or an error message
 func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	memberID, err := uuid.Parse(chi.URLParam(r, "memberId"))
 	if err != nil {
@@ -485,14 +485,14 @@ func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 校验新角色是否在白名单中
+	// verify the new role is in the whitelist
 	newLevel, ok := validRoles[req.Role]
 	if !ok {
 		response.BadRequest(w, "invalid role: must be one of owner, admin, member, viewer")
 		return
 	}
 
-	// 不能修改自己的角色
+	// cannot change your own role
 	if claims.UserID == memberID {
 		response.BadRequest(w, "cannot change your own role")
 		return
@@ -505,7 +505,7 @@ func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 获取成员在该工作区中的当前角色
+	// get the member's current role in this workspace
 	workspaceID, _ := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	wm, err := wsSvc.GetMembership(r.Context(), workspaceID, memberID)
 	if err != nil {
@@ -513,13 +513,13 @@ func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 只有 Owner 可以将角色变更到/变更自 Owner
+	// only the Owner can change a role to/from Owner
 	if req.Role == "owner" || wm.Role == "owner" {
 		response.BadRequest(w, "use transfer-ownership to change owner role")
 		return
 	}
 
-	// 只允许设置低于自己等级的角色
+	// only allow setting roles lower than your own level
 	actorLevel, ok := validRoles[claims.Role]
 	if !ok {
 		response.Forbidden(w, "invalid actor role")
@@ -531,12 +531,12 @@ func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 只能修改角色等级低于自己的成员
+	// can only modify members whose role level is lower than your own
 	if currentLevel >= actorLevel {
 		response.Forbidden(w, "cannot modify a member with role equal to or higher than your own")
 		return
 	}
-	// 只能分配低于自己等级的角色
+	// can only assign roles lower than your own level
 	if newLevel >= actorLevel {
 		response.Forbidden(w, "cannot assign a role equal to or higher than your own")
 		return

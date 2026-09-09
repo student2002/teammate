@@ -1,4 +1,4 @@
--- 审计日志
+-- Audit log queries
 
 -- name: CreateAuditLog :one
 INSERT INTO audit_logs (workspace_id, actor_type, actor_id, action, resource_type, resource_id, details, ip_address, user_agent, request_id)

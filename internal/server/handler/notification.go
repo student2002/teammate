@@ -1,10 +1,10 @@
-// notification.go 提供通知列表查询的 HTTP API 端点。
+// notification.go provides HTTP API endpoints for querying the notification list.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - GET /workspaces/{workspaceId}/notifications: 列出工作区下的通知，支持按 member_id 查询参数过滤
+// This file provides the following HTTP API endpoints:
+//   - GET /workspaces/{workspaceId}/notifications: list notifications under the workspace, supports filtering by the member_id query parameter
 //
-// 通知列表由 NotificationService 查询，返回指定工作区中所有通知或特定成员的通知。
-// 请求路径参数 workspaceId 必须为合法的 UUID 格式；member_id 查询参数可选，若提供则仅返回该成员的通知。
+// The notification list is queried by NotificationService and returns all notifications in the specified workspace or notifications for a specific member.
+// The request path parameter workspaceId must be a valid UUID format; the member_id query parameter is optional, and if provided, only that member's notifications are returned.
 
 package handler
 
@@ -18,26 +18,26 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// NotificationHandler 处理通知查询的 HTTP 请求。
+// NotificationHandler handles HTTP requests for notification queries.
 type NotificationHandler struct {
 	Svc *service.Service
 }
 
-// NewNotificationHandler 创建 NotificationHandler 实例。
+// NewNotificationHandler creates a NotificationHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供通知查询能力
+// Parameters:
+//   - svc: business logic service instance, provides notification query capability
 //
-// 返回:
-//   - *NotificationHandler: 通知处理器实例
+// Returns:
+//   - *NotificationHandler: notification handler instance
 func NewNotificationHandler(svc *service.Service) *NotificationHandler {
 	return &NotificationHandler{Svc: svc}
 }
 
-// Routes 返回通知的路由表。
+// Routes returns the route table for notifications.
 //
-// 返回:
-//   - chi.Router: 包含通知相关端点的路由
+// Returns:
+//   - chi.Router: router containing notification-related endpoints
 func (h *NotificationHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -46,14 +46,14 @@ func (h *NotificationHandler) Routes() chi.Router {
 	return r
 }
 
-// ListNotifications 处理 GET /workspaces/{workspaceId}/notifications 端点，列出工作区下的通知，支持按成员 ID 过滤。
+// ListNotifications handles the GET /workspaces/{workspaceId}/notifications endpoint, listing notifications under the workspace, supports filtering by member ID.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，查询参数 member_id 可选
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, query parameter member_id is optional
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含通知列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w containing the notification list or an error message
 func (h *NotificationHandler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {

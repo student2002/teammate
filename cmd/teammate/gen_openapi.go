@@ -1,15 +1,15 @@
-// gen_openapi.go 提供 gen-openapi 子命令,通过 chi.Walk 反射生产路由树生成 OpenAPI 3.1 spec。
+// gen_openapi.go provides the gen-openapi subcommand, which generates an OpenAPI 3.1 spec by reflecting the production route tree via chi.Walk.
 //
-// 设计原则:
-//   - 路由注册是唯一真相源——反射结果必然和 routes_*.go 中的 r.Get/r.Post 一致
-//   - 不连接真实 DB/Redis——gen-openapi 只需要路由结构,不需要运行时数据
-//   - 生成产物 docs/apifox/teammate-openapi.json 可直接导入 Apifox/Postman
+// Design principles:
+//   - Route registration is the single source of truth — the reflection result is necessarily consistent with the r.Get/r.Post calls in routes_*.go
+//   - Does not connect to a real DB/Redis — gen-openapi only needs the route structure, not runtime data
+//   - The generated artifact docs/apifox/teammate-openapi.json can be imported directly into Apifox/Postman
 //
-// 用法:
+// Usage:
 //
 //	go run ./cmd/teammate gen-openapi -o docs/apifox/teammate-openapi.json
 //
-// CI 集成:生成后 git diff --exit-code 确保提交的 spec 与代码同步。
+// CI integration: after generation, run git diff --exit-code to ensure the committed spec stays in sync with the code.
 package main
 
 import (
@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	genOpenAPIOutput string // 输出文件路径
-	genOpenAPIIndent bool   // 是否缩进 JSON
+	genOpenAPIOutput string // output file path
+	genOpenAPIIndent bool   // whether to indent the JSON
 )
 
 var genOpenAPICmd = &cobra.Command{
@@ -55,25 +55,25 @@ func init() {
 	genOpenAPICmd.Flags().BoolVar(&genOpenAPIIndent, "indent", true,
 		"indent JSON output (pretty-print)")
 
-	// gen-openapi 是开发工具,不需要认证
+	// gen-openapi is a development tool and does not require authentication
 	skipAuthCommands["teammate gen-openapi"] = true
 	rootCmd.AddCommand(genOpenAPICmd)
 }
 
 func runGenOpenAPI(cmd *cobra.Command, args []string) error {
-	// 构建生产路由树(不连接真实 DB/Redis)
+	// Build the production route tree (does not connect to a real DB/Redis)
 	router, err := server.BuildRouterForOpenAPI()
 	if err != nil {
 		return fmt.Errorf("build router: %w", err)
 	}
 
-	// 反射路由树生成 OpenAPI spec
+	// Reflect the route tree to generate the OpenAPI spec
 	spec, err := server.ReflectOpenAPI(router)
 	if err != nil {
 		return fmt.Errorf("reflect openapi: %w", err)
 	}
 
-	// 序列化 JSON
+	// Serialize JSON
 	var data []byte
 	if genOpenAPIIndent {
 		data, err = json.MarshalIndent(spec, "", "  ")
@@ -84,12 +84,12 @@ func runGenOpenAPI(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("marshal spec: %w", err)
 	}
 
-	// 写入文件
+	// Write to file
 	if err := os.WriteFile(genOpenAPIOutput, data, 0644); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 
-	// 统计端点数
+	// Count endpoints
 	pathCount := len(spec.Paths)
 	endpointCount := 0
 	for _, item := range spec.Paths {

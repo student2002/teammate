@@ -1,4 +1,4 @@
-// workflow_trigger_test.go 覆盖工作流触发器数据访问的测试。
+// workflow_trigger_test.go tests for workflow trigger data access.
 package store_test
 
 import (

@@ -1,4 +1,4 @@
-// main.go 是 teammate CLI 的入口，执行根命令并处理退出码。
+// main.go is the entry point for the teammate CLI; it executes the root command and handles exit codes.
 package main
 
 import "os"

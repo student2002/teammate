@@ -1,4 +1,4 @@
--- 社区工作流查询
+-- Community workflow queries
 
 -- name: CreateCommunityWorkflow :one
 INSERT INTO community_workflows (

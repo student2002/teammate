@@ -31,7 +31,7 @@ type CreateRuntimeParams struct {
 	PublicKey        sql.NullString `db:"public_key" json:"public_key"`
 }
 
-// 运行时查询
+// Runtime queries
 func (q *Queries) CreateRuntime(ctx context.Context, arg CreateRuntimeParams) (Runtime, error) {
 	row := q.db.QueryRowContext(ctx, createRuntime,
 		arg.AgentID,

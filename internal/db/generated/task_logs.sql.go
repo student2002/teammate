@@ -29,7 +29,7 @@ type CreateTaskLogParams struct {
 	Timestamp time.Time `db:"timestamp" json:"timestamp"`
 }
 
-// 任务日志查询
+// Task log queries
 func (q *Queries) CreateTaskLog(ctx context.Context, arg CreateTaskLogParams) (TaskLog, error) {
 	row := q.db.QueryRowContext(ctx, createTaskLog,
 		arg.TaskID,

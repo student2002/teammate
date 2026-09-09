@@ -1,4 +1,4 @@
-// node.go 实现节点子命令，管理任务节点的认领、审批等操作。
+// node.go implements the node subcommand, managing task node claiming, approval, and other operations.
 package main
 
 import (

@@ -1,4 +1,4 @@
-// security_statemachine_test.go 覆盖状态机安全约束的测试。
+// security_statemachine_test.go tests covering state machine security constraints.
 package handler_test
 
 import (
@@ -11,7 +11,7 @@ import (
 	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
-// TestNode3CannotBeClaimedBeforeNode2Completed 验证在 node2（sort_order=2）未完成时无法认领 node3（sort_order=3）。
+// TestNode3CannotBeClaimedBeforeNode2Completed verifies that node3 (sort_order=3) cannot be claimed when node2 (sort_order=2) is not completed.
 func TestNode3CannotBeClaimedBeforeNode2Completed(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -37,10 +37,10 @@ func TestNode3CannotBeClaimedBeforeNode2Completed(t *testing.T) {
 	node1ID := nodes[0]["id"].(string)
 	node3ID := nodes[2]["id"].(string)
 
-	// 认领 node1 但不完成它
+	// Claim node1 but do not complete it
 	claimNode(t, client, srv.URL, taskID, node1ID, agentID, agentToken)
 
-	// 尝试认领 node3——应失败，因为 node2 未完成
+	// Attempt to claim node3 — should fail because node2 is not completed
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{"agent_id": agentID}
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+node3ID+"/claim", agentToken, body)
@@ -49,7 +49,7 @@ func TestNode3CannotBeClaimedBeforeNode2Completed(t *testing.T) {
 	}
 }
 
-// TestRejectTargetNodeCanBeReclaimed 验证驳回后目标节点被置为 pending 状态并可被其他代理重新认领。
+// TestRejectTargetNodeCanBeReclaimed verifies that after rejection, the target node is set to pending status and can be reclaimed by other agents.
 func TestRejectTargetNodeCanBeReclaimed(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -74,20 +74,20 @@ func TestRejectTargetNodeCanBeReclaimed(t *testing.T) {
 	node1ID := nodes[0]["id"].(string)
 	node2ID := nodes[1]["id"].(string)
 
-	// Agent1 认领并完成 node1
+	// Agent1 claims and completes node1
 	claimNode(t, client, srv.URL, taskID, node1ID, agent1ID, agent1Token)
 	approveNode(t, client, srv.URL, taskID, node1ID, agent1ID, agent1Token)
 
-	// Agent2 认领 node2（review）
+	// Agent2 claims node2 (review)
 	claimNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token)
 
-	// 拒绝 node2 并指向 node1
+	// Reject node2 targeting node1
 	status, _ := rejectNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token, &node1ID)
 	if status != 200 {
 		t.Fatalf("reject: expected 200, got %d", status)
 	}
 
-	// 验证 node1 现在为 pending（而非 in_progress）
+	// Verify node1 is now pending (not in_progress)
 	q = dbQueries(t, db)
 	node1UUID := parseUUID(t, node1ID)
 	node1, err := q.GetTaskNode(t.Context(), node1UUID)
@@ -101,11 +101,11 @@ func TestRejectTargetNodeCanBeReclaimed(t *testing.T) {
 		t.Errorf("after reject, target node assignee_id should be NULL, got %v", node1.AssigneeID)
 	}
 
-	// Agent1 可以重新认领 node1
+	// Agent1 can reclaim node1
 	claimNode(t, client, srv.URL, taskID, node1ID, agent1ID, agent1Token)
 }
 
-// TestAgentCanCompleteStandardNode 验证代理可以使用 /complete 端点完成标准节点而无需 task:approve 权限。
+// TestAgentCanCompleteStandardNode verifies that an agent can complete a standard node using the /complete endpoint without task:approve permission.
 func TestAgentCanCompleteStandardNode(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -121,17 +121,17 @@ func TestAgentCanCompleteStandardNode(t *testing.T) {
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
-	// 仅授予 task:claim 和 task:execute，不授予 task:approve
+	// Only grant task:claim and task:execute, not task:approve
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "task:claim", token)
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "task:execute", token)
 
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	codeNodeID := nodes[0]["id"].(string)
 
-	// Agent 认领 code 节点
+	// Agent claims code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agentID, agentToken)
 
-	// Agent 使用 /complete 端点（而非 /approve）
+	// Agent uses /complete endpoint (not /approve)
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{
 		"summary": "Code completed by agent",
@@ -150,8 +150,8 @@ func TestAgentCanCompleteStandardNode(t *testing.T) {
 	}
 }
 
-// TestResolvedManualInterventionNodeCanBeCompleted 验证节点可以从
-// manual_intervention -> pending -> in_progress -> completed 流转，前提是已完成人工处理。
+// TestResolvedManualInterventionNodeCanBeCompleted verifies that a node can transition from
+// manual_intervention -> pending -> in_progress -> completed after manual resolution.
 func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -203,7 +203,7 @@ func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 	}
 
 	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/complete", agentToken, map[string]interface{}{
-		"summary": "已完成 OpenClaw 介绍文章的编写",
+		"summary": "Completed writing the OpenClaw introductory article",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("complete resolved node: expected 200, got %d, body: %s", status, respBody)
@@ -217,7 +217,7 @@ func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 	}
 }
 
-// TestAgentCannotCompleteReviewNode 验证 /complete 端点拒绝审核节点（审核节点需要 approve/reject）。
+// TestAgentCannotCompleteReviewNode verifies that the /complete endpoint rejects review nodes (review nodes require approve/reject).
 func TestAgentCannotCompleteReviewNode(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -243,14 +243,14 @@ func TestAgentCannotCompleteReviewNode(t *testing.T) {
 	codeNodeID := nodes[0]["id"].(string)
 	reviewNodeID := nodes[1]["id"].(string)
 
-	// Agent1 完成 code 节点
+	// Agent1 completes code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
 	approveNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
 
-	// Agent2 认领 review 节点
+	// Agent2 claims review node
 	claimNode(t, client, srv.URL, taskID, reviewNodeID, agent2ID, agent2Token)
 
-	// Agent2 尝试在 review 节点上调用 /complete——应失败
+	// Agent2 attempts to call /complete on review node — should fail
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{"summary": "should fail"}
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+reviewNodeID+"/complete", agent2Token, body)
@@ -259,7 +259,7 @@ func TestAgentCannotCompleteReviewNode(t *testing.T) {
 	}
 }
 
-// TestInterruptAckEndpoint 验证代理可以通过 /interrupt-ack 端点确认中断。
+// TestInterruptAckEndpoint verifies that an agent can acknowledge an interrupt via the /interrupt-ack endpoint.
 func TestInterruptAckEndpoint(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -280,10 +280,10 @@ func TestInterruptAckEndpoint(t *testing.T) {
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	codeNodeID := nodes[0]["id"].(string)
 
-	// Agent 认领 code 节点
+	// Agent claims code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agentID, agentToken)
 
-	// Agent 发送中断确认
+	// Agent sends interrupt acknowledgment
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{
 		"comment": "interrupt acknowledged",
@@ -294,7 +294,7 @@ func TestInterruptAckEndpoint(t *testing.T) {
 	}
 }
 
-// TestLogUploadCannotForgeNode 验证日志消息不能上传到 URL 中不属于该任务的节点。
+// TestLogUploadCannotForgeNode verifies that log messages cannot be uploaded to a node that does not belong to the task in the URL.
 func TestLogUploadCannotForgeNode(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -312,20 +312,20 @@ func TestLogUploadCannotForgeNode(t *testing.T) {
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
-	// 创建两个任务
+	// Create two tasks
 	taskID1, nodes1 := createTask(t, client, srv.URL, projID, tplID, token)
 	taskID2, _ := createTask(t, client, srv.URL, projID, tplID, token)
 
-	// Agent 认领 task1 中的节点
+	// Agent claims a node in task1
 	claimNode(t, client, srv.URL, taskID1, nodes1[0]["id"].(string), agentID, agentToken)
 
-	// Agent 尝试使用 task1 的节点向 task2 上传日志
+	// Agent attempts to upload a log to task2 using a node from task1
 	body := map[string]interface{}{
-		"node_id": nodes1[0]["id"].(string), // 该节点属于 task1
+		"node_id": nodes1[0]["id"].(string), // this node belongs to task1
 		"type":    "stdout",
 		"content": "forged log",
 	}
-	url := fmt.Sprintf("%s/api/tasks/%d/messages", srv.URL, taskID2) // 但 URL 指向 task2
+	url := fmt.Sprintf("%s/api/tasks/%d/messages", srv.URL, taskID2) // but URL points to task2
 	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, url, agentToken, body)
 	if status != http.StatusForbidden {
 		t.Errorf("log upload with wrong task: expected 403, got %d, body: %s", status, string(respBody))

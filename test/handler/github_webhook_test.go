@@ -1,4 +1,4 @@
-// github_webhook_test.go 覆盖 GitHub Webhook 端点的测试。
+// github_webhook_test.go tests the GitHub Webhook endpoints.
 package handler_test
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/teammate/server/test/testdb"
 )
 
-// strPtr 返回 s 的指针，用于构造领域参数中的 *string 字段。
+// strPtr returns a pointer to s, used for constructing *string fields in domain params.
 func strPtr(s string) *string { return &s }
 
 func TestGitHubWebhookSignatureAndIssueCreation(t *testing.T) {
@@ -33,7 +33,7 @@ func TestGitHubWebhookSignatureAndIssueCreation(t *testing.T) {
 		_ = testdb.DeleteWorkspace(pgDB, ws.ID)
 	})
 
-	payload := githubIssuePayload("opened", "acme", "rocket", 42, "修复登录失败")
+	payload := githubIssuePayload("opened", "acme", "rocket", 42, "Fix login failure")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/github", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "issues")
@@ -67,7 +67,7 @@ func TestGitHubWebhookSignatureAndIssueCreation(t *testing.T) {
 	}
 	var matching int
 	for _, task := range tasks {
-		if task.Title == "修复登录失败" {
+		if task.Title == "Fix login failure" {
 			matching++
 		}
 	}
@@ -105,7 +105,7 @@ func createGitHubWebhookTemplate(t *testing.T, svc *service.Service, secret stri
 		TriggerConfig:  config,
 		TriggerEnabled: true,
 	}, []types.CreateTemplateNodeParams{
-		{Name: "处理 Issue", SortOrder: 1, NodeType: types.NodeTypeStandard, AssigneeType: types.AssigneeTypeAnyAgent, TimeoutMinutes: 60, MaxRejectCycles: 3},
+		{Name: "Handle Issue", SortOrder: 1, NodeType: types.NodeTypeStandard, AssigneeType: types.AssigneeTypeAnyAgent, TimeoutMinutes: 60, MaxRejectCycles: 3},
 	})
 	if err != nil {
 		t.Fatalf("create workflow template: %v", err)
@@ -126,7 +126,7 @@ func githubIssuePayload(action, owner, repo string, number int, title string) []
 		"issue": map[string]interface{}{
 			"number":   number,
 			"title":    title,
-			"body":     "用户无法登录",
+			"body":     "User cannot log in",
 			"html_url": fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repo, number),
 			"user": map[string]interface{}{
 				"login": "octocat",

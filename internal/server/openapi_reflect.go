@@ -1,20 +1,20 @@
-// openapi_reflect.go 通过反射 chi 路由树生成 OpenAPI 3.1 spec。
+// openapi_reflect.go generates the OpenAPI 3.1 spec by reflecting over the chi router tree.
 //
-// 核心原理:
-//   - routes_*.go 中的 r.Get/r.Post/r.Put/r.Delete 是路由注册的唯一真相源
-//   - chi.Walk 遍历路由树,反射出 method+pattern,必然与代码一致
-//   - 任何路由变更后重跑 gen-openapi,spec 自动同步——零手工维护
+// Core principle:
+//   - The r.Get/r.Post/r.Put/r.Delete calls in routes_*.go are the single source of truth for route registration
+//   - chi.Walk walks the router tree and reflects out method+pattern, which necessarily matches the code
+//   - After any route change, rerun gen-openapi and the spec auto-syncs — zero manual maintenance
 //
-// 设计取舍:
-//   - 不解析 handler 函数签名提取请求/响应 schema(那需要 AST 解析或运行时反射,
-//     复杂度高且易出错)
-//   - 转而生成"结构正确、schema 精简"的 spec:每个端点有正确的 method/path/tags,
-//     请求/响应统一引用通用 schema(object + 说明)
-//   - 这足以让 Apifox/Postman 正确分组所有端点,开发者再按需补充具体 schema
+// Design trade-offs:
+//   - Does not parse handler function signatures to extract request/response schemas
+//     (that would require AST parsing or runtime reflection, with high complexity and error-prone)
+//   - Instead generates a "structurally correct, schema-lean" spec: each endpoint has correct method/path/tags,
+//     and request/response uniformly reference generic schemas (object + description)
+//   - This is enough for Apifox/Postman to correctly group all endpoints; developers supplement specific schemas as needed
 //
-// 与 swag 注解方案的对比:
-//   - swag:每个 handler 加 10 行注释,手工维护 @Router/@Param/@Success,易漂移
-//   - 反射:零注释,路由树即真相源,改路由自动同步 spec
+// Comparison with the swag annotation approach:
+//   - swag: each handler gets 10 lines of comments, manually maintaining @Router/@Param/@Success, prone to drift
+//   - reflection: zero comments, the router tree is the source of truth, changing routes auto-syncs the spec
 package server
 
 import (
@@ -29,57 +29,57 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// BuildRouterForOpenAPI 构建用于 OpenAPI 生成的生产路由树。
+// BuildRouterForOpenAPI builds the production router tree used for OpenAPI generation.
 //
-// 与 server.New() 的区别:
-//   - 不连接真实 DB/Redis(传入 nil)
-//   - 不启动 Hub/Gateway(传入 nil)
-//   - 仅构建路由结构,供 chi.Walk 反射
+// Differences from server.New():
+//   - Does not connect to a real DB/Redis (passes nil)
+//   - Does not start Hub/Gateway (passes nil)
+//   - Only builds the route structure for chi.Walk to reflect over
 //
-// 注意:中间件(AuthMiddleware/RateLimitMiddleware 等)会正常注册,
-// 但因为不执行任何 HTTP 请求,它们不会 panic。路由树结构完全等同于生产环境。
+// Note: middleware (AuthMiddleware/RateLimitMiddleware, etc.) registers normally,
+// but since no HTTP request is executed, they will not panic. The router tree structure is identical to production.
 func BuildRouterForOpenAPI() (chi.Router, error) {
 	cfg := LoadConfig()
 
-	// 构造最小 Server,仅设置 Config 和必要的 nil 依赖
+	// Build a minimal Server, only setting Config and the necessary nil dependencies
 	s := &Server{
 		Config:  &cfg,
-		DB:      nil, // gen-openapi 不需要真实 DB
-		Redis:   nil, // gen-openapi 不需要真实 Redis
-		Hub:     nil, // SSE Hub 不启动
-		Gateway: nil, // WebSocket Gateway 不启动
+		DB:      nil, // gen-openapi does not need a real DB
+		Redis:   nil, // gen-openapi does not need a real Redis
+		Hub:     nil, // SSE Hub not started
+		Gateway: nil, // WebSocket Gateway not started
 	}
 
-	// 使用 buildRouter 构建与生产完全一致的路由树
-	// service.New(nil, nil, nil) 是安全的——它只构造结构体,不执行查询
+	// Use buildRouter to construct a router tree identical to production
+	// service.New(nil, nil, nil) is safe — it only constructs the struct and runs no queries
 	svc := buildServiceForReflection(s)
 	return s.buildRouter(svc), nil
 }
 
-// buildServiceForReflection 构造用于路由反射的最小 service.Service。
+// buildServiceForReflection builds a minimal service.Service for router reflection.
 //
-// gen-openapi 只需要路由结构,不需要真实数据访问。
-// service.New 内部调用 store.New(pgDB),pgDB 为 nil 时 store 方法会返回错误,
-// 但这不会影响路由树构建——路由注册不执行 store 方法。
+// gen-openapi only needs the route structure, not real data access.
+// service.New internally calls store.New(pgDB); when pgDB is nil, store methods return errors,
+// but this does not affect router tree construction — route registration does not invoke store methods.
 func buildServiceForReflection(s *Server) *service.Service {
 	return service.New(s.DB, s.Hub, s.Redis)
 }
 
-// ReflectOpenAPI 遍历 chi 路由树,生成 OpenAPI 3.1 文档。
+// ReflectOpenAPI walks the chi router tree and generates an OpenAPI 3.1 document.
 //
-// 生成内容:
-//   - info: 标题、版本、描述
-//   - servers: 本地开发、Next.js 代理
-//   - paths: 每个端点的 method/path/summary/tags
-//   - components.schemas: 通用 Error schema
+// Generated content:
+//   - info: title, version, description
+//   - servers: local development, Next.js proxy
+//   - paths: method/path/summary/tags for each endpoint
+//   - components.schemas: generic Error schema
 //   - components.securitySchemes: BearerAuth + ApiKeyAuth
 //
-// 端点元数据(tags/summary)通过 pathToTagAndSummary 从 URL 路径推断,
-// 无需手工维护注释。
+// Endpoint metadata (tags/summary) is inferred from the URL path via pathToTagAndSummary,
+// no manual comment maintenance required.
 func ReflectOpenAPI(router chi.Router) (*OpenAPIDoc, error) {
 	doc := newOpenAPIDoc()
 
-	// 收集所有路由
+	// Collect all routes
 	type routeEntry struct {
 		method string
 		path   string
@@ -87,15 +87,15 @@ func ReflectOpenAPI(router chi.Router) (*OpenAPIDoc, error) {
 	var routes []routeEntry
 
 	walkFn := func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		// chi.Walk 会返回 HEAD 方法(对应 GET),我们只记录显式注册的方法
-		// 跳过 chi 内部路由(如 /* 静态文件回退)和空方法
+		// chi.Walk returns HEAD methods (corresponding to GET); we only record explicitly registered methods
+		// Skip chi internal routes (e.g. /* static file fallback) and empty methods
 		if method == "" || route == "" {
 			return nil
 		}
-		// 规范化路径(修复审核问题 1/2/3):
-		//   - 剥离 /api 前缀:tag 推断和 Apifox 分组需要原始资源路径
-		//   - chi Mount("/", ...) 反射出 * 段,OpenAPI 3.1 仅允许 {param},替换为 {nodeBase}
-		//   - Mount 子路由产生 trailing slash(/comments/),OpenAPI 视 /x 与 /x/ 为不同路径,裁剪
+		// Normalize the path (fixes review issues 1/2/3):
+		//   - Strip the /api prefix: tag inference and Apifox grouping need the original resource path
+		//   - chi Mount("/", ...) reflects a * segment; OpenAPI 3.1 only allows {param}, replace with {nodeBase}
+		//   - Mounted sub-routers produce a trailing slash (/comments/); OpenAPI treats /x and /x/ as different paths, trim it
 		normalized := normalizeRoute(route)
 		if normalized == "" {
 			return nil
@@ -108,7 +108,7 @@ func ReflectOpenAPI(router chi.Router) (*OpenAPIDoc, error) {
 		return nil, fmt.Errorf("walk router: %w", err)
 	}
 
-	// 按路径+方法排序,确保生成结果稳定(deterministic)
+	// Sort by path+method to ensure deterministic output
 	sort.Slice(routes, func(i, j int) bool {
 		if routes[i].path != routes[j].path {
 			return routes[i].path < routes[j].path
@@ -116,7 +116,7 @@ func ReflectOpenAPI(router chi.Router) (*OpenAPIDoc, error) {
 		return routes[i].method < routes[j].method
 	})
 
-	// 将路由填入 OpenAPI paths
+	// Fill the routes into OpenAPI paths
 	for _, r := range routes {
 		pathItem, exists := doc.Paths[r.path]
 		if !exists {
@@ -143,52 +143,52 @@ func ReflectOpenAPI(router chi.Router) (*OpenAPIDoc, error) {
 		}
 	}
 
-	// 反射 handler DTO Response 结构体,注册业务 schema $ref(修复审核问题 8)
-	// 使成功响应引用具体 schema 而非不透明 object,Apifox 可渲染示例响应
+	// Reflect handler DTO Response structs and register business schema $refs (fixes review issue 8)
+	// so success responses reference a concrete schema instead of an opaque object; Apifox can render example responses
 	if err := reflectResponseSchemas(doc, resolveHandlerDir()); err != nil {
-		// 反射失败不中断生成,降级为不透明 object(已在 buildStandardResponses 中处理)
-		// 但记录到 stderr 提醒开发者修复 handler DTO 声明
+		// Reflection failure does not abort generation; it degrades to an opaque object (handled in buildStandardResponses)
+		// but logs to stderr to remind developers to fix the handler DTO declarations
 		fmt.Fprintf(os.Stderr, "warn: reflect response schemas: %v\n", err)
 	}
 
-	// 为成功响应注入业务 schema $ref(基于路径推断匹配的 Response 类型)
+	// Inject business schema $refs into success responses (matching the Response type inferred from the path)
 	injectResponseSchemaRefs(doc)
 
 	return doc, nil
 }
 
-// buildOperation 从 method+path 构建一个 OpenAPI Operation。
+// buildOperation builds an OpenAPI Operation from method+path.
 //
-// 元数据推断规则:
-//   - tags: 从路径首段推断(如 /auth/login → "认证",/workspaces → "工作区")
-//   - summary: 从 method+path 生成简短描述
-//   - operationId: method_path_去参数
-//   - responses: 统一 200/400/401/403/404/500,引用通用 Error schema
+// Metadata inference rules:
+//   - tags: inferred from the first path segment (e.g. /auth/login → "Authentication", /workspaces → "Workspaces")
+//   - summary: a short description generated from method+path
+//   - operationId: method_path_without-params
+//   - responses: unified 200/400/401/403/404/500 referencing the generic Error schema
 func buildOperation(method, path string) *OpenAPIOperation {
 	tag, _ := pathToTag(path)
 
-	// 生成 operationId: 去掉路径参数,用下划线连接
+	// Generate operationId: strip path params, join with underscores
 	opID := method + "_" + sanitizePathForID(path)
 
-	// 推断 summary
+	// Infer the summary
 	summary := inferSummary(method, path)
 
 	op := &OpenAPIOperation{
 		Tags:        []string{tag},
 		Summary:     summary,
-		Description: fmt.Sprintf("%s %s — 由 chi 路由反射自动生成", method, path),
+		Description: fmt.Sprintf("%s %s — auto-generated via chi router reflection", method, path),
 		OperationID: opID,
 		Responses:   buildStandardResponses(method),
 	}
 
-	// 注入 per-operation security(修复审核问题 6:全局仅 BearerAuth,Agent 端点无法标为 ApiKeyAuth)
-	// Agent 专用端点用 API Key(st_/tm_ Token)认证,需显式声明覆盖全局 BearerAuth
+	// Inject per-operation security (fixes review issue 6: global only BearerAuth, Agent endpoints could not be marked as ApiKeyAuth)
+	// Agent-specific endpoints use API Key (st_/tm_ Token) auth and must explicitly override the global BearerAuth
 	security := inferSecurity(path)
 	if security != nil {
 		op.Security = security
 	}
 
-	// POST/PUT/PATCH 通常有请求体
+	// POST/PUT/PATCH typically have a request body
 	switch strings.ToLower(method) {
 	case "post", "put", "patch":
 		op.RequestBody = &OpenAPIRequestBody{
@@ -197,7 +197,7 @@ func buildOperation(method, path string) *OpenAPIOperation {
 				"application/json": {
 					Schema: map[string]interface{}{
 						"type":       "object",
-						"description": "请求体结构参见对应 handler 的 DTO 定义",
+						"description": "Request body structure — see the corresponding handler's DTO definition",
 					},
 				},
 			},
@@ -207,19 +207,19 @@ func buildOperation(method, path string) *OpenAPIOperation {
 	return op
 }
 
-// inferSecurity 从路径推断端点的认证方式。
+// inferSecurity infers the endpoint's authentication method from the path.
 //
-// 推断规则(修复审核问题 6:全局仅 BearerAuth,Agent 专用端点需标为 ApiKeyAuth):
-//   - Agent 专用端点(/runtimes/*、/token-usage、/messages、/logs、/git-branch、
-//     /token-exchange、/agents/*/rotate-token、/agents/*/in-progress-nodes、
-//     /agents/*/execution/*)使用 API Key(st_/tm_ Token)认证
-//   - 其他端点使用全局 BearerAuth(返回 nil 表示沿用全局)
+// Inference rules (fixes review issue 6: global only BearerAuth, Agent-specific endpoints must be marked as ApiKeyAuth):
+//   - Agent-specific endpoints (/runtimes/*, /token-usage, /messages, /logs, /git-branch,
+//     /token-exchange, /agents/*/rotate-token, /agents/*/in-progress-nodes,
+//     /agents/*/execution/*) use API Key (st_/tm_ Token) auth
+//   - Other endpoints use the global BearerAuth (return nil to indicate inheriting the global)
 //
-// 返回:
-//   - nil: 沿用全局 BearerAuth
-//   - []map: per-operation security 声明(含 ApiKeyAuth 或两者皆可)
+// Returns:
+//   - nil: inherit the global BearerAuth
+//   - []map: per-operation security declaration (with ApiKeyAuth or both allowed)
 func inferSecurity(path string) []map[string][]interface{} {
-	// Agent 专用端点判定:用路径末段和前缀识别
+	// Agent-specific endpoint detection: identify by the last path segment and prefixes
 	lastSeg := ""
 	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for i := len(segments) - 1; i >= 0; i-- {
@@ -230,23 +230,23 @@ func inferSecurity(path string) []map[string][]interface{} {
 		}
 	}
 
-	// runtime 相关端点(agentd 守护进程注册/心跳/同步/公钥/SSE)
+	// Runtime-related endpoints (agentd daemon registration/heartbeat/sync/public-key/SSE)
 	if strings.Contains(path, "/runtimes") {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}, {"BearerAuth": {}}}
 	}
 
-	// token-exchange 端点(API Token → 会话 Token,agentd 调用)
+	// token-exchange endpoint (API Token → session token, called by agentd)
 	if lastSeg == "token-exchange" {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}}
 	}
 
-	// 任务级 agentd 上报端点
-	// 注意:用 strings.Contains 判定而非末段匹配,因为 /logs/ws 末段是 ws 而非 logs
+	// Task-level agentd reporting endpoints
+	// Note: use strings.Contains rather than last-segment matching, because the last segment of /logs/ws is ws, not logs
 	agentTaskPaths := map[string]bool{
-		"/messages":    true, // 日志消息上报
-		"/logs":        true, // 历史日志查询(daemon 回放) + /logs/ws WebSocket
-		"/git-branch":  true, // Git 分支上报
-		"/token-usage": true, // Token 用量上报
+		"/messages":    true, // log message reporting
+		"/logs":        true, // historical log query (daemon replay) + /logs/ws WebSocket
+		"/git-branch":  true, // Git branch reporting
+		"/token-usage": true, // token usage reporting
 	}
 	for key := range agentTaskPaths {
 		if strings.Contains(path, "/tasks/") && strings.Contains(path, key) {
@@ -254,7 +254,7 @@ func inferSecurity(path string) []map[string][]interface{} {
 		}
 	}
 
-	// Agent 自身管理端点(轮换 Token、查询进行中节点、执行 MCP)
+	// Agent self-management endpoints (rotate token, query in-progress nodes, execute MCP)
 	agentSelfEndpoints := map[string]bool{
 		"rotate-token":        true,
 		"in-progress-nodes":   true,
@@ -262,22 +262,22 @@ func inferSecurity(path string) []map[string][]interface{} {
 	if strings.Contains(path, "/agents/") && agentSelfEndpoints[lastSeg] {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}, {"BearerAuth": {}}}
 	}
-	// execution/mcp-servers 是 daemon-only,仅 ApiKeyAuth
+	// execution/mcp-servers is daemon-only, ApiKeyAuth only
 	if strings.Contains(path, "/agents/") && lastSeg == "mcp-servers" &&
 		strings.Contains(path, "/execution/") {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}}
 	}
 
-	return nil // 沿用全局 BearerAuth
+	return nil // inherit the global BearerAuth
 }
 
-// buildStandardResponses 为每个端点生成标准响应集。
+// buildStandardResponses generates the standard response set for each endpoint.
 //
-// 根据方法推断成功响应码:
+// Infers the success response code from the method:
 //   - GET/PUT/PATCH/DELETE → 200
-//   - POST → 201(创建)或 200(动作)
+//   - POST → 201 (create) or 200 (action)
 //
-// 错误响应统一引用 #/components/schemas/Error。
+// Error responses uniformly reference #/components/schemas/Error.
 func buildStandardResponses(method string) map[string]OpenAPIResponse {
 	successCode := "200"
 	if strings.ToLower(method) == "post" {
@@ -286,18 +286,18 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 
 	resps := map[string]OpenAPIResponse{
 		successCode: {
-			Description: "成功响应",
+			Description: "Successful response",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{
 						"type":        "object",
-						"description": "响应体结构参见对应 handler 的 Response DTO",
+						"description": "Response body structure — see the corresponding handler's Response DTO",
 					},
 				},
 			},
 		},
 		"400": {
-			Description: "请求参数错误",
+			Description: "Invalid request parameters",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{
@@ -307,7 +307,7 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 			},
 		},
 		"401": {
-			Description: "未认证或 Token 失效",
+			Description: "Unauthenticated or token invalid",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{"$ref": "#/components/schemas/Error"},
@@ -315,7 +315,7 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 			},
 		},
 		"403": {
-			Description: "无权限",
+			Description: "Forbidden",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{"$ref": "#/components/schemas/Error"},
@@ -323,7 +323,7 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 			},
 		},
 		"404": {
-			Description: "资源不存在",
+			Description: "Resource not found",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{"$ref": "#/components/schemas/Error"},
@@ -331,7 +331,7 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 			},
 		},
 		"500": {
-			Description: "服务器内部错误",
+			Description: "Internal server error",
 			Content: map[string]OpenAPIMediaType{
 				"application/json": {
 					Schema: map[string]interface{}{"$ref": "#/components/schemas/Error"},
@@ -340,34 +340,34 @@ func buildStandardResponses(method string) map[string]OpenAPIResponse {
 		},
 	}
 
-	// DELETE 通常是 204 无响应体
+	// DELETE is typically 204 with no response body
 	if strings.ToLower(method) == "delete" {
 		delete(resps, successCode)
-		resps["204"] = OpenAPIResponse{Description: "删除成功,无响应体"}
+		resps["204"] = OpenAPIResponse{Description: "Deleted successfully, no response body"}
 	}
 
 	return resps
 }
 
-// pathToTag 从 URL 路径推断 OpenAPI tag。
+// pathToTag infers the OpenAPI tag from the URL path.
 //
-// 推断规则(按路径首段):
-//   - /auth/*          → "认证"
-//   - /workspaces/*    → "工作区"
-//   - /projects/*      → "项目"
-//   - /tasks/*         → "任务"
-//   - /agents/*        → "代理"
-//   - /memories/*      → "记忆"
-//   - /community/*     → "社区"
-//   - /health, /ready  → "系统"
-//   - 其他             → "通用"
+// Inference rules (by first path segment):
+//   - /auth/*          → "Authentication"
+//   - /workspaces/*    → "Workspaces"
+//   - /projects/*      → "Projects"
+//   - /tasks/*         → "Tasks"
+//   - /agents/*        → "Agents"
+//   - /memories/*      → "Memories"
+//   - /community/*     → "Community"
+//   - /health, /ready  → "System"
+//   - others           → "General"
 //
-// 返回 (tagName, tagDescription)。
+// Returns (tagName, tagDescription).
 func pathToTag(path string) (string, string) {
-	// 去掉前导 /
+	// Strip the leading /
 	clean := strings.TrimPrefix(path, "/")
 
-	// 取第一段
+	// Take the first segment
 	firstSeg := clean
 	if idx := strings.Index(clean, "/"); idx >= 0 {
 		firstSeg = clean[:idx]
@@ -375,79 +375,79 @@ func pathToTag(path string) (string, string) {
 
 	switch firstSeg {
 	case "auth":
-		return "认证", "用户认证、注册、密码管理"
+		return "Authentication", "User authentication, registration, password management"
 	case "workspaces":
-		return "工作区", "工作区 CRUD、成员管理"
+		return "Workspaces", "Workspace CRUD, member management"
 	case "projects":
-		return "项目", "项目 CRUD、Git 凭据"
+		return "Projects", "Project CRUD, Git credentials"
 	case "tasks":
-		return "任务", "任务 CRUD、节点操作、评论"
+		return "Tasks", "Task CRUD, node operations, comments"
 	case "agents":
-		return "代理", "AI 代理 CRUD、技能/MCP 绑定"
+		return "Agents", "AI agent CRUD, skill/MCP bindings"
 	case "memories":
-		return "记忆", "共享记忆 CRUD、语义搜索"
+		return "Memories", "Shared memory CRUD, semantic search"
 	case "community":
-		return "社区", "社区工作流市场"
+		return "Community", "Community workflow marketplace"
 	case "templates":
-		return "工作流", "工作流模板 CRUD"
+		return "Workflows", "Workflow template CRUD"
 	case "skills":
-		return "技能", "技能 CRUD"
+		return "Skills", "Skill CRUD"
 	case "mcp-servers":
-		return "MCP", "MCP 服务器 CRUD"
+		return "MCP", "MCP server CRUD"
 	case "runtimes":
-		return "运行时", "Agent 守护进程运行时管理"
+		return "Runtimes", "Agent daemon runtime management"
 	case "notifications":
-		return "通知", "通知列表"
+		return "Notifications", "Notification list"
 	case "search":
-		return "搜索", "任务、代理搜索"
+		return "Search", "Task, agent search"
 	case "board":
-		return "看板", "看板数据"
+		return "Board", "Board data"
 	case "review":
-		return "审查", "审查队列、自我审查检测"
+		return "Review", "Review queue, self-review detection"
 	case "stats":
-		return "统计", "项目/代理/模板统计"
+		return "Stats", "Project/agent/template statistics"
 	case "health", "ready":
-		return "系统", "健康检查、Webhook"
+		return "System", "Health check, Webhook"
 	case "token-usage":
-		return "Token用量", "Token 用量查询和上报"
+		return "Token Usage", "Token usage query and reporting"
 	case "git-credentials":
-		return "Git凭据", "Git 凭据管理"
+		return "Git Credentials", "Git credential management"
 	case "webhooks":
-		return "系统", "Webhook 入口"
+		return "System", "Webhook entry"
 	case "agent-roles":
-		return "系统", "Agent 角色查询"
+		return "System", "Agent role query"
 	default:
-		return "通用", "未分类端点"
+		return "General", "Uncategorized endpoint"
 	}
 }
 
-// normalizeRoute 规范化 chi.Walk 反射出的路径,使其符合 OpenAPI 3.1 path 模板规范。
+// normalizeRoute normalizes the path reflected by chi.Walk to conform to the OpenAPI 3.1 path template spec.
 //
-// 处理规则(修复审核问题 1/2/3):
-//   - 剥离 /api 前缀:tag 推断和 Apifox 分组需要原始资源路径,而非 /api/* 前缀
-//   - chi Mount("/", ...) 反射出 * 段(通配符),OpenAPI 3.1 仅允许 {param},替换为 {nodeBase}
-//   - Mount 子路由产生 trailing slash(/comments/),OpenAPI 视 /x 与 /x/ 为不同路径,裁剪(保留根 /)
-//   - 多段 * 逐个替换为 {nodeBase},确保 path 模板合法
+// Processing rules (fixes review issues 1/2/3):
+//   - Strip the /api prefix: tag inference and Apifox grouping need the original resource path, not the /api/* prefix
+//   - chi Mount("/", ...) reflects a * segment (wildcard); OpenAPI 3.1 only allows {param}, replace with {nodeBase}
+//   - Mounted sub-routers produce a trailing slash (/comments/); OpenAPI treats /x and /x/ as different paths, trim (keep the root /)
+//   - Multiple * segments are each replaced with {nodeBase} to ensure the path template is valid
 //
-// 参数:
-//   - route: chi.Walk 反射出的原始路径(如 /api/tasks/{taskId}/nodes/*/{id}/approve)
+// Parameters:
+//   - route: the raw path reflected by chi.Walk (e.g. /api/tasks/{taskId}/nodes/*/{id}/approve)
 //
-// 返回:
-//   - string: 规范化后的路径(如 /tasks/{taskId}/nodes/{nodeBase}/{id}/approve),空字符串表示应跳过
+// Returns:
+//   - string: the normalized path (e.g. /tasks/{taskId}/nodes/{nodeBase}/{id}/approve); an empty string means it should be skipped
 func normalizeRoute(route string) string {
-	// 剥离 /api 前缀(修复问题 3:tag 错位)
+	// Strip the /api prefix (fixes issue 3: tag misalignment)
 	clean := strings.TrimPrefix(route, "/api")
 
-	// chi Mount("/", ...) 反射出的 * 段替换为 {nodeBase}(修复问题 1:通配符违反 OpenAPI 规范)
-	// chi 用 * 表示 mount 回退路由,OpenAPI 3.1 仅允许 {param} 模板
+	// Replace the * segment reflected by chi Mount("/", ...) with {nodeBase} (fixes issue 1: wildcard violates OpenAPI spec)
+	// chi uses * to denote mount fallback routes; OpenAPI 3.1 only allows {param} templates
 	clean = strings.ReplaceAll(clean, "/*", "/{nodeBase}")
-	// 处理路径末尾单独的 *(如 /nodes/*/)
+	// Handle a standalone * at the end of the path (e.g. /nodes/*/)
 	if clean == "*" || clean == "/*" {
 		return "/{nodeBase}"
 	}
 
-	// 裁剪 trailing slash(修复问题 2:Mount 子路由产生 /comments/ 等)
-	// 保留根 /(根路径是合法的 OpenAPI path)
+	// Trim the trailing slash (fixes issue 2: mounted sub-routers produce /comments/ etc.)
+	// Keep the root / (the root path is a valid OpenAPI path)
 	if len(clean) > 1 && strings.HasSuffix(clean, "/") {
 		clean = strings.TrimRight(clean, "/")
 	}
@@ -455,29 +455,29 @@ func normalizeRoute(route string) string {
 	return clean
 }
 
-// inferSummary 从 method+path 推断简短的端点摘要。
+// inferSummary infers a short endpoint summary from method+path.
 //
-// 推断优先级(修复审核问题 7:原实现 POST 一律返回"创建 xxx",login/logout/claim/approve 等语义错误):
-//  1. 特殊端点白名单(/health、/ready)
-//  2. 路径末段若为已知动词(login/logout/claim/approve/reject/...),直接用动词中文映射
-//  3. 含动作子串的路径(import/heartbeat/transfer/switch/...)识别为对应动作
-//  4. 回退到 method→中文动作映射(GET=查询/POST=创建/PUT=更新/DELETE=删除/PATCH=部分更新)
+// Inference priority (fixes review issue 7: the original implementation always returned "Create xxx" for POST, semantically wrong for login/logout/claim/approve etc.):
+//  1. Special endpoint whitelist (/health, /ready)
+//  2. If the last path segment is a known verb (login/logout/claim/approve/reject/...), use the verb mapping directly
+//  3. Paths containing an action substring (import/heartbeat/transfer/switch/...) are recognized as the corresponding action
+//  4. Fall back to the method→action mapping (GET=Query/POST=Create/PUT=Update/DELETE=Delete/PATCH=Partial update)
 func inferSummary(method, path string) string {
 	m := strings.ToUpper(method)
 
-	// 优先级 1:特殊端点白名单
+	// Priority 1: special endpoint whitelist
 	switch path {
 	case "/health":
-		return "存活检查"
+		return "Liveness check"
 	case "/ready":
-		return "就绪检查"
+		return "Readiness check"
 	}
 
-	// 从路径推断资源名和末段
+	// Infer resource name and last segment from the path
 	clean := strings.TrimPrefix(path, "/")
 	segments := strings.Split(clean, "/")
 
-	// 找到最后一个非参数段作为资源名
+	// Find the last non-param segment as the resource name
 	resource := ""
 	lastSeg := ""
 	for i := len(segments) - 1; i >= 0; i-- {
@@ -496,56 +496,56 @@ func inferSummary(method, path string) string {
 		resource = segments[len(segments)-2]
 	}
 
-	// 优先级 2:路径末段动词映射(覆盖 POST 动作端点:login/logout/claim/approve/reject/...)
-	// 这些路径段本身就是动词,语义优先于 method 的"创建"
+	// Priority 2: path last-segment verb mapping (covers POST action endpoints: login/logout/claim/approve/reject/...)
+	// These path segments are themselves verbs; their semantics take priority over the method's "create"
 	verbMap := map[string]string{
-		"login":                   "用户登录",
-		"logout":                  "用户登出",
-		"register":                "用户注册",
-		"whoami":                  "查询当前用户",
-		"token-exchange":          "Token 交换",
-		"change-password":         "修改密码",
-		"reset-password":          "重置密码",
-		"request-password-reset":  "请求密码重置",
-		"accept-invitation":       "接受邀请",
-		"switch-workspace":        "切换工作区",
-		"claim":                   "认领节点",
-		"approve":                 "审批通过节点",
-		"reject":                  "驳回节点",
-		"manual":                  "人工干预",
-		"resolve":                 "解决人工干预",
-		"skip-claim":              "跳过认领",
-		"summary":                 "更新执行摘要",
-		"interrupt":               "中断任务",
-		"interrupt-ack":           "中断确认",
-		"complete":                "完成节点",
-		"heartbeat":               "运行时心跳",
-		"public-key":              "上传运行时公钥",
-		"sync":                    "同步运行时",
-		"rotate-token":            "轮换 API Token",
-		"grant-role":              "授予角色",
-		"grant":                   "授予权限",
-		"import":                  "导入社区工作流",
-		"transfer-ownership":      "转移所有权",
-		"self-review-check":       "自我审查检测",
-		"review-queue":            "获取审查队列",
-		"agent-stats":             "获取代理统计",
-		"agent-roles":             "列出 Agent 角色",
-		"health-check":            "MCP 健康检查",
-		"in-progress-nodes":       "查询进行中节点",
-		"git-branch":              "更新 Git 分支",
+		"login":                   "User login",
+		"logout":                  "User logout",
+		"register":                "User registration",
+		"whoami":                  "Query current user",
+		"token-exchange":          "Token exchange",
+		"change-password":         "Change password",
+		"reset-password":          "Reset password",
+		"request-password-reset":  "Request password reset",
+		"accept-invitation":       "Accept invitation",
+		"switch-workspace":        "Switch workspace",
+		"claim":                   "Claim node",
+		"approve":                 "Approve node",
+		"reject":                  "Reject node",
+		"manual":                  "Manual intervention",
+		"resolve":                 "Resolve manual intervention",
+		"skip-claim":              "Skip claim",
+		"summary":                 "Update execution summary",
+		"interrupt":               "Interrupt task",
+		"interrupt-ack":           "Interrupt acknowledgement",
+		"complete":                "Complete node",
+		"heartbeat":               "Runtime heartbeat",
+		"public-key":              "Upload runtime public key",
+		"sync":                    "Sync runtime",
+		"rotate-token":            "Rotate API token",
+		"grant-role":              "Grant role",
+		"grant":                   "Grant permission",
+		"import":                  "Import community workflow",
+		"transfer-ownership":      "Transfer ownership",
+		"self-review-check":       "Self-review detection",
+		"review-queue":            "Get review queue",
+		"agent-stats":             "Get agent statistics",
+		"agent-roles":             "List agent roles",
+		"health-check":            "MCP health check",
+		"in-progress-nodes":       "Query in-progress nodes",
+		"git-branch":              "Update Git branch",
 	}
 	if summary, ok := verbMap[lastSeg]; ok {
 		return summary
 	}
 
-	// 优先级 3:method→中文动作映射(回退)
+	// Priority 3: method→action mapping (fallback)
 	actionMap := map[string]string{
-		"GET":    "查询",
-		"POST":   "创建",
-		"PUT":    "更新",
-		"DELETE": "删除",
-		"PATCH":  "部分更新",
+		"GET":    "Query",
+		"POST":   "Create",
+		"PUT":    "Update",
+		"DELETE": "Delete",
+		"PATCH":  "Partial update",
 	}
 	action := actionMap[m]
 	if action == "" {
@@ -559,69 +559,69 @@ func inferSummary(method, path string) string {
 	return fmt.Sprintf("%s %s", action, resource)
 }
 
-// sanitizePathForID 将路径转换为合法的 operationId 片段。
+// sanitizePathForID converts a path into a valid operationId segment.
 //
-// 规则(符合 OpenAPI operationId 模式 ^[a-zA-Z0-9_-]+$):
-//   - 去掉前导 /
-//   - {param} → param(保留参数名)
+// Rules (conforming to the OpenAPI operationId pattern ^[a-zA-Z0-9_-]+$):
+//   - Strip the leading /
+//   - {param} → param (keep the parameter name)
 //   - / → _
-//   - * → root(chi Mount 回退路由,normalizeRoute 已转为 {nodeBase},此处兜底处理残留 *)
-//   - 去掉其他非法字符(如 - 后紧跟的非法符)
+//   - * → root (chi Mount fallback route; normalizeRoute already converts to {nodeBase}; here handles any residual *)
+//   - Strip other illegal characters (e.g. illegal chars following a -)
 func sanitizePathForID(path string) string {
 	clean := strings.TrimPrefix(path, "/")
 	clean = strings.ReplaceAll(clean, "{", "")
 	clean = strings.ReplaceAll(clean, "}", "")
 	clean = strings.ReplaceAll(clean, "/", "_")
-	// 兜底:normalizeRoute 已把 /* 换成 /{nodeBase},但若有残留 * 替换为 root
+	// Fallback: normalizeRoute already converted /* to /{nodeBase}, but replace any residual * with root
 	clean = strings.ReplaceAll(clean, "*", "root")
 	return clean
 }
 
-// injectResponseSchemaRefs 为成功响应注入业务 schema $ref(修复审核问题 8)。
+// injectResponseSchemaRefs injects business schema $refs into success responses (fixes review issue 8).
 //
-// 原实现所有端点成功响应为不透明 {"type":"object"},Apifox 无法渲染示例响应。
-// 本函数基于路径推断匹配的 Response 类型,将成功响应的 schema 替换为具体 $ref。
+// The original implementation made all endpoint success responses opaque {"type":"object"}, so Apifox could not render example responses.
+// This function infers the matching Response type from the path and replaces the success response's schema with a concrete $ref.
 //
-// 匹配规则(路径 → Response 类型名):
+// Matching rules (path → Response type name):
 //   - /auth/login, /auth/register, /auth/accept-invitation → authResponse
 //   - /auth/token-exchange → tokenExchangeResponse
 //   - /auth/switch-workspace → switchWorkspaceResponse
-//   - /tasks/*(单条) → taskResponse
-//   - /agents/*(单条) → agentResponse 或 createAgentResponse
-//   - /workflows/*(单条) → templateResponse
+//   - /tasks/* (single) → taskResponse
+//   - /agents/* (single) → agentResponse or createAgentResponse
+//   - /workflows/* (single) → templateResponse
 //   - /projects/*/stats → projectStatsResponse
 //   - /agents/*/stats/agent-stats → agentStatsResponse
-//   - /projects/*/git-credentials(单条) → credentialResponse
+//   - /projects/*/git-credentials (single) → credentialResponse
 //
-// 未匹配的端点保持不透明 object(降级安全)。
+// Unmatched endpoints keep the opaque object (safe degradation).
 func injectResponseSchemaRefs(doc *OpenAPIDoc) {
-	// 路径模式 → Response 类型名
+	// Path pattern → Response type name
 	type patternMatch struct {
 		contains    string
-		lastSegIs   string // 末段精确匹配(空表示不限)
+		lastSegIs   string // exact last-segment match (empty means no constraint)
 		responseRef string
 	}
 	matches := []patternMatch{
-		// 认证(具体端点优先,避免被通用规则盖过)
+		// Authentication (specific endpoints first, to avoid being overridden by generic rules)
 		{contains: "/auth/login", responseRef: "authResponse"},
 		{contains: "/auth/register", responseRef: "authResponse"},
 		{contains: "/auth/accept-invitation", responseRef: "authResponse"},
 		{contains: "/auth/whoami", responseRef: "authResponse"},
 		{contains: "/auth/token-exchange", responseRef: "tokenExchangeResponse"},
 		{contains: "/auth/switch-workspace", responseRef: "switchWorkspaceResponse"},
-		// 统计(具体路径优先,在代理通用规则之前匹配)
+		// Stats (specific paths first, matched before the agent generic rule)
 		{contains: "/agents/", lastSegIs: "agent-stats", responseRef: "agentStatsResponse"},
 		{contains: "/projects/", lastSegIs: "stats", responseRef: "projectStatsResponse"},
-		// 任务(单条优先,在列表通用规则之前)
+		// Tasks (single first, before the list generic rule)
 		{contains: "/tasks/", lastSegIs: "{taskId}", responseRef: "taskResponse"},
 		{contains: "/tasks/", lastSegIs: "{id}", responseRef: "taskResponse"},
-		// 代理(单条优先,在列表通用规则之前)
+		// Agents (single first, before the list generic rule)
 		{contains: "/agents/", lastSegIs: "{agentId}", responseRef: "agentResponse"},
 		{contains: "/agents/", lastSegIs: "{id}", responseRef: "agentResponse"},
-		// 工作流(单条优先)
+		// Workflows (single first)
 		{contains: "/workflows/", lastSegIs: "{workflowId}", responseRef: "templateResponse"},
 		{contains: "/workflows/", lastSegIs: "{id}", responseRef: "templateResponse"},
-		// Git 凭据(单条优先)
+		// Git credentials (single first)
 		{contains: "/git-credentials", lastSegIs: "{credentialId}", responseRef: "credentialResponse"},
 	}
 
@@ -632,7 +632,7 @@ func injectResponseSchemaRefs(doc *OpenAPIDoc) {
 				continue
 			}
 
-			// 推断成功响应码(与 buildStandardResponses 逻辑一致)
+			// Infer the success response code (consistent with buildStandardResponses)
 			successCode := "200"
 			if m == "post" {
 				successCode = "201"
@@ -641,7 +641,7 @@ func injectResponseSchemaRefs(doc *OpenAPIDoc) {
 				successCode = "204"
 			}
 
-			// DELETE 204 无响应体,跳过 schema 注入
+			// DELETE 204 has no response body; skip schema injection
 			if successCode == "204" {
 				continue
 			}
@@ -651,7 +651,7 @@ func injectResponseSchemaRefs(doc *OpenAPIDoc) {
 				continue
 			}
 
-			// 匹配路径 → Response 类型
+			// Match path → Response type
 			lastSeg := ""
 			segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
 			for i := len(segments) - 1; i >= 0; i-- {
@@ -669,7 +669,7 @@ func injectResponseSchemaRefs(doc *OpenAPIDoc) {
 				if match.lastSegIs != "" && lastSeg != match.lastSegIs {
 					continue
 				}
-				// 仅当该 schema 已反射注册才注入 $ref(避免引用悬空)
+				// Only inject the $ref if the schema has already been reflected and registered (avoid dangling references)
 				if _, exists := doc.Components.Schemas[match.responseRef]; exists {
 					if resp.Content == nil {
 						resp.Content = map[string]OpenAPIMediaType{}
@@ -687,7 +687,7 @@ func injectResponseSchemaRefs(doc *OpenAPIDoc) {
 	}
 }
 
-// getOperation 从 PathItem 取指定方法的 operation,未注册返回 nil。
+// getOperation returns the operation for the given method from a PathItem, or nil if not registered.
 func getOperation(pi *OpenAPIPathItem, method string) *OpenAPIOperation {
 	switch method {
 	case "get":

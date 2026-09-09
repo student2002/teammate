@@ -1,4 +1,4 @@
-// approve_test.go 覆盖节点审批接口的测试。
+// approve_test.go covers tests for node approval endpoints.
 package handler_test
 
 import (
@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// TestApproveCascading 验证审批节点会级联到下一个节点：
-// - 审批节点 1 → 节点 2 变为 pending 并设置 reserved_for_agent_id
-// - 审批节点 2 → 节点 3 变为 pending 并设置 reserved_for_agent_id
-// - 审批节点 3 → 任务状态变为 "completed"
+// TestApproveCascading verifies that approving a node cascades to the next node:
+// - Approve node 1 → node 2 becomes pending with reserved_for_agent_id set
+// - Approve node 2 → node 3 becomes pending with reserved_for_agent_id set
+// - Approve node 3 → task status becomes "completed"
 func TestApproveCascading(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -19,7 +19,7 @@ func TestApproveCascading(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 准备：项目、包含 3 个节点（code -> review -> deploy）的工作流
+	// Prepare: project, workflow with 3 nodes (code -> review -> deploy)
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
 	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
@@ -31,7 +31,7 @@ func TestApproveCascading(t *testing.T) {
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
 
-	// 创建包含 3 个节点的任务
+	// Create task with 3 nodes
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	if len(nodes) != 3 {
 		t.Fatalf("expected 3 nodes, got %d", len(nodes))
@@ -42,7 +42,7 @@ func TestApproveCascading(t *testing.T) {
 	node2ID := nodes[1]["id"].(string)
 	node3ID := nodes[2]["id"].(string)
 
-	// 第 1 步：认领并批准节点 1（code）
+	// Step 1: Claim and approve node 1 (code)
 	claimed1 := claimNode(t, client, srv.URL, taskID, node1ID, agentID, agentToken)
 	if claimed1["status"] != "in_progress" {
 		t.Fatalf("node1: expected status 'in_progress', got %v", claimed1["status"])
@@ -53,8 +53,8 @@ func TestApproveCascading(t *testing.T) {
 		t.Fatalf("node1: expected status 'completed' after approve, got %v", approved1["status"])
 	}
 
-	// 验证节点 2 变为 pending——未设置 reserved_for_agent_id，因为
-	// code→review 触发自我审查规避（跳过续行权）
+	// Verify node 2 becomes pending — reserved_for_agent_id is not set because
+	// code→review triggers self-review avoidance (skips continuation right)
 	updatedNodes := listTaskNodes(t, client, srv.URL, taskID, token)
 	node2 := updatedNodes[1]
 	if node2["status"] != "pending" {
@@ -62,7 +62,7 @@ func TestApproveCascading(t *testing.T) {
 	}
 	t.Logf("node2 reserved_for_agent_id: %v (correctly nil due to self-review avoidance)", node2["reserved_for_agent_id"])
 
-	// 第 2 步：Agent2 认领并批准节点 2（review）——使用不同 Agent 以避免自我审查
+	// Step 2: Agent2 claims and approves node 2 (review) — uses a different agent to avoid self-review
 	claimed2 := claimNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token)
 	if claimed2["status"] != "in_progress" {
 		t.Fatalf("node2: expected status 'in_progress', got %v", claimed2["status"])
@@ -73,7 +73,7 @@ func TestApproveCascading(t *testing.T) {
 		t.Fatalf("node2: expected status 'completed' after approve, got %v", approved2["status"])
 	}
 
-	// 验证节点 3 变为 pending 且设置了 reserved_for_agent_id（review→standard，无自我审查）
+	// Verify node 3 becomes pending with reserved_for_agent_id set (review→standard, no self-review)
 	updatedNodes = listTaskNodes(t, client, srv.URL, taskID, token)
 	node3 := updatedNodes[2]
 	if node3["status"] != "pending" {
@@ -84,7 +84,7 @@ func TestApproveCascading(t *testing.T) {
 	}
 	t.Logf("node3 reserved_for_agent_id: %v (continuation right from reviewer)", node3["reserved_for_agent_id"])
 
-	// 第 3 步：认领并批准节点 3（deploy）——agent2 具有续行权
+	// Step 3: Claim and approve node 3 (deploy) — agent2 has continuation right
 	claimed3 := claimNode(t, client, srv.URL, taskID, node3ID, agent2ID, agent2Token)
 	if claimed3["status"] != "in_progress" {
 		t.Fatalf("node3: expected status 'in_progress', got %v", claimed3["status"])
@@ -95,7 +95,7 @@ func TestApproveCascading(t *testing.T) {
 		t.Fatalf("node3: expected status 'completed' after approve, got %v", approved3["status"])
 	}
 
-	// 验证任务状态变为 "completed"（所有节点已完成）
+	// Verify task status becomes "completed" (all nodes finished)
 	q = dbQueries(t, db)
 	task, err := q.GetTask(t.Context(), taskID)
 	if err != nil {

@@ -40,7 +40,7 @@ type CreateCommunityWorkflowParams struct {
 	IsOfficial                   bool                  `db:"is_official" json:"is_official"`
 }
 
-// 社区工作流查询
+// Community workflow queries
 func (q *Queries) CreateCommunityWorkflow(ctx context.Context, arg CreateCommunityWorkflowParams) (CommunityWorkflow, error) {
 	row := q.db.QueryRowContext(ctx, createCommunityWorkflow,
 		arg.Name,

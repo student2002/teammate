@@ -1,4 +1,4 @@
-// permission_matrix_test.go 验证生产上线前的权限矩阵。
+// permission_matrix_test.go verifies the permission matrix before production deployment.
 package handler_test
 
 import (
@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// TestPermissionMatrix_MemberCannotSeeSecretEnvVars 验证人类成员通过普通 API 看不到 MCP 环境变量明文。
+// TestPermissionMatrix_MemberCannotSeeSecretEnvVars verifies that human members cannot see MCP environment variable plaintext through the normal API.
 func TestPermissionMatrix_MemberCannotSeeSecretEnvVars(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -44,7 +44,7 @@ func TestPermissionMatrix_MemberCannotSeeSecretEnvVars(t *testing.T) {
 	}
 }
 
-// TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution 验证 Agent 不能通过 execution 端点获取其他 Agent 的 MCP 配置。
+// TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution verifies that an agent cannot access another agent's MCP configuration via the execution endpoint.
 func TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -58,14 +58,14 @@ func TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution(t *testing.T) 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, _ := createAgent(t, client, srv.URL, wsID, token)
 
-	// Agent1 尝试访问 Agent2 的 execution MCP 端点 → 403
+	// Agent1 tries to access Agent2's execution MCP endpoint → 403
 	url := fmt.Sprintf("%s/api/workspaces/%s/agents/%s/execution/mcp-servers", srv.URL, wsID, agent2ID)
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodGet, url, agent1Token, nil)
 	if status != http.StatusForbidden {
 		t.Errorf("agent1 accessing agent2 execution mcp: expected 403, got %d", status)
 	}
 
-	// Agent1 可以访问自己的 execution MCP 端点 → 200
+	// Agent1 can access its own execution MCP endpoint → 200
 	selfURL := fmt.Sprintf("%s/api/workspaces/%s/agents/%s/execution/mcp-servers", srv.URL, wsID, agent1ID)
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodGet, selfURL, agent1Token, nil)
 	if status != http.StatusOK {
@@ -74,7 +74,7 @@ func TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution(t *testing.T) 
 	_ = agent2ID
 }
 
-// TestPermissionMatrix_MemberCannotAccessExecutionEndpoint 验证人类成员无法访问 Agent execution 端点。
+// TestPermissionMatrix_MemberCannotAccessExecutionEndpoint verifies that human members cannot access the agent execution endpoint.
 func TestPermissionMatrix_MemberCannotAccessExecutionEndpoint(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -93,7 +93,7 @@ func TestPermissionMatrix_MemberCannotAccessExecutionEndpoint(t *testing.T) {
 	}
 }
 
-// TestPermissionMatrix_McpUpdateKeepEnvVars 验证 MCP Update 的 keep 语义（不传 env_vars 时保留现有值）。
+// TestPermissionMatrix_McpUpdateKeepEnvVars verifies the keep semantics of MCP Update (existing values are preserved when env_vars is not provided).
 func TestPermissionMatrix_McpUpdateKeepEnvVars(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -122,7 +122,7 @@ func TestPermissionMatrix_McpUpdateKeepEnvVars(t *testing.T) {
 	}
 	mcpID := created["id"].(string)
 
-	// 更新 MCP 但不传 env_vars
+	// Update MCP without providing env_vars
 	updateURL := fmt.Sprintf("%s/api/workspaces/%s/mcp-servers/%s", srv.URL, wsID, mcpID)
 	_, status, respBody = doRequestWithToken(t, client, http.MethodPut, updateURL, token, map[string]interface{}{
 		"name": "updated-name",
@@ -143,7 +143,7 @@ func TestPermissionMatrix_McpUpdateKeepEnvVars(t *testing.T) {
 	}
 }
 
-// TestPermissionMatrix_McpUpdateClearEnvVars 验证 MCP Update 的 clear 语义（env_vars={} 清空）。
+// TestPermissionMatrix_McpUpdateClearEnvVars verifies the clear semantics of MCP Update (env_vars={} clears all).
 func TestPermissionMatrix_McpUpdateClearEnvVars(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -172,7 +172,7 @@ func TestPermissionMatrix_McpUpdateClearEnvVars(t *testing.T) {
 	}
 	mcpID := created["id"].(string)
 
-	// 更新 MCP 传 env_vars={} 清空
+	// Update MCP with env_vars={} to clear
 	updateURL := fmt.Sprintf("%s/api/workspaces/%s/mcp-servers/%s", srv.URL, wsID, mcpID)
 	_, status, respBody = doRequestWithToken(t, client, http.MethodPut, updateURL, token, map[string]interface{}{
 		"name":     "cleared-name",
@@ -192,7 +192,7 @@ func TestPermissionMatrix_McpUpdateClearEnvVars(t *testing.T) {
 	}
 }
 
-// ── 测试辅助函数 ──
+// ── Test helper functions ──
 
 func newTestServer(router http.Handler) *testServer {
 	return &testServer{httptest.NewServer(router)}

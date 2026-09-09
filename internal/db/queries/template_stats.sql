@@ -1,4 +1,4 @@
--- 模板统计查询
+-- Template statistics queries
 
 -- name: GetTemplateStats :one
 SELECT

@@ -1,40 +1,41 @@
-// permissions.go 定义权限常量、角色定义和角色层级辅助函数。
+// permissions.go defines permission constants, role definitions, and role hierarchy helper functions.
 //
-// 本文件包含：
-//   - Agent 权限常量（Perm*）和预定义角色
-//   - 工作区成员角色常量（MemberRole*）及层级函数
-//   - 项目角色常量（ProjectRole*）及层级函数
+// This file contains:
+//   - Agent permission constants (Perm*) and predefined roles
+//   - Workspace member role constants (MemberRole*) and hierarchy functions
+//   - Project role constants (ProjectRole*) and hierarchy functions
 //
-// 权限系统基于细粒度的字符串标识（如 "task:claim"），支持按资源类型和 ID 授权。
-// 权限分为两类：
-//   - 默认授予：创建 Agent 时自动授予（task:claim, task:execute, task:comment, memory:read）
-//   - 需手动授权：管理员显式授予（task:approve, git:push 等）
+// The permission system is based on fine-grained string identifiers (e.g. "task:claim"),
+// supporting authorization by resource type and ID.
+// Permissions are divided into two categories:
+//   - Default-granted: automatically granted when an Agent is created (task:claim, task:execute, task:comment, memory:read)
+//   - Manual-grant: explicitly granted by an admin (task:approve, git:push, etc.)
 //
-// 预定义 Agent 角色：
-//   - developer: 开发角色，可认领执行任务、推送代码
-//   - reviewer: 审查角色，可认领执行任务、审批驳回
-//   - ops: 运维角色，拥有全部操作权限
+// Predefined Agent roles:
+//   - developer: development role, can claim/execute tasks and push code
+//   - reviewer: review role, can claim/execute tasks and approve/reject
+//   - ops: operations role, has full operational permissions
 package types
 
-// 权限常量定义 —— 用于 RequireAccess 中间件和 agent_permissions 表。
-// 集中定义以在编译期捕获拼写错误。
+// Permission constant definitions — used by the RequireAccess middleware and the agent_permissions table.
+// Centrally defined to catch typos at compile time.
 const (
-	PermTaskClaim      = "task:claim"       // 认领待处理节点
-	PermTaskExecute    = "task:execute"     // 执行节点任务
-	PermTaskApprove    = "task:approve"     // 审批节点完成
-	PermTaskReject     = "task:reject"      // 驳回节点
-	PermTaskComment    = "task:comment"     // 发表任务评论
-	PermMemoryCreate   = "memory:create"    // 创建知识记忆
-	PermMemoryRead     = "memory:read"      // 读取知识记忆
-	PermGitPush        = "git:push"         // 推送代码到远程仓库
-	PermGitForcePush   = "git:force-push"   // 强制推送代码
-	PermResourceDelete = "resource:delete"  // 删除资源
-	PermConfigModify   = "config:modify"    // 修改配置
+	PermTaskClaim      = "task:claim"       // Claim a pending node
+	PermTaskExecute    = "task:execute"     // Execute a node task
+	PermTaskApprove    = "task:approve"     // Approve node completion
+	PermTaskReject     = "task:reject"      // Reject a node
+	PermTaskComment    = "task:comment"     // Post a task comment
+	PermMemoryCreate   = "memory:create"    // Create a knowledge memory
+	PermMemoryRead     = "memory:read"      // Read knowledge memories
+	PermGitPush        = "git:push"         // Push code to a remote repository
+	PermGitForcePush   = "git:force-push"   // Force-push code
+	PermResourceDelete = "resource:delete"  // Delete a resource
+	PermConfigModify   = "config:modify"    // Modify configuration
 )
 
-// DefaultAgentPermissions 是新创建 Agent 默认授予的权限集合。
+// DefaultAgentPermissions is the set of permissions automatically granted to a newly created Agent.
 //
-// 包含基础的操作权限，无需管理员手动授予。
+// It includes basic operation permissions that do not require manual grant by an admin.
 var DefaultAgentPermissions = []string{
 	PermTaskClaim,
 	PermTaskExecute,
@@ -42,9 +43,9 @@ var DefaultAgentPermissions = []string{
 	PermMemoryRead,
 }
 
-// DeniedByDefaultAgentPermissions 是默认不授予的权限集合，需手动授权。
+// DeniedByDefaultAgentPermissions is the set of permissions not granted by default; they require manual authorization.
 //
-// 包含敏感操作权限，需要管理员显式授予才能使用。
+// It includes sensitive operation permissions that require explicit grant by an admin to use.
 var DeniedByDefaultAgentPermissions = []string{
 	PermTaskApprove,
 	PermTaskReject,
@@ -55,10 +56,10 @@ var DeniedByDefaultAgentPermissions = []string{
 	PermConfigModify,
 }
 
-// AllAgentPermissions 返回所有已知的 Agent 权限（默认 + 需手动授权）。
+// AllAgentPermissions returns all known Agent permissions (default + manual-grant).
 //
-// 返回：
-//   - []string: 所有权限字符串列表
+// Returns:
+//   - []string: list of all permission strings
 func AllAgentPermissions() []string {
 	all := make([]string, 0, len(DefaultAgentPermissions)+len(DeniedByDefaultAgentPermissions))
 	all = append(all, DefaultAgentPermissions...)
@@ -66,13 +67,13 @@ func AllAgentPermissions() []string {
 	return all
 }
 
-// IsValidAgentPermission 检查权限字符串是否是已知的 Agent 权限。
+// IsValidAgentPermission checks whether the permission string is a known Agent permission.
 //
-// 参数：
-//   - perm: 权限字符串
+// Parameters:
+//   - perm: permission string
 //
-// 返回：
-//   - bool: 是否是有效权限
+// Returns:
+//   - bool: whether it is a valid permission
 func IsValidAgentPermission(perm string) bool {
 	for _, p := range AllAgentPermissions() {
 		if p == perm {
@@ -82,18 +83,18 @@ func IsValidAgentPermission(perm string) bool {
 	return false
 }
 
-// AgentRole 定义 Agent 角色的命名权限集合。
+// AgentRole defines a named set of permissions for an Agent role.
 //
-// 角色将多个权限打包为一个命名集合，便于管理和分配。
+// A role bundles multiple permissions into a named set for easy management and assignment.
 type AgentRole struct {
-	Name        string   `json:"name"`        // 角色名称（如 "developer"）
-	Description string   `json:"description"` // 角色描述
-	Permissions []string `json:"permissions"` // 该角色拥有的权限列表
+	Name        string   `json:"name"`        // Role name (e.g. "developer")
+	Description string   `json:"description"` // Role description
+	Permissions []string `json:"permissions"` // List of permissions held by this role
 }
 
-// 预定义的 Agent 角色定义。
+// Predefined Agent role definitions.
 var (
-	// AgentRoleDeveloper 开发角色：可认领执行任务、评论、创建记忆、推送代码
+	// AgentRoleDeveloper developer role: can claim/execute tasks, comment, create memories, and push code
 	AgentRoleDeveloper = AgentRole{
 		Name:        "developer",
 		Description: "Can claim, execute, comment on tasks, create memories, and push code",
@@ -107,7 +108,7 @@ var (
 		},
 	}
 
-	// AgentRoleReviewer 审查角色：可认领执行任务、评论、审批驳回
+	// AgentRoleReviewer reviewer role: can claim/execute tasks, comment, and approve/reject reviews
 	AgentRoleReviewer = AgentRole{
 		Name:        "reviewer",
 		Description: "Can claim, execute, comment on tasks, and approve/reject reviews",
@@ -121,7 +122,7 @@ var (
 		},
 	}
 
-	// AgentRoleOps 运维角色：拥有全部操作权限
+	// AgentRoleOps ops role: has full operational permissions
 	AgentRoleOps = AgentRole{
 		Name:        "ops",
 		Description: "Full operational access including force push, resource deletion, and config modification",
@@ -138,7 +139,7 @@ var (
 		},
 	}
 
-	// AgentRoles 将角色名映射到其定义。
+	// AgentRoles maps role names to their definitions.
 	AgentRoles = map[string]AgentRole{
 		AgentRoleDeveloper.Name: AgentRoleDeveloper,
 		AgentRoleReviewer.Name:  AgentRoleReviewer,
@@ -146,10 +147,10 @@ var (
 	}
 )
 
-// ListAgentRoles 返回所有预定义的 Agent 角色列表。
+// ListAgentRoles returns a list of all predefined Agent roles.
 //
-// 返回：
-//   - []AgentRole: 角色列表
+// Returns:
+//   - []AgentRole: role list
 func ListAgentRoles() []AgentRole {
 	roles := make([]AgentRole, 0, len(AgentRoles))
 	for _, r := range AgentRoles {
@@ -159,35 +160,35 @@ func ListAgentRoles() []AgentRole {
 }
 
 // ---------------------------------------------------------------------------
-// 工作区成员角色
+// Workspace member roles
 // ---------------------------------------------------------------------------
 
-// MemberRole 定义工作区成员角色。
+// MemberRole defines workspace member roles.
 //
-// 角色层级：owner > admin > member > viewer
+// Role hierarchy: owner > admin > member > viewer
 const (
-	MemberRoleOwner  = "owner"  // 所有者（全部权限）
-	MemberRoleAdmin  = "admin"  // 管理员（成员管理 + 全部操作）
-	MemberRoleMember = "member" // 普通成员（创建/编辑操作）
-	MemberRoleViewer = "viewer" // 只读成员
+	MemberRoleOwner  = "owner"  // Owner (all permissions)
+	MemberRoleAdmin  = "admin"  // Admin (member management + all operations)
+	MemberRoleMember = "member" // Regular member (create/edit operations)
+	MemberRoleViewer = "viewer" // Read-only member
 )
 
-// ProjectRole —— 角色层级：lead > developer > reviewer。
+// ProjectRole — role hierarchy: lead > developer > reviewer.
 const (
-	ProjectRoleLead      = "lead"      // 项目负责人（项目管理、配置修改）
-	ProjectRoleDeveloper = "developer" // 开发者（任务操作）
-	ProjectRoleReviewer  = "reviewer"  // 审查者（审查操作）
+	ProjectRoleLead      = "lead"      // Project lead (project management, config modification)
+	ProjectRoleDeveloper = "developer" // Developer (task operations)
+	ProjectRoleReviewer  = "reviewer"  // Reviewer (review operations)
 )
 
-// MemberRoleLevel 返回成员角色的层级数值，值越大权限越高。
+// MemberRoleLevel returns the hierarchy value of a member role; a higher value means higher permissions.
 //
-// 注意：调用方必须先检查 claims.UserType，Agent 使用独立的权限系统（agent_permissions 表）。
+// Note: the caller must first check claims.UserType; Agents use an independent permission system (agent_permissions table).
 //
-// 参数：
-//   - role: 角色名称
+// Parameters:
+//   - role: role name
 //
-// 返回：
-//   - int: 层级数值（owner=4, admin=3, member=2, viewer=1）
+// Returns:
+//   - int: hierarchy value (owner=4, admin=3, member=2, viewer=1)
 func MemberRoleLevel(role string) int {
 	switch role {
 	case "owner":
@@ -205,13 +206,13 @@ func MemberRoleLevel(role string) int {
 	}
 }
 
-// ProjectRoleLevel 返回项目角色的数值等级（值越大权限越高）。
+// ProjectRoleLevel returns the numeric level of a project role (higher value means higher permissions).
 //
-// 参数：
-//   - role: 角色名称
+// Parameters:
+//   - role: role name
 //
-// 返回：
-//   - int: 层级数值（lead=3, developer=2, reviewer=1）
+// Returns:
+//   - int: hierarchy value (lead=3, developer=2, reviewer=1)
 func ProjectRoleLevel(role string) int {
 	switch role {
 	case ProjectRoleLead:

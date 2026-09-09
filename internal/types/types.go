@@ -1,17 +1,17 @@
-// types.go 定义项目中所有共享的业务枚举常量和核心领域结构体。
+// types.go defines all shared business enum constants and core domain structs in the project.
 //
-// 本文件包含：
-//   - 枚举常量（Agent 提供商、状态、节点类型、任务类型等）
-//   - 核心业务结构体（Workspace、Agent、Task、TaskNode 等）
+// This file contains:
+//   - Enum constants (Agent providers, statuses, node types, task types, etc.)
+//   - Core business structs (Workspace, Agent, Task, TaskNode, etc.)
 //
-// 其他共享定义已拆分至同包的专用文件：
-//   - permissions.go：权限常量和角色定义
-//   - events.go：SSE 事件常量和结构体
-//   - errors.go：API 错误码和错误响应
-//   - dto.go：API 请求/响应结构体
-//   - comment.go：评论类型常量
+// Other shared definitions have been split into dedicated files in the same package:
+//   - permissions.go: permission constants and role definitions
+//   - events.go: SSE event constants and structs
+//   - errors.go: API error codes and error responses
+//   - dto.go: API request/response structs
+//   - comment.go: comment type constants
 //
-// 所有类型定义供 handler、service、CLI 共享使用。
+// All type definitions are shared by the handler, service, and CLI layers.
 package types
 
 import (
@@ -20,597 +20,597 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// 枚举常量定义（字符串类型）
+// Enum constant definitions (string type)
 // ---------------------------------------------------------------------------
 
-// AgentProvider 定义 Agent 支持的 AI 提供商。
+// AgentProvider defines the AI providers supported by an Agent.
 const (
-	AgentProviderClaude   = "claude"    // Claude（Anthropic）
+	AgentProviderClaude   = "claude"    // Claude (Anthropic)
 	AgentProviderOpenClaw = "openclaw"  // OpenClaw
 	AgentProviderOpenCode = "opencode"  // OpenCode
 	AgentProviderAtomCode = "atomcode"  // AtomCode
 	AgentProviderMiMoCode = "mimocode"  // MiMoCode
 	AgentProviderCopilot  = "copilot"   // GitHub Copilot
 	AgentProviderHermes   = "hermes"    // Hermes
-	AgentProviderGemini   = "gemini"    // Gemini（Google）
+	AgentProviderGemini   = "gemini"    // Gemini (Google)
 	AgentProviderPi       = "pi"        // Pi
 	AgentProviderCursor   = "cursor"    // Cursor
 	AgentProviderKimi     = "kimi"      // Kimi
 	AgentProviderKiro     = "kiro"      // Kiro
 )
 
-// AgentStatus 定义 Agent 的运行状态。
+// AgentStatus defines the running status of an Agent.
 const (
-	AgentStatusOnline  = "online"  // 在线
-	AgentStatusOffline = "offline" // 离线
-	AgentStatusBusy    = "busy"    // 忙碌（正在执行任务）
-	AgentStatusPaused  = "paused"  // 暂停
+	AgentStatusOnline  = "online"  // Online
+	AgentStatusOffline = "offline" // Offline
+	AgentStatusBusy    = "busy"    // Busy (currently executing a task)
+	AgentStatusPaused  = "paused"  // Paused
 )
 
-// NodeType 定义工作流节点的类型。
+// NodeType defines the type of a workflow node.
 const (
-	NodeTypeStandard = "standard" // 标准节点（AI 代理执行）
-	NodeTypeReview   = "review"   // 审查节点（AI 或人类审查）
-	NodeTypeManual   = "manual"   // 手动节点（必须由人类执行）
+	NodeTypeStandard = "standard" // Standard node (executed by an AI agent)
+	NodeTypeReview   = "review"   // Review node (reviewed by AI or human)
+	NodeTypeManual   = "manual"   // Manual node (must be executed by a human)
 )
 
-// AssigneeType 定义节点的执行者类型。
+// AssigneeType defines the executor type of a node.
 const (
-	AssigneeTypeAnyAgent      = "any_agent"      // 任意 Agent（可认领）
-	AssigneeTypeSpecificAgent = "specific_agent"  // 指定 Agent
-	AssigneeTypeHuman         = "human"          // 人类用户
-	AssigneeTypeAuto          = "auto"           // 自动分配
+	AssigneeTypeAnyAgent      = "any_agent"      // Any Agent (can claim)
+	AssigneeTypeSpecificAgent = "specific_agent"  // Specified Agent
+	AssigneeTypeHuman         = "human"          // Human user
+	AssigneeTypeAuto          = "auto"           // Auto-assign
 )
 
-// TaskType 定义任务的类型分类。
+// TaskType defines the type classification of a task.
 const (
-	TaskTypeStory = "story" // 用户故事
-	TaskTypeBug   = "bug"   // Bug 修复
-	TaskTypeTask  = "task"  // 通用任务
+	TaskTypeStory = "story" // User story
+	TaskTypeBug   = "bug"   // Bug fix
+	TaskTypeTask  = "task"  // Generic task
 )
 
-// TaskPriority 定义任务的优先级。
+// TaskPriority defines the priority of a task.
 const (
-	TaskPriorityUrgent = "urgent" // 紧急
-	TaskPriorityHigh   = "high"   // 高
-	TaskPriorityMedium = "medium" // 中
-	TaskPriorityLow    = "low"    // 低
+	TaskPriorityUrgent = "urgent" // Urgent
+	TaskPriorityHigh   = "high"   // High
+	TaskPriorityMedium = "medium" // Medium
+	TaskPriorityLow    = "low"    // Low
 )
 
-// TaskStatus 定义任务的状态。
+// TaskStatus defines the status of a task.
 const (
-	TaskStatusActive    = "active"    // 活跃
-	TaskStatusCompleted = "completed" // 已完成
-	TaskStatusCancelled = "cancelled" // 已取消
+	TaskStatusActive    = "active"    // Active
+	TaskStatusCompleted = "completed" // Completed
+	TaskStatusCancelled = "cancelled" // Cancelled
 )
 
-// TaskNodeStatus 定义工作流节点的状态。
+// TaskNodeStatus defines the status of a workflow node.
 //
-// 节点真实状态（5 种）：
-//   - pending: 待处理
-//   - in_progress: 进行中
-//   - completed: 已完成
-//   - rejected: 已退回
-//   - manual_intervention: 需人工介入
+// Real node states (5 kinds):
+//   - pending: pending
+//   - in_progress: in progress
+//   - completed: completed
+//   - rejected: returned
+//   - manual_intervention: requires manual intervention
 const (
-	TaskNodeStatusPending            = "pending"             // 待处理
-	TaskNodeStatusInProgress         = "in_progress"         // 进行中
-	TaskNodeStatusCompleted          = "completed"           // 已完成
-	TaskNodeStatusRejected           = "rejected"            // 已退回
-	TaskNodeStatusManualIntervention = "manual_intervention" // 需人工介入
+	TaskNodeStatusPending            = "pending"             // Pending
+	TaskNodeStatusInProgress         = "in_progress"         // In progress
+	TaskNodeStatusCompleted          = "completed"           // Completed
+	TaskNodeStatusRejected           = "rejected"            // Returned
+	TaskNodeStatusManualIntervention = "manual_intervention" // Requires manual intervention
 )
 
-// TransitionAction 定义节点状态流转的操作类型。
+// TransitionAction defines the action type of a node state transition.
 const (
-	TransitionActionApprove      = "approve"       // 批准
-	TransitionActionReject       = "reject"        // 驳回
-	TransitionActionManual       = "manual"        // 手动介入
-	TransitionActionReclaim      = "reclaim"       // 重新认领
-	TransitionActionTimeout      = "timeout"       // 超时
-	TransitionActionInterruptAck = "interrupt_ack" // 中断确认
+	TransitionActionApprove      = "approve"       // Approve
+	TransitionActionReject       = "reject"        // Reject
+	TransitionActionManual       = "manual"        // Manual intervention
+	TransitionActionReclaim      = "reclaim"       // Reclaim
+	TransitionActionTimeout      = "timeout"       // Timeout
+	TransitionActionInterruptAck = "interrupt_ack" // Interrupt acknowledgement
 )
 
-// ProjectStatus 定义项目的状态。
+// ProjectStatus defines the status of a project.
 const (
-	ProjectStatusPlanned   = "planned"   // 计划中
-	ProjectStatusActive    = "active"    // 活跃
-	ProjectStatusPaused    = "paused"    // 暂停
-	ProjectStatusCompleted = "completed" // 已完成
-	ProjectStatusArchived  = "archived"  // 已归档
+	ProjectStatusPlanned   = "planned"   // Planned
+	ProjectStatusActive    = "active"    // Active
+	ProjectStatusPaused    = "paused"    // Paused
+	ProjectStatusCompleted = "completed" // Completed
+	ProjectStatusArchived  = "archived"  // Archived
 )
 
-// RuntimeStatus 定义 Runtime 的状态。
+// RuntimeStatus defines the status of a Runtime.
 const (
-	RuntimeStatusOnline  = "online"  // 在线
-	RuntimeStatusOffline = "offline" // 离线
-	RuntimeStatusError   = "error"   // 错误
+	RuntimeStatusOnline  = "online"  // Online
+	RuntimeStatusOffline = "offline" // Offline
+	RuntimeStatusError   = "error"   // Error
 )
 
-// TokenType 定义认证 Token 的类型。
+// TokenType defines the type of an auth Token.
 const (
-	TokenTypeAPI     = "api"     // API Token（长期有效）
-	TokenTypeSession = "session" // 会话 Token（7天有效）
-	TokenTypeTask    = "task"    // 任务 Token
+	TokenTypeAPI     = "api"     // API Token (long-lived)
+	TokenTypeSession = "session" // Session Token (valid for 7 days)
+	TokenTypeTask    = "task"    // Task Token
 )
 
-// McpAuthType 定义 MCP 服务器的认证类型。
+// McpAuthType defines the authentication type of an MCP server.
 const (
-	McpAuthTypeNone   = "none"    // 无认证
-	McpAuthTypeAPIKey = "api_key" // API Key 认证
-	McpAuthTypeOAuth  = "oauth"   // OAuth 认证
+	McpAuthTypeNone   = "none"    // No authentication
+	McpAuthTypeAPIKey = "api_key" // API Key authentication
+	McpAuthTypeOAuth  = "oauth"   // OAuth authentication
 )
 
-// MemoryType 定义记忆条目的类型分类。
+// MemoryType defines the type classification of a memory entry.
 const (
-	MemoryTypeArchitecture = "architecture" // 架构决策
-	MemoryTypeCommand      = "command"      // 命令参考
-	MemoryTypeConvention   = "convention"   // 编码约定
-	MemoryTypeDecision     = "decision"     // 技术决策
-	MemoryTypeInsight      = "insight"      // 洞察发现
-	MemoryTypeEnvironment  = "environment"  // 环境配置
+	MemoryTypeArchitecture = "architecture" // Architecture decision
+	MemoryTypeCommand      = "command"      // Command reference
+	MemoryTypeConvention   = "convention"   // Coding convention
+	MemoryTypeDecision     = "decision"     // Technical decision
+	MemoryTypeInsight      = "insight"      // Insight
+	MemoryTypeEnvironment  = "environment"  // Environment configuration
 )
 
 // ---------------------------------------------------------------------------
-// 核心业务结构体
+// Core business structs
 // ---------------------------------------------------------------------------
 
-// Workspace 表示团队工作区。
+// Workspace represents a team workspace.
 //
-// 工作区是顶级组织单元，包含项目、Agent、成员、工作流模板。
+// A workspace is the top-level organizational unit, containing projects, agents, members, and workflow templates.
 type Workspace struct {
-	ID          string    `json:"id" db:"id"`                     // 工作区 UUID
-	Name        string    `json:"name" db:"name"`                 // 工作区名称
-	Description string    `json:"description" db:"description"`   // 描述
-	IssuePrefix string    `json:"issue_prefix" db:"issue_prefix"` // Issue 前缀（如 "TM"）
-	IsDefault   bool      `json:"is_default" db:"is_default"`     // 是否为默认工作区
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`     // 创建时间
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`     // 更新时间
+	ID          string    `json:"id" db:"id"`                     // Workspace UUID
+	Name        string    `json:"name" db:"name"`                 // Workspace name
+	Description string    `json:"description" db:"description"`   // Description
+	IssuePrefix string    `json:"issue_prefix" db:"issue_prefix"` // Issue prefix (e.g. "TM")
+	IsDefault   bool      `json:"is_default" db:"is_default"`     // Whether this is the default workspace
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// Member 表示工作区中的人类成员。
+// Member represents a human member in a workspace.
 type Member struct {
-	ID          string    `json:"id" db:"id"`                    // 成员 UUID
-	WorkspaceID string    `json:"workspace_id" db:"workspace_id"` // 工作区 ID
-	Name        string    `json:"name" db:"name"`                // 名称
-	Email       string    `json:"email" db:"email"`              // 邮箱
-	Role        string    `json:"role" db:"role"`                // 角色
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`    // 创建时间
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`    // 更新时间
+	ID          string    `json:"id" db:"id"`                    // Member UUID
+	WorkspaceID string    `json:"workspace_id" db:"workspace_id"` // Workspace ID
+	Name        string    `json:"name" db:"name"`                // Name
+	Email       string    `json:"email" db:"email"`              // Email
+	Role        string    `json:"role" db:"role"`                // Role
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`    // Creation time
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`    // Update time
 }
 
-// Agent 表示工作区中的 AI 代理。
+// Agent represents an AI agent in a workspace.
 //
-// Agent 可以认领和执行任务节点，支持多种 AI 提供商。
+// An agent can claim and execute task nodes and supports multiple AI providers.
 type Agent struct {
 	ID            string          `json:"id" db:"id"`                      // Agent UUID
-	WorkspaceID   string          `json:"workspace_id" db:"workspace_id"`   // 工作区 ID
-	Name          string          `json:"name" db:"name"`                  // 名称
-	Provider      string          `json:"provider" db:"provider"`          // AI 提供商
-	Instructions  string          `json:"instructions" db:"instructions"`  // 系统指令
-	Model         string          `json:"model" db:"model"`                // 使用的模型
-	Status        string          `json:"status" db:"status"`              // 运行状态
-	CustomEnv     json.RawMessage `json:"custom_env" db:"custom_env"`      // 自定义环境变量（JSON）
-	ExtraArgs     []string        `json:"extra_args" db:"extra_args"`      // 额外命令行参数
-	TotalCompleted int            `json:"total_completed" db:"total_completed"` // 总完成任务数
-	TotalTokens   int64           `json:"total_tokens" db:"total_tokens"`   // 总 Token 用量
-	GitName       string          `json:"git_name" db:"git_name"`          // Git 提交用户名
-	GitEmail      string          `json:"git_email" db:"git_email"`        // Git 提交邮箱
-	CreatedAt     time.Time       `json:"created_at" db:"created_at"`      // 创建时间
-	UpdatedAt     time.Time       `json:"updated_at" db:"updated_at"`      // 更新时间
+	WorkspaceID   string          `json:"workspace_id" db:"workspace_id"`   // Workspace ID
+	Name          string          `json:"name" db:"name"`                  // Name
+	Provider      string          `json:"provider" db:"provider"`          // AI provider
+	Instructions  string          `json:"instructions" db:"instructions"`  // System instructions
+	Model         string          `json:"model" db:"model"`                // Model in use
+	Status        string          `json:"status" db:"status"`              // Running status
+	CustomEnv     json.RawMessage `json:"custom_env" db:"custom_env"`      // Custom environment variables (JSON)
+	ExtraArgs     []string        `json:"extra_args" db:"extra_args"`      // Extra command-line arguments
+	TotalCompleted int            `json:"total_completed" db:"total_completed"` // Total completed tasks
+	TotalTokens   int64           `json:"total_tokens" db:"total_tokens"`   // Total token usage
+	GitName       string          `json:"git_name" db:"git_name"`          // Git commit author name
+	GitEmail      string          `json:"git_email" db:"git_email"`        // Git commit author email
+	CreatedAt     time.Time       `json:"created_at" db:"created_at"`      // Creation time
+	UpdatedAt     time.Time       `json:"updated_at" db:"updated_at"`      // Update time
 }
 
-// WorkflowTemplate 表示可复用的工作流定义模板。
+// WorkflowTemplate represents a reusable workflow definition template.
 //
-// 模板定义了任务执行的有序步骤，如 [需求分析 → 编码 → 审查 → 部署]。
+// The template defines the ordered steps of task execution, e.g. [Requirements analysis -> Coding -> Review -> Deploy].
 type WorkflowTemplate struct {
-	ID              string          `json:"id" db:"id"`                       // 模板 UUID
-	WorkspaceID     string          `json:"workspace_id" db:"workspace_id"`   // 工作区 ID
-	Name            string          `json:"name" db:"name"`                   // 模板名称
-	Description     string          `json:"description" db:"description"`     // 描述
-	IsBuiltin       bool            `json:"is_builtin" db:"is_builtin"`       // 是否为内置模板
-	TriggerType     string          `json:"trigger_type" db:"trigger_type"`   // 触发器类型
-	TriggerConfig   json.RawMessage `json:"trigger_config" db:"trigger_config"` // 触发器配置（JSON）
-	TriggerEnabled  bool            `json:"trigger_enabled" db:"trigger_enabled"` // 触发器是否启用
-	NextRunAt       *time.Time      `json:"next_run_at" db:"next_run_at"`     // 下次运行时间
-	LastTriggeredAt *time.Time      `json:"last_triggered_at" db:"last_triggered_at"` // 上次触发时间
-	CreatedAt       time.Time       `json:"created_at" db:"created_at"`       // 创建时间
-	UpdatedAt       time.Time       `json:"updated_at" db:"updated_at"`       // 更新时间
+	ID              string          `json:"id" db:"id"`                       // Template UUID
+	WorkspaceID     string          `json:"workspace_id" db:"workspace_id"`   // Workspace ID
+	Name            string          `json:"name" db:"name"`                   // Template name
+	Description     string          `json:"description" db:"description"`     // Description
+	IsBuiltin       bool            `json:"is_builtin" db:"is_builtin"`       // Whether it is a built-in template
+	TriggerType     string          `json:"trigger_type" db:"trigger_type"`   // Trigger type
+	TriggerConfig   json.RawMessage `json:"trigger_config" db:"trigger_config"` // Trigger configuration (JSON)
+	TriggerEnabled  bool            `json:"trigger_enabled" db:"trigger_enabled"` // Whether the trigger is enabled
+	NextRunAt       *time.Time      `json:"next_run_at" db:"next_run_at"`     // Next run time
+	LastTriggeredAt *time.Time      `json:"last_triggered_at" db:"last_triggered_at"` // Last triggered time
+	CreatedAt       time.Time       `json:"created_at" db:"created_at"`       // Creation time
+	UpdatedAt       time.Time       `json:"updated_at" db:"updated_at"`       // Update time
 }
 
-// WorkflowTriggerRun 表示一次工作流触发器执行记录。
+// WorkflowTriggerRun represents a single workflow trigger execution record.
 type WorkflowTriggerRun struct {
-	ID                 string          `json:"id" db:"id"`                          // 运行记录 UUID
-	WorkspaceID        string          `json:"workspace_id" db:"workspace_id"`      // 工作区 ID
-	ProjectID          string          `json:"project_id" db:"project_id"`          // 项目 ID
-	WorkflowTemplateID string          `json:"workflow_template_id" db:"workflow_template_id"` // 模板 ID
-	TriggerType        string          `json:"trigger_type" db:"trigger_type"`      // 触发器类型
-	ExternalKey        string          `json:"external_key" db:"external_key"`      // 外部去重键
-	Status             string          `json:"status" db:"status"`                  // 状态
-	TaskID             *int32          `json:"task_id" db:"task_id"`                // 关联任务 ID
-	Payload            json.RawMessage `json:"payload" db:"payload"`                // 触发负载（JSON）
-	Error              string          `json:"error" db:"error"`                    // 错误信息
-	CreatedAt          time.Time       `json:"created_at" db:"created_at"`          // 创建时间
+	ID                 string          `json:"id" db:"id"`                          // Run record UUID
+	WorkspaceID        string          `json:"workspace_id" db:"workspace_id"`      // Workspace ID
+	ProjectID          string          `json:"project_id" db:"project_id"`          // Project ID
+	WorkflowTemplateID string          `json:"workflow_template_id" db:"workflow_template_id"` // Template ID
+	TriggerType        string          `json:"trigger_type" db:"trigger_type"`      // Trigger type
+	ExternalKey        string          `json:"external_key" db:"external_key"`      // External deduplication key
+	Status             string          `json:"status" db:"status"`                  // Status
+	TaskID             *int32          `json:"task_id" db:"task_id"`                // Associated task ID
+	Payload            json.RawMessage `json:"payload" db:"payload"`                // Trigger payload (JSON)
+	Error              string          `json:"error" db:"error"`                    // Error message
+	CreatedAt          time.Time       `json:"created_at" db:"created_at"`          // Creation time
 }
 
-// WorkflowTemplateNode 表示工作流模板中的单个步骤节点。
+// WorkflowTemplateNode represents a single step node in a workflow template.
 type WorkflowTemplateNode struct {
-	ID              string          `json:"id" db:"id"`                        // 节点 UUID
-	TemplateID      string          `json:"template_id" db:"template_id"`      // 所属模板 ID
-	Name            string          `json:"name" db:"name"`                    // 节点名称
-	Description     string          `json:"description" db:"description"`      // 描述
-	SortOrder       int             `json:"sort_order" db:"sort_order"`        // 排序顺序
-	NodeType        string          `json:"node_type" db:"node_type"`          // 节点类型
-	AssigneeType    string          `json:"assignee_type" db:"assignee_type"`  // 分配者类型
-	AssigneeID      *string         `json:"assignee_id" db:"assignee_id"`      // 指定分配者 ID
-	TimeoutMinutes  int             `json:"timeout_minutes" db:"timeout_minutes"` // 超时时间（分钟）
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`   // 只读目录（JSON）
-	FullControlDirs json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"` // 完全控制目录（JSON）
-	Artifact        json.RawMessage `json:"artifact" db:"artifact"`            // 产物定义（JSON）
-	DependsOn       []string        `json:"depends_on" db:"depends_on"`        // 依赖节点 ID 列表
-	MaxRejectCycles int             `json:"max_reject_cycles" db:"max_reject_cycles"` // 最大驳回轮次
-	CreatedAt       time.Time       `json:"created_at" db:"created_at"`        // 创建时间
+	ID              string          `json:"id" db:"id"`                        // Node UUID
+	TemplateID      string          `json:"template_id" db:"template_id"`      // Owning template ID
+	Name            string          `json:"name" db:"name"`                    // Node name
+	Description     string          `json:"description" db:"description"`      // Description
+	SortOrder       int             `json:"sort_order" db:"sort_order"`        // Sort order
+	NodeType        string          `json:"node_type" db:"node_type"`          // Node type
+	AssigneeType    string          `json:"assignee_type" db:"assignee_type"`  // Assignee type
+	AssigneeID      *string         `json:"assignee_id" db:"assignee_id"`      // Specified assignee ID
+	TimeoutMinutes  int             `json:"timeout_minutes" db:"timeout_minutes"` // Timeout (minutes)
+	ReadonlyDirs    json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`   // Read-only directories (JSON)
+	FullControlDirs json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"` // Full control directories (JSON)
+	Artifact        json.RawMessage `json:"artifact" db:"artifact"`            // Artifact definition (JSON)
+	DependsOn       []string        `json:"depends_on" db:"depends_on"`        // List of dependency node IDs
+	MaxRejectCycles int             `json:"max_reject_cycles" db:"max_reject_cycles"` // Maximum reject cycles
+	CreatedAt       time.Time       `json:"created_at" db:"created_at"`        // Creation time
 }
 
-// Project 表示工作区内的一个软件项目。
+// Project represents a software project within a workspace.
 type Project struct {
-	ID                 string    `json:"id" db:"id"`                               // 项目 UUID
-	WorkspaceID        string    `json:"workspace_id" db:"workspace_id"`            // 工作区 ID
-	Name               string    `json:"name" db:"name"`                           // 项目名称
-	Description        string    `json:"description" db:"description"`             // 描述
-	Icon               string    `json:"icon" db:"icon"`                           // 图标
-	Status             string    `json:"status" db:"status"`                       // 项目状态
-	RepoURL            string    `json:"repo_url" db:"repo_url"`                   // 代码仓库 URL
-	Context            string    `json:"context" db:"context"`                     // 项目上下文描述
-	DefaultWorkflowID  *string   `json:"default_workflow_id" db:"default_workflow_id"` // 默认工作流模板 ID
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`               // 创建时间
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`               // 更新时间
+	ID                 string    `json:"id" db:"id"`                               // Project UUID
+	WorkspaceID        string    `json:"workspace_id" db:"workspace_id"`            // Workspace ID
+	Name               string    `json:"name" db:"name"`                           // Project name
+	Description        string    `json:"description" db:"description"`             // Description
+	Icon               string    `json:"icon" db:"icon"`                           // Icon
+	Status             string    `json:"status" db:"status"`                       // Project status
+	RepoURL            string    `json:"repo_url" db:"repo_url"`                   // Repository URL
+	Context            string    `json:"context" db:"context"`                     // Project context description
+	DefaultWorkflowID  *string   `json:"default_workflow_id" db:"default_workflow_id"` // Default workflow template ID
+	CreatedAt          time.Time `json:"created_at" db:"created_at"`               // Creation time
+	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`               // Update time
 }
 
-// ProjectMember 表示项目与成员（Agent 或人类）的关联关系。
+// ProjectMember represents the association between a project and a member (Agent or human).
 type ProjectMember struct {
-	ID         string    `json:"id" db:"id"`                    // 关联记录 UUID
-	ProjectID  string    `json:"project_id" db:"project_id"`    // 项目 ID
-	MemberType string    `json:"member_type" db:"member_type"`  // 成员类型（"agent" 或 "member"）
-	AgentID    *string   `json:"agent_id" db:"agent_id"`        // Agent ID（member_type=agent 时）
-	MemberID   *string   `json:"member_id" db:"member_id"`      // 人类成员 ID（member_type=member 时）
-	Role       string    `json:"role" db:"role"`                // 项目角色
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`    // 创建时间
+	ID         string    `json:"id" db:"id"`                    // Association record UUID
+	ProjectID  string    `json:"project_id" db:"project_id"`    // Project ID
+	MemberType string    `json:"member_type" db:"member_type"`  // Member type ("agent" or "member")
+	AgentID    *string   `json:"agent_id" db:"agent_id"`        // Agent ID (when member_type=agent)
+	MemberID   *string   `json:"member_id" db:"member_id"`      // Human member ID (when member_type=member)
+	Role       string    `json:"role" db:"role"`                // Project role
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`    // Creation time
 }
 
-// Task 表示项目中的一个工作单元。
+// Task represents a unit of work in a project.
 //
-// 任务由工作流模板实例化为有序的工作流节点。
+// A task is instantiated from a workflow template as an ordered set of workflow nodes.
 type Task struct {
-	ID           int32      `json:"id" db:"id"`                     // 任务 ID（自增整数）
-	ProjectID    string     `json:"project_id" db:"project_id"`     // 所属项目 ID
-	WorkflowName string     `json:"workflow_name" db:"workflow_name"` // 工作流名称
-	Title        string     `json:"title" db:"title"`               // 任务标题
-	Description  string     `json:"description" db:"description"`   // 任务描述
-	Constraints  string     `json:"constraints" db:"constraints"`   // 约束条件
-	Type         string     `json:"type" db:"type"`                 // 任务类型（story/bug/task）
-	Priority     string     `json:"priority" db:"priority"`         // 优先级
-	Status       string     `json:"status" db:"status"`             // 任务状态
-	AuthorType   string     `json:"author_type" db:"author_type"`   // 作者类型
-	AuthorID     string     `json:"author_id" db:"author_id"`       // 作者 ID
-	DueDate      *time.Time `json:"due_date" db:"due_date"`          // 截止日期
-	Labels       []string   `json:"labels" db:"labels"`              // 标签列表
-	Sequence     int        `json:"sequence" db:"sequence"`          // 排序序号
-	ParentTaskID *int32     `json:"parent_task_id" db:"parent_task_id"` // 父任务 ID（子任务时）
-	GitBranch    *string    `json:"git_branch" db:"git_branch"`      // 关联的 Git 分支
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`      // 创建时间
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`      // 更新时间
+	ID           int32      `json:"id" db:"id"`                     // Task ID (auto-increment integer)
+	ProjectID    string     `json:"project_id" db:"project_id"`     // Owning project ID
+	WorkflowName string     `json:"workflow_name" db:"workflow_name"` // Workflow name
+	Title        string     `json:"title" db:"title"`               // Task title
+	Description  string     `json:"description" db:"description"`   // Task description
+	Constraints  string     `json:"constraints" db:"constraints"`   // Constraints
+	Type         string     `json:"type" db:"type"`                 // Task type (story/bug/task)
+	Priority     string     `json:"priority" db:"priority"`         // Priority
+	Status       string     `json:"status" db:"status"`             // Task status
+	AuthorType   string     `json:"author_type" db:"author_type"`   // Author type
+	AuthorID     string     `json:"author_id" db:"author_id"`       // Author ID
+	DueDate      *time.Time `json:"due_date" db:"due_date"`          // Due date
+	Labels       []string   `json:"labels" db:"labels"`              // List of labels
+	Sequence     int        `json:"sequence" db:"sequence"`          // Sort sequence number
+	ParentTaskID *int32     `json:"parent_task_id" db:"parent_task_id"` // Parent task ID (for subtasks)
+	GitBranch    *string    `json:"git_branch" db:"git_branch"`      // Associated Git branch
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`      // Creation time
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`      // Update time
 }
 
-// TaskNode 表示任务工作流执行中的单个步骤。
+// TaskNode represents a single step in task workflow execution.
 //
-// 节点状态机：pending → in_progress → completed/rejected/manual_intervention
+// Node state machine: pending -> in_progress -> completed/rejected/manual_intervention
 type TaskNode struct {
-	ID                   string     `json:"id" db:"id"`                                     // 节点 UUID
-	TaskID               int32      `json:"task_id" db:"task_id"`                           // 所属任务 ID
-	Name                 string     `json:"name" db:"name"`                                 // 节点名称
-	Description          string     `json:"description" db:"description"`                   // 描述
-	SortOrder            int        `json:"sort_order" db:"sort_order"`                     // 排序顺序
-	NodeType             string     `json:"node_type" db:"node_type"`                       // 节点类型
-	Status               string     `json:"status" db:"status"`                             // 节点状态
-	AssigneeType         string     `json:"assignee_type" db:"assignee_type"`               // 分配者类型
-	AssigneeID           *string    `json:"assignee_id" db:"assignee_id"`                   // 分配者 ID
-	ReservedForAgentID   *string    `json:"reserved_for_agent_id" db:"reserved_for_agent_id"` // 保留给特定 Agent（续约权）
-	RejectCount          int        `json:"reject_count" db:"reject_count"`                 // 驳回次数
-	Version              int        `json:"version" db:"version"`                           // 乐观锁版本号
-	MaxRejectCycles      int        `json:"max_reject_cycles" db:"max_reject_cycles"`       // 最大驳回轮次
-	TimeoutMinutes       int        `json:"timeout_minutes" db:"timeout_minutes"`           // 超时时间（分钟）
-	CompletedAt          *time.Time `json:"completed_at" db:"completed_at"`                 // 完成时间
-	CompletedBy          *string    `json:"completed_by" db:"completed_by"`                 // 完成者 ID
-	Summary              string     `json:"summary" db:"summary"`                           // 节点执行摘要
-	PreviousSummary      string     `json:"previous_summary" db:"previous_summary"`         // 上一次执行摘要
-	ReservationExpiresAt *time.Time `json:"reservation_expires_at" db:"reservation_expires_at"` // 预留过期时间
-	ReadonlyDirs         json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`               // 只读目录（JSON 数组，来自模板节点）
-	FullControlDirs      json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"`       // 完全控制目录（JSON 数组，来自模板节点）
-	DependsOn            []string   `json:"depends_on" db:"depends_on"`                     // 依赖节点 ID 列表
-	CreatedAt            time.Time  `json:"created_at" db:"created_at"`                     // 创建时间
-	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`                     // 更新时间
+	ID                   string     `json:"id" db:"id"`                                     // Node UUID
+	TaskID               int32      `json:"task_id" db:"task_id"`                           // Owning task ID
+	Name                 string     `json:"name" db:"name"`                                 // Node name
+	Description          string     `json:"description" db:"description"`                   // Description
+	SortOrder            int        `json:"sort_order" db:"sort_order"`                     // Sort order
+	NodeType             string     `json:"node_type" db:"node_type"`                       // Node type
+	Status               string     `json:"status" db:"status"`                             // Node status
+	AssigneeType         string     `json:"assignee_type" db:"assignee_type"`               // Assignee type
+	AssigneeID           *string    `json:"assignee_id" db:"assignee_id"`                   // Assignee ID
+	ReservedForAgentID   *string    `json:"reserved_for_agent_id" db:"reserved_for_agent_id"` // Reserved for a specific Agent (renewal right)
+	RejectCount          int        `json:"reject_count" db:"reject_count"`                 // Reject count
+	Version              int        `json:"version" db:"version"`                           // Optimistic lock version
+	MaxRejectCycles      int        `json:"max_reject_cycles" db:"max_reject_cycles"`       // Maximum reject cycles
+	TimeoutMinutes       int        `json:"timeout_minutes" db:"timeout_minutes"`           // Timeout (minutes)
+	CompletedAt          *time.Time `json:"completed_at" db:"completed_at"`                 // Completion time
+	CompletedBy          *string    `json:"completed_by" db:"completed_by"`                 // Completer ID
+	Summary              string     `json:"summary" db:"summary"`                           // Node execution summary
+	PreviousSummary      string     `json:"previous_summary" db:"previous_summary"`         // Previous execution summary
+	ReservationExpiresAt *time.Time `json:"reservation_expires_at" db:"reservation_expires_at"` // Reservation expiration time
+	ReadonlyDirs         json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`               // Read-only directories (JSON array, from template node)
+	FullControlDirs      json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"`       // Full control directories (JSON array, from template node)
+	DependsOn            []string   `json:"depends_on" db:"depends_on"`                     // List of dependency node IDs
+	CreatedAt            time.Time  `json:"created_at" db:"created_at"`                     // Creation time
+	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`                     // Update time
 }
 
-// NodeTransition 记录工作流节点的状态流转历史。
+// NodeTransition records the state transition history of a workflow node.
 //
-// 每次节点状态变更都会创建一条流转记录，用于审计和调试。
+// A transition record is created on every node state change, used for auditing and debugging.
 type NodeTransition struct {
-	ID           string    `json:"id" db:"id"`                     // 流转记录 UUID
-	TaskNodeID   string    `json:"task_node_id" db:"task_node_id"` // 节点 ID
-	FromStatus   string    `json:"from_status" db:"from_status"`   // 源状态
-	ToStatus     string    `json:"to_status" db:"to_status"`       // 目标状态
-	Action       string    `json:"action" db:"action"`             // 操作类型
-	TargetNodeID *string   `json:"target_node_id" db:"target_node_id"` // 目标节点 ID（驳回时）
-	Comment      string    `json:"comment" db:"comment"`           // 操作评论
-	OperatorID   *string   `json:"operator_id" db:"operator_id"`   // 操作者 ID
-	OperatorType string    `json:"operator_type" db:"operator_type"` // 操作者类型
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`     // 创建时间
+	ID           string    `json:"id" db:"id"`                     // Transition record UUID
+	TaskNodeID   string    `json:"task_node_id" db:"task_node_id"` // Node ID
+	FromStatus   string    `json:"from_status" db:"from_status"`   // Source status
+	ToStatus     string    `json:"to_status" db:"to_status"`       // Target status
+	Action       string    `json:"action" db:"action"`             // Action type
+	TargetNodeID *string   `json:"target_node_id" db:"target_node_id"` // Target node ID (on reject)
+	Comment      string    `json:"comment" db:"comment"`           // Action comment
+	OperatorID   *string   `json:"operator_id" db:"operator_id"`   // Operator ID
+	OperatorType string    `json:"operator_type" db:"operator_type"` // Operator type
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`     // Creation time
 }
 
-// Comment 表示任务上的一条评论。
+// Comment represents a comment on a task.
 type Comment struct {
-	ID           string          `json:"id" db:"id"`                     // 评论 UUID
-	TaskID       int32           `json:"task_id" db:"task_id"`           // 所属任务 ID
-	NodeID       *string         `json:"node_id" db:"node_id"`           // 关联节点 ID（节点评论时）
-	SourceNodeID *string         `json:"source_node_id" db:"source_node_id"` // 来源节点 ID（交接评论时）
-	ParentID     *string         `json:"parent_id" db:"parent_id"`       // 父评论 ID（回复时）
-	AuthorType   string          `json:"author_type" db:"author_type"`   // 作者类型
-	AuthorID     string          `json:"author_id" db:"author_id"`       // 作者 ID
-	Content      string          `json:"content" db:"content"`           // 评论内容
-	CommentType  string          `json:"comment_type" db:"comment_type"` // 评论类型
-	Metadata     json.RawMessage `json:"metadata" db:"metadata"`         // 扩展元数据（JSON）
-	Mentions     []string        `json:"mentions" db:"mentions"`         // 提及列表（UUID 数组）
-	EditedAt     *time.Time      `json:"edited_at" db:"edited_at"`       // 编辑时间
-	CreatedAt    time.Time       `json:"created_at" db:"created_at"`     // 创建时间
-	UpdatedAt    time.Time       `json:"updated_at" db:"updated_at"`     // 更新时间
+	ID           string          `json:"id" db:"id"`                     // Comment UUID
+	TaskID       int32           `json:"task_id" db:"task_id"`           // Owning task ID
+	NodeID       *string         `json:"node_id" db:"node_id"`           // Associated node ID (for node comments)
+	SourceNodeID *string         `json:"source_node_id" db:"source_node_id"` // Source node ID (for handoff comments)
+	ParentID     *string         `json:"parent_id" db:"parent_id"`       // Parent comment ID (for replies)
+	AuthorType   string          `json:"author_type" db:"author_type"`   // Author type
+	AuthorID     string          `json:"author_id" db:"author_id"`       // Author ID
+	Content      string          `json:"content" db:"content"`           // Comment content
+	CommentType  string          `json:"comment_type" db:"comment_type"` // Comment type
+	Metadata     json.RawMessage `json:"metadata" db:"metadata"`         // Extension metadata (JSON)
+	Mentions     []string        `json:"mentions" db:"mentions"`         // Mentions list (UUID array)
+	EditedAt     *time.Time      `json:"edited_at" db:"edited_at"`       // Edit time
+	CreatedAt    time.Time       `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt    time.Time       `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// Runtime 表示正在运行的 Agent 守护进程实例。
+// Runtime represents a running Agent daemon instance.
 //
-// 每个 Agent 可以有多个 Runtime（部署在不同机器上），
-// 通过心跳维持在线状态。
+// Each Agent can have multiple Runtimes (deployed on different machines),
+// maintaining online status via heartbeats.
 type Runtime struct {
 	ID                string     `json:"id" db:"id"`                           // Runtime UUID
-	AgentID           string     `json:"agent_id" db:"agent_id"`               // 所属 Agent ID
-	DaemonID          string     `json:"daemon_id" db:"daemon_id"`             // 守护进程 ID
-	Provider          string     `json:"provider" db:"provider"`               // AI 提供商
-	Version           string     `json:"version" db:"version"`                 // 守护进程版本
-	Status            string     `json:"status" db:"status"`                   // 运行状态
-	SessionTokenHash  string     `json:"session_token_hash" db:"session_token_hash"` // 会话 Token 哈希
-	SessionExpiresAt  *time.Time `json:"session_expires_at" db:"session_expires_at"` // 会话过期时间
-	PublicKey         string     `json:"public_key" db:"public_key"`           // RSA 公钥
-	LastHeartbeat     *time.Time `json:"last_heartbeat" db:"last_heartbeat"`   // 最后心跳时间
-	CreatedAt         time.Time  `json:"created_at" db:"created_at"`           // 创建时间
-	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`           // 更新时间
+	AgentID           string     `json:"agent_id" db:"agent_id"`               // Owning Agent ID
+	DaemonID          string     `json:"daemon_id" db:"daemon_id"`             // Daemon ID
+	Provider          string     `json:"provider" db:"provider"`               // AI provider
+	Version           string     `json:"version" db:"version"`                 // Daemon version
+	Status            string     `json:"status" db:"status"`                   // Running status
+	SessionTokenHash  string     `json:"session_token_hash" db:"session_token_hash"` // Session token hash
+	SessionExpiresAt  *time.Time `json:"session_expires_at" db:"session_expires_at"` // Session expiration time
+	PublicKey         string     `json:"public_key" db:"public_key"`           // RSA public key
+	LastHeartbeat     *time.Time `json:"last_heartbeat" db:"last_heartbeat"`   // Last heartbeat time
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`           // Creation time
+	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`           // Update time
 }
 
-// Skill 表示可复用的技能定义。
+// Skill represents a reusable skill definition.
 //
-// 技能是 Agent 可以使用的专业能力，如代码审查、测试编写等。
+// Skills are specialized capabilities that an Agent can use, such as code review, test writing, etc.
 type Skill struct {
-	ID            string    `json:"id" db:"id"`                      // 技能 UUID
-	WorkspaceID   string    `json:"workspace_id" db:"workspace_id"`   // 工作区 ID
-	Name          string    `json:"name" db:"name"`                  // 技能名称
-	Description   string    `json:"description" db:"description"`    // 描述
-	Category      string    `json:"category" db:"category"`          // 分类
-	PromptTemplate string   `json:"prompt_template" db:"prompt_template"` // 提示词模板
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`      // 创建时间
+	ID            string    `json:"id" db:"id"`                      // Skill UUID
+	WorkspaceID   string    `json:"workspace_id" db:"workspace_id"`   // Workspace ID
+	Name          string    `json:"name" db:"name"`                  // Skill name
+	Description   string    `json:"description" db:"description"`    // Description
+	Category      string    `json:"category" db:"category"`          // Category
+	PromptTemplate string   `json:"prompt_template" db:"prompt_template"` // Prompt template
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`      // Creation time
 }
 
-// McpServer 表示 MCP 服务器配置。
+// McpServer represents an MCP server configuration.
 //
-// MCP（Model Context Protocol）服务器为 Agent 提供外部工具和数据源。
+// MCP (Model Context Protocol) servers provide external tools and data sources for Agents.
 type McpServer struct {
-	ID          string          `json:"id" db:"id"`                    // 服务器 UUID
-	WorkspaceID string          `json:"workspace_id" db:"workspace_id"` // 工作区 ID
-	Name        string          `json:"name" db:"name"`                // 服务器名称
-	URL         string          `json:"url" db:"url"`                  // 服务器 URL
-	Type        string          `json:"type" db:"type"`                // 服务器类型
-	AuthType    string          `json:"auth_type" db:"auth_type"`      // 认证类型
-	EnvVars     json.RawMessage `json:"env_vars" db:"env_vars"`        // 环境变量（JSON）
-	Status      string          `json:"status" db:"status"`            // 服务器状态
-	CreatedAt   time.Time       `json:"created_at" db:"created_at"`    // 创建时间
+	ID          string          `json:"id" db:"id"`                    // Server UUID
+	WorkspaceID string          `json:"workspace_id" db:"workspace_id"` // Workspace ID
+	Name        string          `json:"name" db:"name"`                // Server name
+	URL         string          `json:"url" db:"url"`                  // Server URL
+	Type        string          `json:"type" db:"type"`                // Server type
+	AuthType    string          `json:"auth_type" db:"auth_type"`      // Authentication type
+	EnvVars     json.RawMessage `json:"env_vars" db:"env_vars"`        // Environment variables (JSON)
+	Status      string          `json:"status" db:"status"`            // Server status
+	CreatedAt   time.Time       `json:"created_at" db:"created_at"`    // Creation time
 }
 
-// AgentSkill 表示 Agent 与技能的关联关系。
+// AgentSkill represents the association between an Agent and a skill.
 type AgentSkill struct {
 	AgentID   string    `json:"agent_id" db:"agent_id"`   // Agent ID
-	SkillID   string    `json:"skill_id" db:"skill_id"`   // 技能 ID
-	Enabled   bool      `json:"enabled" db:"enabled"`     // 是否启用
-	CreatedAt time.Time `json:"created_at" db:"created_at"` // 创建时间
+	SkillID   string    `json:"skill_id" db:"skill_id"`   // Skill ID
+	Enabled   bool      `json:"enabled" db:"enabled"`     // Whether enabled
+	CreatedAt time.Time `json:"created_at" db:"created_at"` // Creation time
 }
 
-// AgentMcpServer 表示 Agent 与 MCP 服务器的关联关系。
+// AgentMcpServer represents the association between an Agent and an MCP server.
 type AgentMcpServer struct {
 	AgentID     string    `json:"agent_id" db:"agent_id"`         // Agent ID
-	McpServerID string    `json:"mcp_server_id" db:"mcp_server_id"` // MCP 服务器 ID
-	Enabled     bool      `json:"enabled" db:"enabled"`           // 是否启用
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`     // 创建时间
+	McpServerID string    `json:"mcp_server_id" db:"mcp_server_id"` // MCP server ID
+	Enabled     bool      `json:"enabled" db:"enabled"`           // Whether enabled
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`     // Creation time
 }
 
-// TokenUsage 记录工作流节点执行过程中的 Token 消耗量。
+// TokenUsage records token consumption during workflow node execution.
 type TokenUsage struct {
-	ID           int64          `json:"id"`             // 记录 ID
-	TaskNodeID   string         `json:"task_node_id"`   // 节点 ID
+	ID           int64          `json:"id"`             // Record ID
+	TaskNodeID   string         `json:"task_node_id"`   // Node ID
 	AgentID      string         `json:"agent_id"`       // Agent ID
-	InputTokens  int32          `json:"input_tokens"`   // 输入 Token 数
-	OutputTokens int32          `json:"output_tokens"`  // 输出 Token 数
-	TotalTokens  int32          `json:"total_tokens"`   // 总 Token 数
-	CostEstimate *string        `json:"cost_estimate"`  // 费用估算（可选）
-	CreatedAt    time.Time      `json:"created_at"`     // 创建时间
+	InputTokens  int32          `json:"input_tokens"`   // Input token count
+	OutputTokens int32          `json:"output_tokens"`  // Output token count
+	TotalTokens  int32          `json:"total_tokens"`   // Total token count
+	CostEstimate *string        `json:"cost_estimate"`  // Cost estimate (optional)
+	CreatedAt    time.Time      `json:"created_at"`     // Creation time
 }
 
-// AuthToken 表示认证令牌。
+// AuthToken represents an authentication token.
 //
-// 支持三种类型：api（长期 API Token）、session（短期会话 Token）、task（任务 Token）。
+// Supports three types: api (long-lived API token), session (short-lived session token), task (task token).
 type AuthToken struct {
-	ID        string     `json:"id" db:"id"`                   // Token 记录 UUID
-	TokenHash string     `json:"token_hash" db:"token_hash"`   // Token 哈希（bcrypt）
-	TokenType string     `json:"token_type" db:"token_type"`   // Token 类型
-	OwnerType string     `json:"owner_type" db:"owner_type"`   // 所有者类型
-	OwnerID   string     `json:"owner_id" db:"owner_id"`       // 所有者 ID
-	RuntimeID *string    `json:"runtime_id" db:"runtime_id"`   // 关联的 Runtime ID
-	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`   // 过期时间
-	CreatedAt time.Time  `json:"created_at" db:"created_at"`   // 创建时间
+	ID        string     `json:"id" db:"id"`                   // Token record UUID
+	TokenHash string     `json:"token_hash" db:"token_hash"`   // Token hash (bcrypt)
+	TokenType string     `json:"token_type" db:"token_type"`   // Token type
+	OwnerType string     `json:"owner_type" db:"owner_type"`   // Owner type
+	OwnerID   string     `json:"owner_id" db:"owner_id"`       // Owner ID
+	RuntimeID *string    `json:"runtime_id" db:"runtime_id"`   // Associated Runtime ID
+	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`   // Expiration time
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`   // Creation time
 }
 
-// GitCredential 存储加密的 Git PAT，用于仓库访问认证。
+// GitCredential stores an encrypted Git PAT used for repository access authentication.
 type GitCredential struct {
-	ID           string     `json:"id" db:"id"`                     // 凭据 UUID
-	ProjectID    string     `json:"project_id" db:"project_id"`     // 所属项目 ID
-	RepoURL      string     `json:"repo_url" db:"repo_url"`         // 仓库 URL
-	Username     string     `json:"username" db:"username"`         // 用户名
-	EncryptedPAT string     `json:"encrypted_pat" db:"encrypted_pat"` // 加密的 PAT
-	CreatedBy    *string    `json:"created_by" db:"created_by"`     // 创建者 ID
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`     // 创建时间
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`     // 更新时间
+	ID           string     `json:"id" db:"id"`                     // Credential UUID
+	ProjectID    string     `json:"project_id" db:"project_id"`     // Owning project ID
+	RepoURL      string     `json:"repo_url" db:"repo_url"`         // Repository URL
+	Username     string     `json:"username" db:"username"`         // Username
+	EncryptedPAT string     `json:"encrypted_pat" db:"encrypted_pat"` // Encrypted PAT
+	CreatedBy    *string    `json:"created_by" db:"created_by"`     // Creator ID
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// Memory 表示工作区的知识记忆条目。
+// Memory represents a knowledge memory entry for the workspace.
 //
-// 记忆支持文本搜索和语义搜索（pgvector），用于 Agent 学习和参考。
+// Memory supports text search and semantic search (pgvector), used for Agent learning and reference.
 type Memory struct {
-	ID           string          `json:"id" db:"id"`                     // 记忆 UUID
-	WorkspaceID  string          `json:"workspace_id" db:"workspace_id"`  // 工作区 ID
-	SourceTaskID *int32          `json:"source_task_id" db:"source_task_id"` // 来源任务 ID
-	Type         string          `json:"type" db:"type"`                 // 记忆类型
-	Title        string          `json:"title" db:"title"`               // 标题
-	Content      string          `json:"content" db:"content"`           // 内容
-	Tags         []string        `json:"tags" db:"tags"`                 // 标签列表
-	Confidence   float64         `json:"confidence" db:"confidence"`     // 置信度（0-1）
-	Verified     bool            `json:"verified" db:"verified"`         // 是否已验证
-	Stale        bool            `json:"stale" db:"stale"`               // 是否已过期
-	Metadata     json.RawMessage `json:"metadata" db:"metadata"`         // 扩展元数据（JSON）
-	CreatedAt    time.Time       `json:"created_at" db:"created_at"`     // 创建时间
-	UpdatedAt    time.Time       `json:"updated_at" db:"updated_at"`     // 更新时间
+	ID           string          `json:"id" db:"id"`                     // Memory UUID
+	WorkspaceID  string          `json:"workspace_id" db:"workspace_id"`  // Workspace ID
+	SourceTaskID *int32          `json:"source_task_id" db:"source_task_id"` // Source task ID
+	Type         string          `json:"type" db:"type"`                 // Memory type
+	Title        string          `json:"title" db:"title"`               // Title
+	Content      string          `json:"content" db:"content"`           // Content
+	Tags         []string        `json:"tags" db:"tags"`                 // List of tags
+	Confidence   float64         `json:"confidence" db:"confidence"`     // Confidence (0-1)
+	Verified     bool            `json:"verified" db:"verified"`         // Whether verified
+	Stale        bool            `json:"stale" db:"stale"`               // Whether stale
+	Metadata     json.RawMessage `json:"metadata" db:"metadata"`         // Extension metadata (JSON)
+	CreatedAt    time.Time       `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt    time.Time       `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// CommunityWorkflow 表示来自社区的共享工作流。
+// CommunityWorkflow represents a shared workflow from the community.
 type CommunityWorkflow struct {
-	ID                           string          `json:"id" db:"id"`                               // 工作流 UUID
-	Name                         string          `json:"name" db:"name"`                           // 名称
-	Description                  string          `json:"description" db:"description"`             // 描述
-	Author                       string          `json:"author" db:"author"`                       // 作者
-	Version                      string          `json:"version" db:"version"`                     // 版本
-	WorkflowDefinition           json.RawMessage `json:"workflow_definition" db:"workflow_definition"` // 工作流定义（JSON）
-	RequiredSkills               json.RawMessage `json:"required_skills" db:"required_skills"`     // 所需技能（JSON）
-	RequiredMcpServers           json.RawMessage `json:"required_mcp_servers" db:"required_mcp_servers"` // 所需 MCP 服务器（JSON）
-	RecommendedAgentInstructions json.RawMessage `json:"recommended_agent_instructions" db:"recommended_agent_instructions"` // 推荐 Agent 指令（JSON）
-	Downloads                    int             `json:"downloads" db:"downloads"`                 // 下载次数
-	IsOfficial                   bool            `json:"is_official" db:"is_official"`             // 是否为官方
-	CreatedAt                    time.Time       `json:"created_at" db:"created_at"`               // 创建时间
-	UpdatedAt                    time.Time       `json:"updated_at" db:"updated_at"`               // 更新时间
+	ID                           string          `json:"id" db:"id"`                               // Workflow UUID
+	Name                         string          `json:"name" db:"name"`                           // Name
+	Description                  string          `json:"description" db:"description"`             // Description
+	Author                       string          `json:"author" db:"author"`                       // Author
+	Version                      string          `json:"version" db:"version"`                     // Version
+	WorkflowDefinition           json.RawMessage `json:"workflow_definition" db:"workflow_definition"` // Workflow definition (JSON)
+	RequiredSkills               json.RawMessage `json:"required_skills" db:"required_skills"`     // Required skills (JSON)
+	RequiredMcpServers           json.RawMessage `json:"required_mcp_servers" db:"required_mcp_servers"` // Required MCP servers (JSON)
+	RecommendedAgentInstructions json.RawMessage `json:"recommended_agent_instructions" db:"recommended_agent_instructions"` // Recommended Agent instructions (JSON)
+	Downloads                    int             `json:"downloads" db:"downloads"`                 // Download count
+	IsOfficial                   bool            `json:"is_official" db:"is_official"`             // Whether it is official
+	CreatedAt                    time.Time       `json:"created_at" db:"created_at"`               // Creation time
+	UpdatedAt                    time.Time       `json:"updated_at" db:"updated_at"`               // Update time
 }
 
-// ProjectReviewer 表示项目的审查者指派。
+// ProjectReviewer represents a reviewer assignment for a project.
 type ProjectReviewer struct {
-	ID         string    `json:"id" db:"id"`                   // 记录 UUID
-	ProjectID  string    `json:"project_id" db:"project_id"`   // 项目 ID
-	MemberType string    `json:"member_type" db:"member_type"` // 成员类型
+	ID         string    `json:"id" db:"id"`                   // Record UUID
+	ProjectID  string    `json:"project_id" db:"project_id"`   // Project ID
+	MemberType string    `json:"member_type" db:"member_type"` // Member type
 	AgentID    *string   `json:"agent_id" db:"agent_id"`       // Agent ID
-	MemberID   *string   `json:"member_id" db:"member_id"`     // 人类成员 ID
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`   // 创建时间
+	MemberID   *string   `json:"member_id" db:"member_id"`     // Human member ID
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`   // Creation time
 }
 
 // ---------------------------------------------------------------------------
-// 补齐缺失的实体结构体（对照 db/generated/models.go）
+// Entity structs backfilled to match db/generated/models.go
 // ---------------------------------------------------------------------------
 
-// AgentPermission 表示授予 Agent 的细粒度权限。
+// AgentPermission represents a fine-grained permission granted to an Agent.
 type AgentPermission struct {
-	ID           string  `json:"id" db:"id"`                          // 记录 UUID
+	ID           string  `json:"id" db:"id"`                          // Record UUID
 	AgentID      string  `json:"agent_id" db:"agent_id"`              // Agent ID
-	Permission   string  `json:"permission" db:"permission"`          // 权限名称
-	ResourceType string  `json:"resource_type" db:"resource_type"`    // 资源类型
-	ResourceID   *string `json:"resource_id" db:"resource_id"`        // 资源 ID（可选）
-	GrantedBy    *string `json:"granted_by" db:"granted_by"`          // 授权者 ID（可选）
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`        // 创建时间
+	Permission   string  `json:"permission" db:"permission"`          // Permission name
+	ResourceType string  `json:"resource_type" db:"resource_type"`    // Resource type
+	ResourceID   *string `json:"resource_id" db:"resource_id"`        // Resource ID (optional)
+	GrantedBy    *string `json:"granted_by" db:"granted_by"`          // Grantor ID (optional)
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`        // Creation time
 }
 
-// AuditLog 表示系统审计日志条目，记录用户/Agent 的关键操作。
+// AuditLog represents a system audit log entry, recording key actions by users/Agents.
 type AuditLog struct {
-	ID           int64           `json:"id" db:"id"`                              // 日志 ID
-	WorkspaceID  string          `json:"workspace_id" db:"workspace_id"`         // 工作区 ID
-	ActorType    string          `json:"actor_type" db:"actor_type"`             // 操作者类型
-	ActorID      string          `json:"actor_id" db:"actor_id"`                 // 操作者 ID
-	Action       string          `json:"action" db:"action"`                     // 操作类型
-	ResourceType string          `json:"resource_type" db:"resource_type"`       // 资源类型
-	ResourceID   string          `json:"resource_id" db:"resource_id"`           // 资源 ID
-	Details      json.RawMessage `json:"details" db:"details"`                   // 操作详情（JSON）
-	IPAddress    string          `json:"ip_address" db:"ip_address"`             // 请求来源 IP
-	UserAgent    *string         `json:"user_agent" db:"user_agent"`             // 客户端 User-Agent
-	RequestID    *string         `json:"request_id" db:"request_id"`             // 请求追踪 ID
-	CreatedAt    time.Time       `json:"created_at" db:"created_at"`             // 创建时间
+	ID           int64           `json:"id" db:"id"`                              // Log ID
+	WorkspaceID  string          `json:"workspace_id" db:"workspace_id"`         // Workspace ID
+	ActorType    string          `json:"actor_type" db:"actor_type"`             // Actor type
+	ActorID      string          `json:"actor_id" db:"actor_id"`                 // Actor ID
+	Action       string          `json:"action" db:"action"`                     // Action type
+	ResourceType string          `json:"resource_type" db:"resource_type"`       // Resource type
+	ResourceID   string          `json:"resource_id" db:"resource_id"`           // Resource ID
+	Details      json.RawMessage `json:"details" db:"details"`                   // Action details (JSON)
+	IPAddress    string          `json:"ip_address" db:"ip_address"`             // Request source IP
+	UserAgent    *string         `json:"user_agent" db:"user_agent"`             // Client User-Agent
+	RequestID    *string         `json:"request_id" db:"request_id"`             // Request trace ID
+	CreatedAt    time.Time       `json:"created_at" db:"created_at"`             // Creation time
 }
 
-// ExecutionSession 表示一次节点执行会话，记录 Agent 执行节点时的运行时信息。
+// ExecutionSession represents a node execution session, recording runtime information when an Agent executes a node.
 type ExecutionSession struct {
-	ID              string     `json:"id" db:"id"`                              // 会话 UUID
-	RuntimeID       *string    `json:"runtime_id" db:"runtime_id"`              // 关联的 Runtime ID
-	AgentID         *string    `json:"agent_id" db:"agent_id"`                  // 执行 Agent ID
-	TaskNodeID      string     `json:"task_node_id" db:"task_node_id"`          // 执行的节点 ID
-	Attempt         int32      `json:"attempt" db:"attempt"`                    // 尝试次数
-	Status          string     `json:"status" db:"status"`                      // 会话状态
-	Workdir         *string    `json:"workdir" db:"workdir"`                    // 工作目录
-	Branch          *string    `json:"branch" db:"branch"`                      // Git 分支
-	BaseCommit      *string    `json:"base_commit" db:"base_commit"`            // 起始 commit
-	HeadCommit      *string    `json:"head_commit" db:"head_commit"`            // 最新 commit
+	ID              string     `json:"id" db:"id"`                              // Session UUID
+	RuntimeID       *string    `json:"runtime_id" db:"runtime_id"`              // Associated Runtime ID
+	AgentID         *string    `json:"agent_id" db:"agent_id"`                  // Executing Agent ID
+	TaskNodeID      string     `json:"task_node_id" db:"task_node_id"`          // Executed node ID
+	Attempt         int32      `json:"attempt" db:"attempt"`                    // Attempt count
+	Status          string     `json:"status" db:"status"`                      // Session status
+	Workdir         *string    `json:"workdir" db:"workdir"`                    // Working directory
+	Branch          *string    `json:"branch" db:"branch"`                      // Git branch
+	BaseCommit      *string    `json:"base_commit" db:"base_commit"`            // Starting commit
+	HeadCommit      *string    `json:"head_commit" db:"head_commit"`            // Latest commit
 	ClaudeSessionID *string    `json:"claude_session_id" db:"claude_session_id"` // Claude session ID
-	StartedAt       time.Time  `json:"started_at" db:"started_at"`              // 开始时间
-	CompletedAt     *time.Time `json:"completed_at" db:"completed_at"`          // 完成时间
-	InterruptedAt   *time.Time `json:"interrupted_at" db:"interrupted_at"`      // 中断时间
-	CreatedAt       time.Time  `json:"created_at" db:"created_at"`              // 创建时间
+	StartedAt       time.Time  `json:"started_at" db:"started_at"`              // Start time
+	CompletedAt     *time.Time `json:"completed_at" db:"completed_at"`          // Completion time
+	InterruptedAt   *time.Time `json:"interrupted_at" db:"interrupted_at"`      // Interruption time
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`              // Creation time
 }
 
-// Invitation 表示工作区邀请，通过邮件发送给待加入的成员。
+// Invitation represents a workspace invitation, sent by email to a member pending to join.
 type Invitation struct {
-	ID          string     `json:"id" db:"id"`                       // 邀请 UUID
-	WorkspaceID string     `json:"workspace_id" db:"workspace_id"`   // 目标工作区 ID
-	Email       string     `json:"email" db:"email"`                 // 被邀请者邮箱
-	Role        string     `json:"role" db:"role"`                   // 邀请的角色
-	TokenHash   string     `json:"token_hash" db:"token_hash"`       // 邀请令牌哈希
-	InvitedBy   *string    `json:"invited_by" db:"invited_by"`       // 邀请发起者 ID
-	ExpiresAt   time.Time  `json:"expires_at" db:"expires_at"`       // 邀请过期时间
-	AcceptedAt  *time.Time `json:"accepted_at" db:"accepted_at"`     // 接受时间
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`       // 创建时间
+	ID          string     `json:"id" db:"id"`                       // Invitation UUID
+	WorkspaceID string     `json:"workspace_id" db:"workspace_id"`   // Target workspace ID
+	Email       string     `json:"email" db:"email"`                 // Invitee email
+	Role        string     `json:"role" db:"role"`                   // Invited role
+	TokenHash   string     `json:"token_hash" db:"token_hash"`       // Invitation token hash
+	InvitedBy   *string    `json:"invited_by" db:"invited_by"`       // Inviter ID
+	ExpiresAt   time.Time  `json:"expires_at" db:"expires_at"`       // Invitation expiration time
+	AcceptedAt  *time.Time `json:"accepted_at" db:"accepted_at"`     // Acceptance time
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`       // Creation time
 }
 
-// SseEventBuffer 表示 SSE 事件缓冲区条目，用于断线重连时补发丢失的事件。
+// SseEventBuffer represents an SSE event buffer entry, used to replay lost events on reconnection.
 type SseEventBuffer struct {
-	ID        int64           `json:"id" db:"id"`                       // 缓冲条目 ID
-	RuntimeID string          `json:"runtime_id" db:"runtime_id"`      // 目标 Runtime ID
-	EventType string          `json:"event_type" db:"event_type"`      // 事件类型
-	EventData json.RawMessage `json:"event_data" db:"event_data"`      // 事件数据（JSON）
-	CreatedAt time.Time       `json:"created_at" db:"created_at"`      // 创建时间
+	ID        int64           `json:"id" db:"id"`                       // Buffer entry ID
+	RuntimeID string          `json:"runtime_id" db:"runtime_id"`      // Target Runtime ID
+	EventType string          `json:"event_type" db:"event_type"`      // Event type
+	EventData json.RawMessage `json:"event_data" db:"event_data"`      // Event data (JSON)
+	CreatedAt time.Time       `json:"created_at" db:"created_at"`      // Creation time
 }
 
-// TaskLog 表示任务执行日志条目，记录节点执行过程中的关键事件。
+// TaskLog represents a task execution log entry, recording key events during node execution.
 type TaskLog struct {
-	ID        string    `json:"id" db:"id"`                  // 日志 UUID
-	TaskID    int32     `json:"task_id" db:"task_id"`        // 所属任务 ID
-	NodeID    string    `json:"node_id" db:"node_id"`        // 关联节点 ID
-	Type      string    `json:"type" db:"type"`              // 日志类型
-	Content   string    `json:"content" db:"content"`        // 日志内容
-	Timestamp time.Time `json:"timestamp" db:"timestamp"`    // 日志时间戳
-	CreatedAt time.Time `json:"created_at" db:"created_at"`  // 创建时间
+	ID        string    `json:"id" db:"id"`                  // Log UUID
+	TaskID    int32     `json:"task_id" db:"task_id"`        // Owning task ID
+	NodeID    string    `json:"node_id" db:"node_id"`        // Associated node ID
+	Type      string    `json:"type" db:"type"`              // Log type
+	Content   string    `json:"content" db:"content"`        // Log content
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`    // Log timestamp
+	CreatedAt time.Time `json:"created_at" db:"created_at"`  // Creation time
 }
 
-// TaskLogChunk 表示任务日志的分块数据，支持大日志的分块上传。
+// TaskLogChunk represents chunked data of a task log, supporting chunked upload for large logs.
 type TaskLogChunk struct {
-	ID         int64     `json:"id" db:"id"`                    // 分块 ID
-	TaskNodeID string    `json:"task_node_id" db:"task_node_id"` // 关联节点 ID
-	ChunkIndex int32     `json:"chunk_index" db:"chunk_index"`   // 分块序号
-	Data       []byte    `json:"data" db:"data"`                 // 分块数据
-	Size       int32     `json:"size" db:"size"`                 // 分块大小（字节）
-	UploadedAt time.Time `json:"uploaded_at" db:"uploaded_at"`   // 上传时间
+	ID         int64     `json:"id" db:"id"`                    // Chunk ID
+	TaskNodeID string    `json:"task_node_id" db:"task_node_id"` // Associated node ID
+	ChunkIndex int32     `json:"chunk_index" db:"chunk_index"`   // Chunk sequence number
+	Data       []byte    `json:"data" db:"data"`                 // Chunk data
+	Size       int32     `json:"size" db:"size"`                 // Chunk size (bytes)
+	UploadedAt time.Time `json:"uploaded_at" db:"uploaded_at"`   // Upload time
 }
 
-// WorkspaceMember 表示工作区成员关联记录。
+// WorkspaceMember represents a workspace member association record.
 type WorkspaceMember struct {
-	ID          string    `json:"id" db:"id"`                       // 记录 UUID
-	WorkspaceID string    `json:"workspace_id" db:"workspace_id"`   // 工作区 ID
-	MemberID    string    `json:"member_id" db:"member_id"`         // 成员 ID
-	Role        string    `json:"role" db:"role"`                   // 成员在工作区中的角色
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`       // 创建时间
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`       // 更新时间
+	ID          string    `json:"id" db:"id"`                       // Record UUID
+	WorkspaceID string    `json:"workspace_id" db:"workspace_id"`   // Workspace ID
+	MemberID    string    `json:"member_id" db:"member_id"`         // Member ID
+	Role        string    `json:"role" db:"role"`                   // Member's role in the workspace
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`       // Creation time
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`       // Update time
 }

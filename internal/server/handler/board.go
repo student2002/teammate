@@ -1,10 +1,10 @@
-// board.go 提供项目看板数据查询的 HTTP API 端点，返回按列组织的任务数据。
+// board.go provides HTTP API endpoints for querying project board data, returning task data organized by column.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - GET /projects/{projectId}/board: 获取项目看板数据，返回按列（pending/in_progress/completed/rejected/manual_intervention）组织的任务列表
+// This file provides the following HTTP API endpoint:
+//   - GET /projects/{projectId}/board: get project board data, returns a task list organized by column (pending/in_progress/completed/rejected/manual_intervention)
 //
-// 看板数据由 BoardService 查询并按预定义列顺序排列，每列包含列标识、标签及对应任务列表。
-// 请求路径参数 projectId 必须为合法的 UUID 格式，否则返回 400 Bad Request。
+// The board data is queried by BoardService and arranged in a predefined column order; each column contains a column key, label, and the corresponding task list.
+// The request path parameter projectId must be a valid UUID format, otherwise a 400 Bad Request is returned.
 
 package handler
 
@@ -18,26 +18,26 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// BoardHandler 处理项目看板数据查询的 HTTP 请求。
+// BoardHandler handles HTTP requests for project board data queries.
 type BoardHandler struct {
 	Svc *service.Service
 }
 
-// NewBoardHandler 创建 BoardHandler 实例。
+// NewBoardHandler creates a BoardHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供数据查询能力
+// Parameters:
+//   - svc: business logic service instance, provides data query capability
 //
-// 返回:
-//   - *BoardHandler: 看板处理器实例
+// Returns:
+//   - *BoardHandler: board handler instance
 func NewBoardHandler(svc *service.Service) *BoardHandler {
 	return &BoardHandler{Svc: svc}
 }
 
-// Routes 返回看板的路由表。
+// Routes returns the route table for the board.
 //
-// 返回:
-//   - chi.Router: 包含看板相关端点的路由
+// Returns:
+//   - chi.Router: routes containing board-related endpoints
 func (h *BoardHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -46,14 +46,14 @@ func (h *BoardHandler) Routes() chi.Router {
 	return r
 }
 
-// GetBoardData 处理 GET /projects/{projectId}/board 端点，返回按列组织的看板任务数据。
+// GetBoardData handles the GET /projects/{projectId}/board endpoint, returning board task data organized by column.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 projectId 为项目 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter projectId is the project UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含按列组织的任务数据或错误信息
+// Returns:
+//   - no return value; writes a JSON response via w, containing task data organized by column or an error message
 func (h *BoardHandler) GetBoardData(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
 	if err != nil {
@@ -68,7 +68,7 @@ func (h *BoardHandler) GetBoardData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 按定义的列顺序构建结果
+	// build the result in the defined column order
 	type boardColumn struct {
 		Key   string                   `json:"key"`
 		Label string                   `json:"label"`

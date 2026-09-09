@@ -1,4 +1,4 @@
-// agent_test.go 覆盖 Agent 数据访问的测试。
+// agent_test.go tests for Agent data access.
 package store_test
 
 import (
@@ -35,7 +35,7 @@ func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 	agent, _ := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 
-	// 为agent创建运行时
+	// Create a runtime for the agent
 	ver := "1.0.0"
 	_, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
 		AgentID:  agent.ID,
@@ -52,7 +52,7 @@ func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 		t.Fatalf("DeleteAgent: %v", err)
 	}
 
-	// 验证agent已被删除
+	// Verify the agent has been deleted
 	_, err = s.GetAgent(ctx, uuid.MustParse(agent.ID))
 	if err == nil {
 		t.Fatal("expected error retrieving deleted agent")
@@ -77,13 +77,13 @@ func TestRotateAgentToken(t *testing.T) {
 		t.Fatal("expected different token after rotation")
 	}
 
-	// 旧token应失效
+	// Old token should be invalid
 	_, err = s.ExchangeAPITokenForSession(ctx, oldToken)
 	if err == nil {
 		t.Fatal("expected old token to be invalid after rotation")
 	}
 
-	// 新token应有效
+	// New token should be valid
 	_, err = s.ExchangeAPITokenForSession(ctx, newToken)
 	if err != nil {
 		t.Fatalf("new token should be valid: %v", err)

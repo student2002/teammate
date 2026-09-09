@@ -87,7 +87,7 @@ type CreateAgentParams struct {
 	GitEmail     sql.NullString        `db:"git_email" json:"git_email"`
 }
 
-// Agent 查询
+// Agent queries
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
 	row := q.db.QueryRowContext(ctx, createAgent,
 		arg.WorkspaceID,

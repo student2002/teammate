@@ -1,16 +1,16 @@
-// auth.go 提供认证和授权相关的数据访问操作。
+// auth.go provides data access operations related to authentication and authorization.
 //
-// 包含用户登录/注册、JWT Token 生成、API Token 交换会话 Token、
-// 密码重置、登录锁定、Git 凭据管理等功能。
+// It includes user login/registration, JWT Token generation, API Token exchange for session Tokens,
+// password reset, login lockout, Git credential management, and other features.
 //
-// 认证流程：
-//   - 人类用户：邮箱+密码 → bcrypt 校验 → JWT Token（24小时有效）
-//   - Agent：API Token → SHA-256 查找 → bcrypt 验证 → 会话 Token（7天有效）
+// Authentication flow:
+//   - Human users: email + password -> bcrypt verification -> JWT Token (valid for 24 hours)
+//   - Agent: API Token -> SHA-256 lookup -> bcrypt verification -> session Token (valid for 7 days)
 //
-// 安全特性：
-//   - Token 存储采用双重哈希：bcrypt 安全存储 + SHA-256 高效查找
-//   - 登录失败 5 次锁定 15 分钟（Redis 实现）
-//   - 密码重置 Token 1 小时过期
+// Security features:
+//   - Token storage uses dual hashing: bcrypt for secure storage + SHA-256 for efficient lookup
+//   - 5 failed logins lock the account for 15 minutes (Redis-backed)
+//   - Password reset Tokens expire after 1 hour
 package store
 
 import (
@@ -32,47 +32,47 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// LoginResult 封装登录操作的返回结果。
+// LoginResult encapsulates the return result of a login operation.
 //
-// 包含 JWT Token、过期时间、JTI（Token 唯一标识）、成员信息、工作区 ID 和角色。
+// It includes the JWT Token, expiration time, JTI (Token unique identifier), member info, workspace ID, and role.
 type LoginResult struct {
-	Token       string        // JWT Token 字符串
-	ExpiresAt   time.Time     // Token 过期时间
-	JTI         string        // Token 唯一标识（用于 Token 撤销）
-	Member      types.Member  // 成员信息（domain 幜格，不含 PasswordHash）
-	WorkspaceID uuid.UUID     // 工作区 ID
-	Role        string        // 成员角色（owner/admin/member/viewer）
+	Token       string        // JWT Token string
+	ExpiresAt   time.Time     // Token expiration time
+	JTI         string        // Token unique identifier (used for Token revocation)
+	Member      types.Member  // member info (domain struct, without PasswordHash)
+	WorkspaceID uuid.UUID     // workspace ID
+	Role        string        // member role (owner/admin/member/viewer)
 }
 
-// RegisterResult 封装注册操作的返回结果。
+// RegisterResult encapsulates the return result of a registration operation.
 //
-// 结构与 LoginResult 相同，注册后自动登录。
+// Its structure is identical to LoginResult; auto-login happens after registration.
 type RegisterResult struct {
-	Token       string        // JWT Token 字符串
-	ExpiresAt   time.Time     // Token 过期时间
-	JTI         string        // Token 唯一标识
-	Member      types.Member  // 成员信息（domain 幜格，不含 PasswordHash）
-	WorkspaceID uuid.UUID     // 工作区 ID
-	Role        string        // 成员角色
+	Token       string        // JWT Token string
+	ExpiresAt   time.Time     // Token expiration time
+	JTI         string        // Token unique identifier
+	Member      types.Member  // member info (domain struct, without PasswordHash)
+	WorkspaceID uuid.UUID     // workspace ID
+	Role        string        // member role
 }
 
-// Login 通过邮箱和密码认证成员身份。
+// Login authenticates a member by email and password.
 //
-// 执行步骤：
-//  1. 根据邮箱查询成员记录
-//  2. 使用 bcrypt 校验密码
-//  3. 查询成员的第一个工作区成员关系
-//  4. 生成 JWT Token（有效期 24 小时）
+// Steps:
+//  1. Query the member record by email
+//  2. Verify the password with bcrypt
+//  3. Query the member's first workspace membership
+//  4. Generate a JWT Token (valid for 24 hours)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 成员邮箱
-//   - password: 明文密码
-//   - jwtSecret: JWT 签名密钥
+// Parameters:
+//   - ctx: request context
+//   - email: the member's email
+//   - password: the plaintext password
+//   - jwtSecret: the JWT signing secret
 //
-// 返回：
-//   - *LoginResult: 登录结果，包含 Token 和成员信息
-//   - error: 登录失败时返回错误（如邮箱不存在、密码错误）
+// Returns:
+//   - *LoginResult: the login result, including the Token and member info
+//   - error: error returned when login fails (e.g. email does not exist, wrong password)
 func (s *Store) Login(ctx context.Context, email, password, jwtSecret string) (*LoginResult, error) {
 	member, err := s.q.GetMemberByEmail(ctx, email)
 	if err != nil {
@@ -87,7 +87,7 @@ func (s *Store) Login(ctx context.Context, email, password, jwtSecret string) (*
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	// 查找成员的第一个工作区成员关系，以获取 workspace_id 和 role
+	// Find the member's first workspace membership to obtain workspace_id and role
 	var workspaceID uuid.UUID
 	var role string
 	err = s.db.QueryRowContext(ctx,
@@ -113,34 +113,34 @@ func (s *Store) Login(ctx context.Context, email, password, jwtSecret string) (*
 	}, nil
 }
 
-// Register 注册新用户，自动创建工作区并设置为 owner。
+// Register registers a new user, automatically creating a workspace and setting the user as owner.
 //
-// 执行步骤：
-//  1. 使用 bcrypt 哈希密码
-//  2. 创建工作区（名称："{用户名}'s Workspace"）
-//  3. 种子里建的 5 个内置工作流模板
-//  4. 创建成员记录
-//  5. 创建工作区成员关系（角色：owner）
-//  6. 更新密码哈希
-//  7. 生成 JWT Token
+// Steps:
+//  1. Hash the password with bcrypt
+//  2. Create the workspace (name: "{username}'s Workspace")
+//  3. Seed the 5 built-in workflow templates
+//  4. Create the member record
+//  5. Create the workspace membership (role: owner)
+//  6. Update the password hash
+//  7. Generate a JWT Token
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - name: 用户名称
-//   - email: 用户邮箱
-//   - password: 明文密码
-//   - jwtSecret: JWT 签名密钥
+// Parameters:
+//   - ctx: request context
+//   - name: the user's name
+//   - email: the user's email
+//   - password: the plaintext password
+//   - jwtSecret: the JWT signing secret
 //
-// 返回：
-//   - *RegisterResult: 注册结果，包含 Token 和成员信息
-//   - error: 注册失败时返回错误
+// Returns:
+//   - *RegisterResult: the registration result, including the Token and member info
+//   - error: error returned when registration fails
 func (s *Store) Register(ctx context.Context, name, email, password, jwtSecret string) (*RegisterResult, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	// 每个新用户都会拥有自己的工作区
+	// Every new user gets their own workspace
 	ws, err := s.q.CreateWorkspace(ctx, db.CreateWorkspaceParams{
 		Name:        name + "'s Workspace",
 		Description: nullString("Auto-created workspace for " + name),
@@ -155,7 +155,7 @@ func (s *Store) Register(ctx context.Context, name, email, password, jwtSecret s
 		slog.Warn("workspace created but builtin templates failed", "workspace_id", ws.ID, "err", err)
 	}
 
-	// 自己工作区中的第一个用户成为 owner
+	// The first user in their own workspace becomes the owner
 	role := "owner"
 
 	member, err := s.q.CreateMember(ctx, db.CreateMemberParams{
@@ -166,7 +166,7 @@ func (s *Store) Register(ctx context.Context, name, email, password, jwtSecret s
 		return nil, fmt.Errorf("create member: %w", err)
 	}
 
-	// 以 owner 角色将成员添加到工作区
+	// Add the member to the workspace with the owner role
 	_, err = s.q.CreateWorkspaceMember(ctx, db.CreateWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
 		MemberID:    member.ID,
@@ -200,24 +200,24 @@ func (s *Store) Register(ctx context.Context, name, email, password, jwtSecret s
 	}, nil
 }
 
-// GenerateJWT 为用户生成包含 jti 声明的 JWT Token，有效期 24 小时。
+// GenerateJWT generates a JWT Token containing a jti claim for the user, valid for 24 hours.
 //
-// JWT Claims 包含：
-//   - jti: Token 唯一标识（用于 Token 撤销）
-//   - user_id: 用户 ID
-//   - user_type: 用户类型（"member" 或 "agent"）
-//   - exp/iat: 过期时间和签发时间
+// JWT Claims include:
+//   - jti: Token unique identifier (used for Token revocation)
+//   - user_id: the user ID
+//   - user_type: the user type ("member" or "agent")
+//   - exp/iat: expiration time and issued-at time
 //
-// 参数：
-//   - userID: 用户 ID
-//   - userType: 用户类型
-//   - jwtSecret: JWT 签名密钥
+// Parameters:
+//   - userID: the user ID
+//   - userType: the user type
+//   - jwtSecret: the JWT signing secret
 //
-// 返回：
-//   - string: JWT Token 字符串
-//   - time.Time: 过期时间
-//   - string: JTI（Token 唯一标识）
-//   - error: 生成失败时返回错误
+// Returns:
+//   - string: the JWT Token string
+//   - time.Time: the expiration time
+//   - string: the JTI (Token unique identifier)
+//   - error: error returned when generation fails
 func GenerateJWT(userID uuid.UUID, userType string, jwtSecret string) (string, time.Time, string, error) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 	jti := uuid.New().String()
@@ -239,38 +239,38 @@ func GenerateJWT(userID uuid.UUID, userType string, jwtSecret string) (string, t
 	return tokenStr, expiresAt, jti, nil
 }
 
-// SessionTokenResult 封装会话 Token 交换的返回结果。
+// SessionTokenResult encapsulates the return result of a session Token exchange.
 //
-// 会话 Token 用于 Agent 守护进程与 Server 的认证通信。
+// The session Token is used for authenticated communication between the Agent daemon and the Server.
 type SessionTokenResult struct {
-	SessionToken string    // 会话 Token 字符串
-	ExpiresAt    time.Time // 过期时间（7天）
+	SessionToken string    // session Token string
+	ExpiresAt    time.Time // expiration time (7 days)
 	AgentID      uuid.UUID // Agent ID
 }
 
-// ExchangeAPITokenForSession 将 API Token 换取会话 Token。
+// ExchangeAPITokenForSession exchanges an API Token for a session Token.
 //
-// 执行步骤：
-//  1. 计算 API Token 的 SHA-256 查找哈希
-//  2. 在 auth_tokens 表中查找匹配的 Token 记录
-//  3. 使用 bcrypt 验证 API Token
-//  4. 生成会话 Token（格式：st_{agent_id_short}_{32_hex_random}）
-//  5. 使用 bcrypt 哈希会话 Token 并存储
-//  6. 会话 Token 有效期 7 天
+// Steps:
+//  1. Compute the SHA-256 lookup hash of the API Token
+//  2. Look up the matching Token record in the auth_tokens table
+//  3. Verify the API Token with bcrypt
+//  4. Generate a session Token (format: st_{agent_id_short}_{32_hex_random})
+//  5. Hash the session Token with bcrypt and store it
+//  6. The session Token is valid for 7 days
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - apiToken: Agent 的 API Token 明文
+// Parameters:
+//   - ctx: request context
+//   - apiToken: the Agent's API Token plaintext
 //
-// 返回：
-//   - *SessionTokenResult: 会话 Token 结果
-//   - error: 交换失败时返回错误（如 Token 无效或过期）
+// Returns:
+//   - *SessionTokenResult: the session Token result
+//   - error: error returned when the exchange fails (e.g. Token invalid or expired)
 func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string) (*SessionTokenResult, error) {
-	// 计算 SHA-256 查找哈希以实现高效的数据库查询
+	// Compute a SHA-256 lookup hash for efficient database queries
 	lookupHash := sha256.Sum256([]byte(apiToken))
 	lookupHashStr := hex.EncodeToString(lookupHash[:])
 
-	// 通过 lookup_hash 查找 API Token
+	// Look up the API Token by lookup_hash
 	var tokenHash string
 	var ownerType string
 	var ownerIDStr string
@@ -282,7 +282,7 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 		return nil, fmt.Errorf("invalid or expired api token")
 	}
 
-	// 使用 bcrypt 校验 API Token
+	// Verify the API Token with bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(tokenHash), []byte(apiToken)); err != nil {
 		return nil, fmt.Errorf("invalid or expired api token")
 	}
@@ -296,7 +296,7 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 		return nil, fmt.Errorf("invalid owner_id in token record")
 	}
 
-	// 生成会话 Token：st_{agent_id_short}_{32_hex_random}
+	// Generate the session Token: st_{agent_id_short}_{32_hex_random}
 	sessionToken, err := generateSessionToken(ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("generate session token: %w", err)
@@ -304,7 +304,7 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	// 存储会话 Token 的 bcrypt 哈希及 SHA-256 查找哈希
+	// Store the session Token's bcrypt hash and SHA-256 lookup hash
 	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(sessionToken), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash session token: %w", err)
@@ -327,19 +327,19 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 	}, nil
 }
 
-// generateSessionToken 生成格式为 st_{agent_id_short}_{32_hex_random} 的会话 Token。
+// generateSessionToken generates a session Token with the format st_{agent_id_short}_{32_hex_random}.
 //
-// Token 结构：
-//   - st_: 固定前缀，标识 Session Token
-//   - agent_id_short: Agent ID 去除连字符后的前 8 位
-//   - 32_hex_random: 16 字节随机数的十六进制表示
+// Token structure:
+//   - st_: fixed prefix identifying a Session Token
+//   - agent_id_short: the first 8 characters of the Agent ID after removing hyphens
+//   - 32_hex_random: the hexadecimal representation of 16 random bytes
 //
-// 参数：
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - string: 生成的会话 Token 明文
-//   - error: 随机数生成失败时返回错误
+// Returns:
+//   - string: the generated session Token plaintext
+//   - error: error returned when random number generation fails
 func generateSessionToken(agentID uuid.UUID) (string, error) {
 	idShort := strings.ReplaceAll(agentID.String(), "-", "")[:8]
 	randomBytes := make([]byte, 16)
@@ -349,14 +349,14 @@ func generateSessionToken(agentID uuid.UUID) (string, error) {
 	return fmt.Sprintf("st_%s_%s", idShort, hex.EncodeToString(randomBytes)), nil
 }
 
-// DeleteSessionToken 根据 Token 原文删除对应的会话记录（通过 SHA-256 查找哈希匹配）。
+// DeleteSessionToken deletes the matching session record by the Token plaintext (matched via the SHA-256 lookup hash).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - token: 会话 Token 明文
+// Parameters:
+//   - ctx: request context
+//   - token: the session Token plaintext
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) DeleteSessionToken(ctx context.Context, token string) error {
 	shaHash := sha256.Sum256([]byte(token))
 	lookupHash := hex.EncodeToString(shaHash[:])
@@ -366,29 +366,29 @@ func (s *Store) DeleteSessionToken(ctx context.Context, token string) error {
 	return err
 }
 
-// WhoamiInfo 封装 whoami 接口返回的已认证用户信息。
+// WhoamiInfo encapsulates the authenticated user info returned by the whoami endpoint.
 //
-// 支持 member 和 agent 两种用户类型，字段根据类型有所不同。
+// Supports both member and agent user types; fields differ based on the type.
 type WhoamiInfo struct {
-	ID          uuid.UUID `json:"id"`               // 用户 ID
-	Name        string    `json:"name"`             // 用户名称
-	UserType    string    `json:"user_type"`        // 用户类型（"member" 或 "agent"）
-	WorkspaceID uuid.UUID `json:"workspace_id"`     // 工作区 ID
-	Email       string    `json:"email,omitempty"`  // 邮箱（仅 member）
-	Role        string    `json:"role,omitempty"`   // 角色（仅 member）
-	Status      string    `json:"status,omitempty"` // 状态（仅 agent）
+	ID          uuid.UUID `json:"id"`               // user ID
+	Name        string    `json:"name"`             // user name
+	UserType    string    `json:"user_type"`        // user type ("member" or "agent")
+	WorkspaceID uuid.UUID `json:"workspace_id"`     // workspace ID
+	Email       string    `json:"email,omitempty"`  // email (member only)
+	Role        string    `json:"role,omitempty"`   // role (member only)
+	Status      string    `json:"status,omitempty"` // status (agent only)
 }
 
-// GetWhoamiInfo 根据所有者类型和 ID 查询用户信息（支持 member 和 agent 两种类型）。
+// GetWhoamiInfo queries user info by owner type and ID (supports both member and agent types).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - ownerType: 用户类型（"member" 或 "agent"）
-//   - ownerID: 用户 ID
+// Parameters:
+//   - ctx: request context
+//   - ownerType: user type ("member" or "agent")
+//   - ownerID: user ID
 //
-// 返回：
-//   - *WhoamiInfo: 用户信息
-//   - error: 查询失败时返回错误
+// Returns:
+//   - *WhoamiInfo: user info
+//   - error: error returned when the query fails
 func (s *Store) GetWhoamiInfo(ctx context.Context, ownerType string, ownerID uuid.UUID) (*WhoamiInfo, error) {
 	switch ownerType {
 	case "member":
@@ -396,7 +396,7 @@ func (s *Store) GetWhoamiInfo(ctx context.Context, ownerType string, ownerID uui
 		if err != nil {
 			return nil, fmt.Errorf("get member: %w", err)
 		}
-		// 查找成员的工作区成员关系
+		// Find the member's workspace membership
 		var workspaceID uuid.UUID
 		var role string
 		err = s.db.QueryRowContext(ctx,
@@ -431,17 +431,17 @@ func (s *Store) GetWhoamiInfo(ctx context.Context, ownerType string, ownerID uui
 	}
 }
 
-// UpdateRuntimePublicKey 更新 Runtime 的公钥字段。
+// UpdateRuntimePublicKey updates the public key field of a Runtime.
 //
-// 公钥用于 Agent 与 Server 之间的安全通信验证。
+// The public key is used to verify secure communication between the Agent and the Server.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: Runtime 的 UUID
-//   - publicKey: RSA 公钥字符串
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: the Runtime's UUID
+//   - publicKey: the RSA public key string
 //
-// 返回：
-//   - error: 更新失败时返回错误
+// Returns:
+//   - error: error returned when the update fails
 func (s *Store) UpdateRuntimePublicKey(ctx context.Context, runtimeID uuid.UUID, publicKey string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE runtimes SET public_key = $1, updated_at = NOW() WHERE id = $2`,
@@ -449,15 +449,15 @@ func (s *Store) UpdateRuntimePublicKey(ctx context.Context, runtimeID uuid.UUID,
 	return err
 }
 
-// GetRuntimeByID 根据 ID 查询单个 Runtime 记录。
+// GetRuntimeByID queries a single Runtime record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: Runtime 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: the Runtime's UUID
 //
-// 返回：
-//   - types.Runtime: Runtime 记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.Runtime: the Runtime record
+//   - error: error returned when the query fails
 func (s *Store) GetRuntimeByID(ctx context.Context, runtimeID uuid.UUID) (types.Runtime, error) {
 	r, err := s.q.GetRuntime(ctx, runtimeID)
 	if err != nil {
@@ -466,16 +466,16 @@ func (s *Store) GetRuntimeByID(ctx context.Context, runtimeID uuid.UUID) (types.
 	return ToDomainRuntime(r)
 }
 
-// GetAuthTokenByLookupHashAndType 根据 lookup_hash 和 token_type 查询未过期的认证令牌。
+// GetAuthTokenByLookupHashAndType queries a non-expired auth token by lookup_hash and token_type.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - lookupHash: 令牌的 SHA-256 查找哈希
-//   - tokenType: 令牌类型（session 或 api）
+// Parameters:
+//   - ctx: request context
+//   - lookupHash: the SHA-256 lookup hash of the token
+//   - tokenType: the token type (session or api)
 //
-// 返回：
-//   - db.GetAuthTokenByLookupHashAndTypeRow: 包含 owner_type、owner_id、token_hash
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.GetAuthTokenByLookupHashAndTypeRow: includes owner_type, owner_id, token_hash
+//   - error: error returned when the query fails
 func (s *Store) GetAuthTokenByLookupHashAndType(ctx context.Context, lookupHash string, tokenType string) (types.GetAuthTokenByLookupHashAndTypeRow, error) {
 	row, err := s.q.GetAuthTokenByLookupHashAndType(ctx, db.GetAuthTokenByLookupHashAndTypeParams{
 		LookupHash: lookupHash,
@@ -491,15 +491,15 @@ func (s *Store) GetAuthTokenByLookupHashAndType(ctx context.Context, lookupHash 
 	}, nil
 }
 
-// GetLatestPublicKeyForAgent 查询指定 Agent 最近一次更新的公钥。
+// GetLatestPublicKeyForAgent queries the most recently updated public key for the specified Agent.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - string: RSA 公钥字符串
-//   - error: 查询失败时返回错误（如无公钥记录）
+// Returns:
+//   - string: the RSA public key string
+//   - error: error returned when the query fails (e.g. no public key record)
 func (s *Store) GetLatestPublicKeyForAgent(ctx context.Context, agentID uuid.UUID) (string, error) {
 	var publicKey string
 	err := s.db.QueryRowContext(ctx,
@@ -513,15 +513,15 @@ func (s *Store) GetLatestPublicKeyForAgent(ctx context.Context, agentID uuid.UUI
 	return publicKey, nil
 }
 
-// GetGitCredentialsByProject 查询指定项目的所有 Git 凭据记录。
+// GetGitCredentialsByProject queries all Git credential records for the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []types.GitCredential: Git 凭据列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.GitCredential: the Git credential list
+//   - error: error returned when the query fails
 func (s *Store) GetGitCredentialsByProject(ctx context.Context, projectID uuid.UUID) ([]types.GitCredential, error) {
 	creds, err := s.q.ListGitCredentialsByProject(ctx, projectID)
 	if err != nil {
@@ -530,17 +530,17 @@ func (s *Store) GetGitCredentialsByProject(ctx context.Context, projectID uuid.U
 	return ToDomainGitCredentialSlice(creds)
 }
 
-// CreateGitCredential 创建一条新的 Git 凭据记录。
+// CreateGitCredential creates a new Git credential record.
 //
-// 凭据包含加密的 PAT（Personal Access Token），用于仓库访问认证。
+// The credential contains an encrypted PAT (Personal Access Token), used for repository access authentication.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - arg: 凭据创建参数
+// Parameters:
+//   - ctx: request context
+//   - arg: credential creation parameters
 //
-// 返回：
-//   - types.GitCredential: 创建的凭据记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.GitCredential: the created credential record
+//   - error: error returned when creation fails
 func (s *Store) CreateGitCredential(ctx context.Context, arg types.CreateGitCredentialParams) (types.GitCredential, error) {
 	projectUUID, err := uuid.Parse(arg.ProjectID)
 	if err != nil {
@@ -567,15 +567,15 @@ func (s *Store) CreateGitCredential(ctx context.Context, arg types.CreateGitCred
 	return ToDomainGitCredential(cred)
 }
 
-// UpdateGitCredential 更新已有的 Git 凭据记录。
+// UpdateGitCredential updates an existing Git credential record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - arg: 凭据更新参数
+// Parameters:
+//   - ctx: request context
+//   - arg: credential update parameters
 //
-// 返回：
-//   - types.GitCredential: 更新后的凭据记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.GitCredential: the updated credential record
+//   - error: error returned when the update fails
 func (s *Store) UpdateGitCredential(ctx context.Context, arg types.UpdateGitCredentialParams) (types.GitCredential, error) {
 	id, err := uuid.Parse(arg.ID)
 	if err != nil {
@@ -593,15 +593,15 @@ func (s *Store) UpdateGitCredential(ctx context.Context, arg types.UpdateGitCred
 	return ToDomainGitCredential(cred)
 }
 
-// GetGitCredential 根据 ID 查询单条 Git 凭据记录。
+// GetGitCredential queries a single Git credential record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 凭据 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: credential UUID
 //
-// 返回：
-//   - types.GitCredential: 凭据记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.GitCredential: the credential record
+//   - error: error returned when the query fails
 func (s *Store) GetGitCredential(ctx context.Context, id uuid.UUID) (types.GitCredential, error) {
 	cred, err := s.q.GetGitCredential(ctx, id)
 	if err != nil {
@@ -610,22 +610,22 @@ func (s *Store) GetGitCredential(ctx context.Context, id uuid.UUID) (types.GitCr
 	return ToDomainGitCredential(cred)
 }
 
-// ChangePassword 在验证旧密码后修改成员密码（bcrypt 哈希存储）。
+// ChangePassword changes a member's password after verifying the old password (bcrypt hash storage).
 //
-// 执行步骤：
-//  1. 查询成员记录
-//  2. 验证旧密码（bcrypt 校验）
-//  3. 使用 bcrypt 哈希新密码
-//  4. 更新密码哈希
+// Steps:
+//  1. Query the member record
+//  2. Verify the old password (bcrypt verification)
+//  3. Hash the new password with bcrypt
+//  4. Update the password hash
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 UUID
-//   - oldPassword: 旧密码
-//   - newPassword: 新密码
+// Parameters:
+//   - ctx: request context
+//   - memberID: member UUID
+//   - oldPassword: the old password
+//   - newPassword: the new password
 //
-// 返回：
-//   - error: 修改失败时返回错误（如旧密码错误）
+// Returns:
+//   - error: error returned when the change fails (e.g. wrong old password)
 func (s *Store) ChangePassword(ctx context.Context, memberID uuid.UUID, oldPassword, newPassword string) error {
 	member, err := s.q.GetMember(ctx, memberID)
 	if err != nil {
@@ -655,18 +655,18 @@ func (s *Store) ChangePassword(ctx context.Context, memberID uuid.UUID, oldPassw
 	return nil
 }
 
-// CheckLoginLockout 通过 Redis 检查账户是否因登录失败次数过多而被临时锁定。
+// CheckLoginLockout checks via Redis whether the account is temporarily locked due to too many failed logins.
 //
-// 使用 Redis 存储锁定状态，键格式：login_lockout:{email}
-// 锁定时长：15 分钟
+// Uses Redis to store the lockout state, key format: login_lockout:{email}
+// Lockout duration: 15 minutes
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱
-//   - rdb: Redis 客户端
+// Parameters:
+//   - ctx: request context
+//   - email: the user's email
+//   - rdb: Redis client
 //
-// 返回：
-//   - error: 账户被锁定时返回错误，否则返回 nil
+// Returns:
+//   - error: error returned when the account is locked; otherwise nil
 func (s *Store) CheckLoginLockout(ctx context.Context, email string, rdb *redis.Client) error {
 	if rdb == nil {
 		return nil
@@ -677,20 +677,20 @@ func (s *Store) CheckLoginLockout(ctx context.Context, email string, rdb *redis.
 		return nil
 	}
 	if err != nil {
-		return nil // Redis 错误，允许登录
+		return nil // Redis error, allow login
 	}
 	return fmt.Errorf("account temporarily locked due to too many failed login attempts, please try again later (locked until: %s)", val)
 }
 
-// RecordLoginFailure 通过 Redis 记录一次登录失败，累计 5 次后锁定账户 15 分钟。
+// RecordLoginFailure records a login failure via Redis, locking the account for 15 minutes after 5 accumulated failures.
 //
-// 使用 Redis 计数器，键格式：login_attempts:{email}
-// 首次失败时设置 15 分钟过期，达到 5 次时写入锁定键。
+// Uses a Redis counter, key format: login_attempts:{email}
+// On the first failure, sets a 15-minute expiration; upon reaching 5 failures, writes the lockout key.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱
-//   - rdb: Redis 客户端
+// Parameters:
+//   - ctx: request context
+//   - email: the user's email
+//   - rdb: Redis client
 func (s *Store) RecordLoginFailure(ctx context.Context, email string, rdb *redis.Client) {
 	if rdb == nil {
 		return
@@ -704,21 +704,21 @@ func (s *Store) RecordLoginFailure(ctx context.Context, email string, rdb *redis
 		rdb.Expire(ctx, key, 15*time.Minute)
 	}
 	if count >= 5 {
-		// 锁定账户 15 分钟
+		// Lock the account for 15 minutes
 		lockoutKey := fmt.Sprintf("login_lockout:%s", email)
 		lockoutUntil := time.Now().Add(15 * time.Minute).Format(time.RFC3339)
 		rdb.Set(ctx, lockoutKey, lockoutUntil, 15*time.Minute)
 	}
 }
 
-// RecordLoginSuccess 通过 Redis 清除登录失败计数（登录成功时调用）。
+// RecordLoginSuccess clears the login failure count via Redis (called on login success).
 //
-// 删除 Redis 中的 login_attempts:{email} 键。
+// Deletes the login_attempts:{email} key from Redis.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱
-//   - rdb: Redis 客户端
+// Parameters:
+//   - ctx: request context
+//   - email: the user's email
+//   - rdb: Redis client
 func (s *Store) RecordLoginSuccess(ctx context.Context, email string, rdb *redis.Client) {
 	if rdb == nil {
 		return
@@ -727,42 +727,42 @@ func (s *Store) RecordLoginSuccess(ctx context.Context, email string, rdb *redis
 	rdb.Del(ctx, key)
 }
 
-// CreatePasswordResetToken 为成员生成密码重置 Token。
+// CreatePasswordResetToken generates a password reset Token for a member.
 //
-// 执行步骤：
-//  1. 根据邮箱查询成员（不泄露邮箱是否存在）
-//  2. 生成 32 字节随机 Token（格式：reset_{hex}）
-//  3. 使用 bcrypt 哈希 Token
-//  4. 计算 SHA-256 查找哈希
-//  5. 存储到 auth_tokens 表，有效期 1 小时
+// Steps:
+//  1. Query the member by email (does not leak whether the email exists)
+//  2. Generate a 32-byte random Token (format: reset_{hex})
+//  3. Hash the Token with bcrypt
+//  4. Compute a SHA-256 lookup hash
+//  5. Store it in the auth_tokens table, valid for 1 hour
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱
+// Parameters:
+//   - ctx: request context
+//   - email: the user's email
 //
-// 返回：
-//   - string: 重置 Token 明文
-//   - error: 生成失败时返回错误
+// Returns:
+//   - string: the reset Token plaintext
+//   - error: error returned when generation fails
 func (s *Store) CreatePasswordResetToken(ctx context.Context, email string) (string, error) {
 	member, err := s.q.GetMemberByEmail(ctx, email)
 	if err != nil {
-		// 不要暴露该邮箱是否存在
+		// Do not expose whether this email exists
 		return "", nil
 	}
 
 	if member.PasswordHash == "" {
-		// OAuth 用户，无法重置密码
+		// OAuth user, cannot reset password
 		return "", nil
 	}
 
-	// 生成重置 Token
+	// Generate the reset Token
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", fmt.Errorf("generate reset token: %w", err)
 	}
 	token := "reset_" + hex.EncodeToString(tokenBytes)
 
-	// 将 bcrypt 哈希存入 token_hash，SHA-256 存入 lookup_hash
+	// Store the bcrypt hash in token_hash and the SHA-256 hash in lookup_hash
 	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(token), bcrypt.DefaultCost)
 	if err != nil {
 		return "", fmt.Errorf("hash reset token: %w", err)
@@ -770,7 +770,7 @@ func (s *Store) CreatePasswordResetToken(ctx context.Context, email string) (str
 	shaHash := sha256.Sum256([]byte(token))
 	lookupHash := hex.EncodeToString(shaHash[:])
 
-	// 存入 auth_tokens，有效期 1 小时
+	// Store in auth_tokens, valid for 1 hour
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO auth_tokens (token_hash, lookup_hash, token_type, owner_type, owner_id, expires_at)
 		 VALUES ($1, $2, 'password_reset', 'member', $3, NOW() + INTERVAL '1 hour')`,
@@ -782,29 +782,29 @@ func (s *Store) CreatePasswordResetToken(ctx context.Context, email string) (str
 	return token, nil
 }
 
-// ResetPasswordWithToken 使用有效的重置 Token 为成员设置新密码。
+// ResetPasswordWithToken uses a valid reset Token to set a new password for a member.
 //
-// 执行步骤：
-//  1. 计算 Token 的 SHA-256 查找哈希
-//  2. 在 auth_tokens 表中查找匹配的重置 Token
-//  3. 使用 bcrypt 验证 Token
-//  4. 使用 bcrypt 哈希新密码
-//  5. 更新成员密码哈希
-//  6. 删除已使用的重置 Token
+// Steps:
+//  1. Compute the SHA-256 lookup hash of the Token
+//  2. Look up the matching reset Token in the auth_tokens table
+//  3. Verify the Token with bcrypt
+//  4. Hash the new password with bcrypt
+//  5. Update the member's password hash
+//  6. Delete the used reset Token
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - token: 重置 Token 明文
-//   - newPassword: 新密码
+// Parameters:
+//   - ctx: request context
+//   - token: the reset Token plaintext
+//   - newPassword: the new password
 //
-// 返回：
-//   - error: 重置失败时返回错误（如 Token 无效或过期）
+// Returns:
+//   - error: error returned when reset fails (e.g. Token invalid or expired)
 func (s *Store) ResetPasswordWithToken(ctx context.Context, token, newPassword string) error {
-	// 计算查找哈希以实现高效的数据库查询
+	// Compute the lookup hash for efficient database queries
 	shaHash := sha256.Sum256([]byte(token))
 	lookupHash := hex.EncodeToString(shaHash[:])
 
-	// 通过 lookup_hash 查找重置 Token
+	// Look up the reset Token by lookup_hash
 	var tokenHash string
 	var ownerID uuid.UUID
 	err := s.db.QueryRowContext(ctx,
@@ -814,18 +814,18 @@ func (s *Store) ResetPasswordWithToken(ctx context.Context, token, newPassword s
 		return fmt.Errorf("invalid or expired reset token")
 	}
 
-	// 使用 bcrypt 校验 Token
+	// Verify the Token with bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(tokenHash), []byte(token)); err != nil {
 		return fmt.Errorf("invalid or expired reset token")
 	}
 
-	// 对新密码进行哈希
+	// Hash the new password
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	// 更新成员的密码
+	// Update the member's password
 	if err := s.q.UpdateMemberPasswordHash(ctx, db.UpdateMemberPasswordHashParams{
 		ID:           ownerID,
 		PasswordHash: string(passwordHash),
@@ -833,7 +833,7 @@ func (s *Store) ResetPasswordWithToken(ctx context.Context, token, newPassword s
 		return fmt.Errorf("update password: %w", err)
 	}
 
-	// 删除已使用的重置 Token
+	// Delete the used reset Token
 	s.db.ExecContext(ctx,
 		`DELETE FROM auth_tokens WHERE lookup_hash = $1 AND token_type = 'password_reset'`,
 		lookupHash)

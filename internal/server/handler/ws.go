@@ -1,13 +1,13 @@
-// ws.go 提供 WebSocket 实时日志流、日志消息推送和日志查询等 HTTP API 端点。
+// ws.go provides HTTP API endpoints for WebSocket real-time log streaming, log message publishing, and log querying.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - GET /ws/tasks/{taskId}: WebSocket 升级端点，订阅指定任务的实时日志流
-//   - POST /api/tasks/{taskId}/messages: Agent 守护进程推送日志消息到 Gateway
-//   - GET /api/tasks/{taskId}/logs: 查询任务的缓冲日志消息列表
+// This file provides the following HTTP API endpoints:
+//   - GET /ws/tasks/{taskId}: WebSocket upgrade endpoint, subscribes to the real-time log stream of the specified task
+//   - POST /api/tasks/{taskId}/messages: the Agent daemon pushes log messages to the Gateway
+//   - GET /api/tasks/{taskId}/logs: query the buffered log message list of the task
 //
-// WebSocket 连接通过 token 查询参数认证（支持 JWT、session token、API key 三种方式），
-// 连接后自动订阅任务日志频道并实时推送，支持按 node_id 过滤。
-// 日志消息通过 ws.Gateway 发布/订阅，底层使用 Redis Pub/Sub + 缓冲实现。
+// The WebSocket connection authenticates via the token query parameter (supporting JWT, session token, and API key),
+// and after connecting it automatically subscribes to the task log channel and pushes in real time, supporting filtering by node_id.
+// Log messages are published/subscribed via ws.Gateway, which uses Redis Pub/Sub + buffering under the hood.
 
 package handler
 
@@ -35,30 +35,30 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// 允许所有来源——CORS 在路由层处理。
+	// allow all origins - CORS is handled at the routing layer.
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 }
 
-// WSHandler 处理 WebSocket 连接的 HTTP 请求，提供实时日志流推送。
+// WSHandler handles HTTP requests for WebSocket connections, providing real-time log stream push.
 type WSHandler struct {
 	Gateway   *ws.Gateway
 	JWTSecret string
 	Svc       *service.Service
-	Checker   svcmw.WorkspaceAccessCheckerFunc // 工作区访问检查器（注入，非全局）
+	Checker   svcmw.WorkspaceAccessCheckerFunc // workspace access checker (injected, not global)
 }
 
-// NewWSHandler 创建 WSHandler 实例。
+// NewWSHandler creates a WSHandler instance.
 //
-// 参数:
-//   - gateway: WebSocket 网关实例，负责消息发布/订阅
-//   - jwtSecret: JWT 签名密钥，用于验证 token
-//   - svc: 业务逻辑服务实例，提供任务和节点查询能力
-//   - checker: 工作区访问检查器（注入，非全局）
+// Parameters:
+//   - gateway: WebSocket gateway instance, responsible for message publishing/subscribing
+//   - jwtSecret: JWT signing secret, used to verify the token
+//   - svc: business logic service instance, provides task and node query capabilities
+//   - checker: workspace access checker (injected, not global)
 //
-// 返回:
-//   - *WSHandler: WebSocket 处理器实例
+// Returns:
+//   - *WSHandler: WebSocket handler instance
 func NewWSHandler(gateway *ws.Gateway, jwtSecret string, svc *service.Service, checker svcmw.WorkspaceAccessCheckerFunc) *WSHandler {
 	return &WSHandler{
 		Gateway:   gateway,
@@ -68,14 +68,14 @@ func NewWSHandler(gateway *ws.Gateway, jwtSecret string, svc *service.Service, c
 	}
 }
 
-// HandleWS 处理 WebSocket 升级请求，通过 token 查询参数认证后，订阅指定任务的日志消息并实时推送给客户端。
+// HandleWS handles the WebSocket upgrade request, authenticates via the token query parameter, then subscribes to the specified task's log messages and pushes them to the client in real time.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 taskId 为任务 ID，查询参数 token 为认证令牌，node_id 可选用于过滤
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID, query parameter token is the auth token, node_id is optional for filtering
 //
-// 返回:
-//   - 无返回值，连接建立后持续推送日志消息直到客户端断开
+// Returns:
+//   - no return value, after the connection is established it continuously pushes log messages until the client disconnects
 func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskId")
 	if taskID == "" {
@@ -86,7 +86,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 通过 token 查询参数进行认证（WebSocket 不支持请求头）。
+	// authenticate via the token query parameter (WebSocket does not support request headers).
 	tokenStr := r.URL.Query().Get("token")
 	if tokenStr == "" {
 		response.Unauthorized(w, "missing authentication token")
@@ -100,7 +100,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证用户是否有权访问该任务
+	// verify the user has access to this task
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 32)
 	if err != nil {
 		response.BadRequest(w, "invalid task_id")
@@ -122,7 +122,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if claims.UserType == "agent" {
-			// Agent 必须是任务的节点 assignee（而不仅是项目成员）
+			// the Agent must be a node assignee of the task (not just a project member)
 			taskSvc := service.NewTaskService(h.Svc)
 			nodes, err := taskSvc.ListTaskNodes(r.Context(), int32(taskIDInt))
 			if err != nil {
@@ -155,7 +155,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 可选的 node_id 过滤器：仅转发该节点的日志。
+	// optional node_id filter: only forward logs of this node.
 	nodeID := r.URL.Query().Get("node_id")
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -168,14 +168,14 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ch, unsub := h.Gateway.Subscribe(taskID)
 	defer unsub()
 
-	// 设置读超时时间以处理 pong。
+	// set the read deadline to handle pong.
 	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
 	})
 
-	// 启动 Ping 协程以保持连接活跃。
+	// start a Ping goroutine to keep the connection alive.
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
@@ -194,7 +194,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 读取循环，处理客户端消息（主要用于检测断连）。
+	// read loop, handles client messages (mainly used to detect disconnections).
 	go func() {
 		defer cancel()
 		for {
@@ -205,7 +205,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 写入循环：将日志消息转发给 WebSocket 客户端。
+	// write loop: forwards log messages to the WebSocket client.
 	for {
 		select {
 		case <-ctx.Done():
@@ -215,7 +215,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if nodeID != "" && msg.NodeID != nodeID {
-				continue // 跳过不匹配的节点
+				continue // skip non-matching nodes
 			}
 			data, err := json.Marshal(msg)
 			if err != nil {
@@ -229,18 +229,18 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// validateToken 验证 token 字符串以进行 WebSocket 认证。
-// 支持 JWT Bearer token、session token（st_ 前缀）和 API key（tm_ 前缀）三种认证方式。
+// validateToken verifies the token string for WebSocket authentication.
+// Supports three auth methods: JWT Bearer token, session token (st_ prefix), and API key (tm_ prefix).
 //
-// 参数:
-//   - ctx: 请求上下文
-//   - tokenStr: 待验证的 token 字符串
+// Parameters:
+//   - ctx: request context
+//   - tokenStr: the token string to verify
 //
-// 返回:
-//   - svcmw.AuthClaims: 认证声明信息，包含用户 ID、类型、工作区 ID 和角色
-//   - error: 验证失败时返回错误
+// Returns:
+//   - svcmw.AuthClaims: auth claim info, containing user ID, type, workspace ID, and role
+//   - error: returns an error when verification fails
 func (h *WSHandler) validateToken(ctx context.Context, tokenStr string) (svcmw.AuthClaims, error) {
-	// 优先尝试 API key / session token（st_ 或 tm_ 前缀）
+	// prefer trying API key / session token (st_ or tm_ prefix)
 	if h.Svc != nil && (strings.HasPrefix(tokenStr, "st_") || strings.HasPrefix(tokenStr, "tm_")) {
 		authSvc := service.NewAuthService(h.Svc, "")
 		result, err := authSvc.AuthenticateAPIKey(ctx, tokenStr)
@@ -253,7 +253,7 @@ func (h *WSHandler) validateToken(ctx context.Context, tokenStr string) (svcmw.A
 		}, nil
 	}
 
-	// 回退到 JWT
+	// fall back to JWT
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
@@ -289,22 +289,22 @@ func (h *WSHandler) validateToken(ctx context.Context, tokenStr string) (svcmw.A
 	}, nil
 }
 
-// PostLogMessageHandler 处理 POST /api/tasks/{taskId}/messages 端点，接收 Agent 守护进程推送的日志消息并通过 Gateway 分发。
+// PostLogMessageHandler handles the POST /api/tasks/{taskId}/messages endpoint, receiving log messages pushed by the Agent daemon and distributing them via the Gateway.
 type PostLogMessageHandler struct {
 	Gateway *ws.Gateway
 	Svc     *service.Service
-	Checker svcmw.WorkspaceAccessCheckerFunc // 工作区访问检查器（注入，非全局）
+	Checker svcmw.WorkspaceAccessCheckerFunc // workspace access checker (injected, not global)
 }
 
-// NewPostLogMessageHandler 创建 PostLogMessageHandler 实例。
+// NewPostLogMessageHandler creates a PostLogMessageHandler instance.
 //
-// 参数:
-//   - gateway: WebSocket 网关实例，负责消息发布
-//   - svc: 业务逻辑服务实例，提供节点和任务验证能力
-//   - checker: 工作区访问检查器（注入，非全局）
+// Parameters:
+//   - gateway: WebSocket gateway instance, responsible for message publishing
+//   - svc: business logic service instance, provides node and task verification capabilities
+//   - checker: workspace access checker (injected, not global)
 //
-// 返回:
-//   - *PostLogMessageHandler: 日志消息推送处理器实例
+// Returns:
+//   - *PostLogMessageHandler: log message push handler instance
 func NewPostLogMessageHandler(gateway *ws.Gateway, svc *service.Service, checker svcmw.WorkspaceAccessCheckerFunc) *PostLogMessageHandler {
 	return &PostLogMessageHandler{Gateway: gateway, Svc: svc, Checker: checker}
 }
@@ -315,14 +315,14 @@ type postLogMessageRequest struct {
 	Content string `json:"content"`
 }
 
-// ServeHTTP 处理日志消息推送请求，验证 Agent 身份后将消息通过 Gateway 发布到对应任务的频道。
+// ServeHTTP handles the log message push request, verifies the Agent identity, then publishes the message to the corresponding task channel via the Gateway.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 taskId 为任务 ID，请求体包含节点 ID、消息类型和内容
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID, request body contains the node ID, message type, and content
 //
-// 返回:
-//   - 无返回值，成功时返回 202 Accepted，失败时返回错误信息
+// Returns:
+//   - no return value, returns 202 Accepted on success, or an error message on failure
 func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskId")
 	if taskID == "" {
@@ -330,21 +330,21 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 验证已认证的 Agent 是否为该节点的 assignee
+	// verify the authenticated Agent is the assignee of this node
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 解析请求体
+	// parse the request body
 	var req postLogMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// node_id 为必填
+	// node_id is required
 	if req.NodeID == "" {
 		response.BadRequest(w, "node_id is required")
 		return
@@ -368,26 +368,26 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// 验证节点是否属于该任务
+		// verify the node belongs to this task
 		if node.TaskID != taskIDInt {
 			response.Forbidden(w, "node does not belong to this task")
 			return
 		}
 
-		// 验证节点处于 in_progress 状态
+		// verify the node is in the in_progress status
 		if node.Status != TaskNodeStatusInProgress {
 			response.Conflict(w, "node is not in progress")
 			return
 		}
 
 		if claims.UserType == "agent" {
-			// Agent 必须是该节点的 assignee
+			// the Agent must be the assignee of this node
 			if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
 				response.Forbidden(w, "agent is not the assignee of this node")
 				return
 			}
 		} else {
-			// Member：基于持久化资源归属验证工作区访问权限。
+			// Member: verify workspace access based on persisted resource ownership.
 			taskSvc := service.NewTaskService(h.Svc)
 			task, err := taskSvc.Get(r.Context(), taskIDInt)
 			if err != nil {
@@ -417,7 +417,7 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	switch req.Type {
 	case "stdout", "stderr", "system":
-		// 有效
+		// valid
 	default:
 		response.BadRequest(w, "invalid type, must be stdout/stderr/system")
 		return
@@ -453,31 +453,31 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// GetTaskLogsHandler 处理 GET /api/tasks/{taskId}/logs 端点，返回任务的缓冲日志消息列表。
+// GetTaskLogsHandler handles the GET /api/tasks/{taskId}/logs endpoint, returning the buffered log message list of the task.
 type GetTaskLogsHandler struct {
 	Gateway *ws.Gateway
 	Svc     *service.Service
 }
 
-// NewGetTaskLogsHandler 创建 GetTaskLogsHandler 实例。
+// NewGetTaskLogsHandler creates a GetTaskLogsHandler instance.
 //
-// 参数:
-//   - gateway: WebSocket 网关实例，提供日志缓冲区读取能力
+// Parameters:
+//   - gateway: WebSocket gateway instance, provides log buffer reading capabilities
 //
-// 返回:
-//   - *GetTaskLogsHandler: 日志查询处理器实例
+// Returns:
+//   - *GetTaskLogsHandler: log query handler instance
 func NewGetTaskLogsHandler(gateway *ws.Gateway, svc *service.Service) *GetTaskLogsHandler {
 	return &GetTaskLogsHandler{Gateway: gateway, Svc: svc}
 }
 
-// ServeHTTP 处理日志查询请求，从 Redis 缓冲区获取任务的日志消息列表，支持按 node_id 过滤。
+// ServeHTTP handles the log query request, fetching the task's log message list from the Redis buffer, supporting filtering by node_id.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 taskId 为任务 ID，查询参数 node_id 可选用于过滤
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID, query parameter node_id is optional for filtering
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含日志消息列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the log message list or an error message
 func (h *GetTaskLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "taskId")
 	if taskID == "" {
@@ -502,7 +502,7 @@ func (h *GetTaskLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 可选的 node_id 过滤器：仅返回指定节点的日志。
+	// optional node_id filter: only return logs of the specified node.
 	nodeID := r.URL.Query().Get("node_id")
 	var parsedNodeID uuid.UUID
 	if nodeID != "" {

@@ -1,4 +1,4 @@
-// comment_dto.go 为 comment.go 提供 domain 类型别名和参数构建器。
+// comment_dto.go provides domain type aliases and parameter builders for comment.go.
 package handler
 
 import (
@@ -8,13 +8,13 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- domain 类型别名 ----
+// ---- domain type aliases ----
 
 type Comment = types.Comment
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateCommentParams 从请求字段构建 types.CreateCommentParams。
+// buildCreateCommentParams builds types.CreateCommentParams from request fields.
 func buildCreateCommentParams(
 	taskID int32,
 	nodeID uuid.NullUUID,
@@ -45,7 +45,7 @@ func buildCreateCommentParams(
 	for _, m := range mentions {
 		mentionStrs = append(mentionStrs, m.String())
 	}
-	// metadata 默认空 JSON
+	// metadata defaults to empty JSON
 	var metadata []byte
 	_ = pqtype.NullRawMessage{}
 	metadata = []byte("{}")

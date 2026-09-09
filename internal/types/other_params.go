@@ -1,7 +1,7 @@
-// other_params.go 定义其余领域（Audit/Auth/Community/ExecutionSession/Git/Invitation/Memory/Notification/Project/Review/Runtime/Search/Workflow）操作的领域参数结构体。
+// other_params.go defines the domain parameter structs for the other domains (Audit/Auth/Community/ExecutionSession/Git/Invitation/Memory/Notification/Project/Review/Runtime/Search/Workflow) operations.
 //
-// 这些结构体是 sqlc 生成的 db.XxxParams 的 domain 对应物，
-// 字段一一对应，类型按 domain 风格映射：
+// These structs are the domain counterparts of the sqlc-generated db.XxxParams,
+// with fields mapped one-to-one and types mapped in domain style:
 //   - uuid.UUID → string
 //   - uuid.NullUUID → *string
 //   - sql.NullString → *string
@@ -18,9 +18,9 @@ import (
 	"time"
 )
 
-// === Audit 领域 ===
+// === Audit domain ===
 
-// CreateAuditLogParams 是创建审计日志的领域参数结构体。
+// CreateAuditLogParams is the domain parameter struct for creating an audit log.
 type CreateAuditLogParams struct {
 	WorkspaceID  string          `json:"workspace_id"`
 	ActorType    string          `json:"actor_type"`
@@ -34,14 +34,14 @@ type CreateAuditLogParams struct {
 	RequestID    *string         `json:"request_id"`
 }
 
-// ListAuditLogsParams 是分页列出审计日志的领域参数结构体。
+// ListAuditLogsParams is the domain parameter struct for paginating audit logs.
 type ListAuditLogsParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Limit       int32  `json:"limit"`
 	Offset      int32  `json:"offset"`
 }
 
-// ListAuditLogsByActorParams 是按操作者分页列出审计日志的领域参数结构体。
+// ListAuditLogsByActorParams is the domain parameter struct for paginating audit logs by actor.
 type ListAuditLogsByActorParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	ActorType   string `json:"actor_type"`
@@ -50,17 +50,17 @@ type ListAuditLogsByActorParams struct {
 	Offset      int32  `json:"offset"`
 }
 
-// === Auth 领域 ===
+// === Auth domain ===
 
-// GetAuthTokenByLookupHashAndTypeParams 是按 lookup_hash 和 token_type 查询 token 的领域参数结构体。
+// GetAuthTokenByLookupHashAndTypeParams is the domain parameter struct for querying a token by lookup_hash and token_type.
 type GetAuthTokenByLookupHashAndTypeParams struct {
 	LookupHash string `json:"lookup_hash"`
 	TokenType  string `json:"token_type"`
 }
 
-// === Community 领域 ===
+// === Community domain ===
 
-// CreateCommunityWorkflowParams 是创建社区工作流的领域参数结构体。
+// CreateCommunityWorkflowParams is the domain parameter struct for creating a community workflow.
 type CreateCommunityWorkflowParams struct {
 	Name                         string          `json:"name"`
 	Description                  *string         `json:"description"`
@@ -74,15 +74,15 @@ type CreateCommunityWorkflowParams struct {
 	IsOfficial                   bool            `json:"is_official"`
 }
 
-// === ExecutionSession 领域 ===
+// === ExecutionSession domain ===
 
-// CompleteExecutionSessionParams 是完成执行会话的领域参数结构体。
+// CompleteExecutionSessionParams is the domain parameter struct for completing an execution session.
 type CompleteExecutionSessionParams struct {
 	ID         string  `json:"id"`
 	HeadCommit *string `json:"head_commit"`
 }
 
-// CreateExecutionSessionParams 是创建执行会话的领域参数结构体。
+// CreateExecutionSessionParams is the domain parameter struct for creating an execution session.
 type CreateExecutionSessionParams struct {
 	RuntimeID       *string `json:"runtime_id"`
 	AgentID         *string `json:"agent_id"`
@@ -95,13 +95,13 @@ type CreateExecutionSessionParams struct {
 	ClaudeSessionID *string `json:"claude_session_id"`
 }
 
-// GetActiveSessionByAgentAndWorkdirParams 是按 Agent 和 workdir 查询活跃会话的领域参数结构体。
+// GetActiveSessionByAgentAndWorkdirParams is the domain parameter struct for querying an active session by Agent and workdir.
 type GetActiveSessionByAgentAndWorkdirParams struct {
 	AgentID *string `json:"agent_id"`
 	Workdir *string `json:"workdir"`
 }
 
-// UpdateExecutionSessionParams 是更新执行会话的领域参数结构体。
+// UpdateExecutionSessionParams is the domain parameter struct for updating an execution session.
 type UpdateExecutionSessionParams struct {
 	ID              string     `json:"id"`
 	Status          string     `json:"status"`
@@ -111,15 +111,15 @@ type UpdateExecutionSessionParams struct {
 	ClaudeSessionID *string    `json:"claude_session_id"`
 }
 
-// UpdateSessionClaudeIDParams 是更新会话 Claude session ID 的领域参数结构体。
+// UpdateSessionClaudeIDParams is the domain parameter struct for updating a session's Claude session ID.
 type UpdateSessionClaudeIDParams struct {
 	ID              string  `json:"id"`
 	ClaudeSessionID *string `json:"claude_session_id"`
 }
 
-// === Git 领域 ===
+// === Git domain ===
 
-// CreateGitCredentialParams 是创建 Git 凭据的领域参数结构体。
+// CreateGitCredentialParams is the domain parameter struct for creating a Git credential.
 type CreateGitCredentialParams struct {
 	ProjectID    string  `json:"project_id"`
 	RepoURL      string  `json:"repo_url"`
@@ -128,7 +128,7 @@ type CreateGitCredentialParams struct {
 	CreatedBy    *string `json:"created_by"`
 }
 
-// UpdateGitCredentialParams 是更新 Git 凭据的领域参数结构体。
+// UpdateGitCredentialParams is the domain parameter struct for updating a Git credential.
 type UpdateGitCredentialParams struct {
 	ID           string `json:"id"`
 	RepoURL      string `json:"repo_url"`
@@ -136,9 +136,9 @@ type UpdateGitCredentialParams struct {
 	EncryptedPAT string `json:"encrypted_pat"`
 }
 
-// === Invitation 领域 ===
+// === Invitation domain ===
 
-// CreateInvitationParams 是创建工作区邀请的领域参数结构体。
+// CreateInvitationParams is the domain parameter struct for creating a workspace invitation.
 type CreateInvitationParams struct {
 	WorkspaceID string  `json:"workspace_id"`
 	Email       string  `json:"email"`
@@ -148,9 +148,9 @@ type CreateInvitationParams struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
-// === Memory 领域 ===
+// === Memory domain ===
 
-// CreateMemoryParams 是创建共享记忆的领域参数结构体。
+// CreateMemoryParams is the domain parameter struct for creating a shared memory.
 type CreateMemoryParams struct {
 	WorkspaceID  string          `json:"workspace_id"`
 	SourceTaskID *int32          `json:"source_task_id"`
@@ -163,7 +163,7 @@ type CreateMemoryParams struct {
 	Metadata     json.RawMessage `json:"metadata"`
 }
 
-// ListMemoriesByWorkspaceParams 是按工作区列出记忆的领域参数结构体。
+// ListMemoriesByWorkspaceParams is the domain parameter struct for listing memories by workspace.
 type ListMemoriesByWorkspaceParams struct {
 	WorkspaceID   string   `json:"workspace_id"`
 	Verified      *bool    `json:"verified"`
@@ -171,23 +171,23 @@ type ListMemoriesByWorkspaceParams struct {
 	Limit         *int32   `json:"limit"`
 }
 
-// SearchMemoriesParams 是搜索记忆的领域参数结构体。
+// SearchMemoriesParams is the domain parameter struct for searching memories.
 type SearchMemoriesParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Title       string `json:"title"`
 }
 
-// === Notification 领域 ===
+// === Notification domain ===
 
-// ListMentionCommentsParams 是列出提及某用户的评论的领域参数结构体。
+// ListMentionCommentsParams is the domain parameter struct for listing comments that mention a user.
 type ListMentionCommentsParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Column2     string `json:"column_2"`
 }
 
-// === Project 领域 ===
+// === Project domain ===
 
-// CreateProjectParams 是创建项目的领域参数结构体。
+// CreateProjectParams is the domain parameter struct for creating a project.
 type CreateProjectParams struct {
 	WorkspaceID string  `json:"workspace_id"`
 	Name        string  `json:"name"`
@@ -198,7 +198,7 @@ type CreateProjectParams struct {
 	Context     *string `json:"context"`
 }
 
-// CreateProjectMemberParams 是创建项目成员关联的领域参数结构体。
+// CreateProjectMemberParams is the domain parameter struct for creating a project member association.
 type CreateProjectMemberParams struct {
 	ProjectID  string  `json:"project_id"`
 	MemberType string  `json:"member_type"`
@@ -207,7 +207,7 @@ type CreateProjectMemberParams struct {
 	Role       string  `json:"role"`
 }
 
-// CreateProjectReviewerParams 是创建项目审查者指派的领域参数结构体。
+// CreateProjectReviewerParams is the domain parameter struct for creating a project reviewer assignment.
 type CreateProjectReviewerParams struct {
 	ProjectID  string  `json:"project_id"`
 	MemberType string  `json:"member_type"`
@@ -215,25 +215,25 @@ type CreateProjectReviewerParams struct {
 	MemberID   *string `json:"member_id"`
 }
 
-// GetProjectMemberRoleParams 是查询项目成员角色的领域参数结构体。
+// GetProjectMemberRoleParams is the domain parameter struct for querying a project member's role.
 type GetProjectMemberRoleParams struct {
 	ProjectID string  `json:"project_id"`
 	MemberID  *string `json:"member_id"`
 }
 
-// IsMemberProjectMemberParams 是判断成员是否为项目成员的领域参数结构体。
+// IsMemberProjectMemberParams is the domain parameter struct for determining whether a member is a project member.
 type IsMemberProjectMemberParams struct {
 	ProjectID string  `json:"project_id"`
 	MemberID  *string `json:"member_id"`
 }
 
-// ListProjectsByAgentMembershipParams 是按 Agent 成员关系列出项目的领域参数结构体。
+// ListProjectsByAgentMembershipParams is the domain parameter struct for listing projects by Agent membership.
 type ListProjectsByAgentMembershipParams struct {
 	WorkspaceID string  `json:"workspace_id"`
 	AgentID     *string `json:"agent_id"`
 }
 
-// UpdateProjectParams 是更新项目的领域参数结构体。
+// UpdateProjectParams is the domain parameter struct for updating a project.
 type UpdateProjectParams struct {
 	ID                string   `json:"id"`
 	Name              string   `json:"name"`
@@ -245,23 +245,23 @@ type UpdateProjectParams struct {
 	MaxReviewCycles   *int32   `json:"max_review_cycles"`
 }
 
-// === Review 领域 ===
+// === Review domain ===
 
-// GetReviewNodeAuthorParams 是查询审查节点原作者的领域参数结构体。
+// GetReviewNodeAuthorParams is the domain parameter struct for querying the original author of a review node.
 type GetReviewNodeAuthorParams struct {
 	TaskID int32  `json:"task_id"`
 	ID     string `json:"id"`
 }
 
-// GetReviewNodeReviewerParams 是查询审查节点审查者的领域参数结构体。
+// GetReviewNodeReviewerParams is the domain parameter struct for querying the reviewer of a review node.
 type GetReviewNodeReviewerParams struct {
 	ID     string `json:"id"`
 	TaskID int32  `json:"task_id"`
 }
 
-// === Runtime 领域 ===
+// === Runtime domain ===
 
-// CreateRuntimeParams 是创建 Runtime 记录的领域参数结构体。
+// CreateRuntimeParams is the domain parameter struct for creating a Runtime record.
 type CreateRuntimeParams struct {
 	AgentID          string  `json:"agent_id"`
 	DaemonID         string  `json:"daemon_id"`
@@ -273,42 +273,42 @@ type CreateRuntimeParams struct {
 	PublicKey        *string `json:"public_key"`
 }
 
-// UpdateRuntimeHeartbeatParams 是更新 Runtime 心跳时间的领域参数结构体。
+// UpdateRuntimeHeartbeatParams is the domain parameter struct for updating a Runtime's heartbeat time.
 type UpdateRuntimeHeartbeatParams struct {
 	ID            string     `json:"id"`
 	LastHeartbeat *time.Time `json:"last_heartbeat"`
 }
 
-// UpdateRuntimeStatusParams 是更新 Runtime 状态的领域参数结构体。
+// UpdateRuntimeStatusParams is the domain parameter struct for updating a Runtime's status.
 type UpdateRuntimeStatusParams struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-// === Search 领域 ===
+// === Search domain ===
 
-// SearchAgentsByWorkspaceParams 是按工作区搜索 Agent 的领域参数结构体。
+// SearchAgentsByWorkspaceParams is the domain parameter struct for searching Agents by workspace.
 type SearchAgentsByWorkspaceParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Name        string `json:"name"`
 }
 
-// SearchTasksByWorkspaceParams 是按工作区搜索任务的领域参数结构体。
+// SearchTasksByWorkspaceParams is the domain parameter struct for searching tasks by workspace.
 type SearchTasksByWorkspaceParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Title       string `json:"title"`
 }
 
-// SearchTasksByWorkspaceAndProjectParams 是按工作区和项目搜索任务的领域参数结构体。
+// SearchTasksByWorkspaceAndProjectParams is the domain parameter struct for searching tasks by workspace and project.
 type SearchTasksByWorkspaceAndProjectParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	ProjectID   string `json:"project_id"`
 	Title       string `json:"title"`
 }
 
-// === Workflow 领域 ===
+// === Workflow domain ===
 
-// CreateTemplateNodeParams 是创建工作流模板节点的领域参数结构体。
+// CreateTemplateNodeParams is the domain parameter struct for creating a workflow template node.
 type CreateTemplateNodeParams struct {
 	TemplateID      string          `json:"template_id"`
 	Name            string          `json:"name"`
@@ -325,7 +325,7 @@ type CreateTemplateNodeParams struct {
 	DependsOn       []string        `json:"depends_on"`
 }
 
-// CreateWorkflowTemplateParams 是创建工作流模板的领域参数结构体。
+// CreateWorkflowTemplateParams is the domain parameter struct for creating a workflow template.
 type CreateWorkflowTemplateParams struct {
 	WorkspaceID     string          `json:"workspace_id"`
 	Name            string          `json:"name"`
@@ -338,7 +338,7 @@ type CreateWorkflowTemplateParams struct {
 	LastTriggeredAt *time.Time      `json:"last_triggered_at"`
 }
 
-// UpdateTemplateNodeParams 是更新工作流模板节点的领域参数结构体。
+// UpdateTemplateNodeParams is the domain parameter struct for updating a workflow template node.
 type UpdateTemplateNodeParams struct {
 	ID              string          `json:"id"`
 	Name            string          `json:"name"`
@@ -355,7 +355,7 @@ type UpdateTemplateNodeParams struct {
 	DependsOn       []string        `json:"depends_on"`
 }
 
-// UpdateWorkflowTemplateParams 是更新工作流模板的领域参数结构体。
+// UpdateWorkflowTemplateParams is the domain parameter struct for updating a workflow template.
 type UpdateWorkflowTemplateParams struct {
 	ID             string          `json:"id"`
 	Name           string          `json:"name"`
@@ -366,7 +366,7 @@ type UpdateWorkflowTemplateParams struct {
 	NextRunAt      *time.Time      `json:"next_run_at"`
 }
 
-// CreateWorkflowTriggerRunParams 是创建工作流触发器运行记录的领域参数结构体。
+// CreateWorkflowTriggerRunParams is the domain parameter struct for creating a workflow trigger run record.
 type CreateWorkflowTriggerRunParams struct {
 	WorkspaceID        string          `json:"workspace_id"`
 	ProjectID          string          `json:"project_id"`
@@ -377,25 +377,25 @@ type CreateWorkflowTriggerRunParams struct {
 	Payload            json.RawMessage `json:"payload"`
 }
 
-// MarkWorkflowTriggerRunCompletedParams 是标记触发器运行完成的领域参数结构体。
+// MarkWorkflowTriggerRunCompletedParams is the domain parameter struct for marking a trigger run as completed.
 type MarkWorkflowTriggerRunCompletedParams struct {
 	ID     string `json:"id"`
 	TaskID *int32 `json:"task_id"`
 }
 
-// MarkWorkflowTriggerRunFailedParams 是标记触发器运行失败的领域参数结构体。
+// MarkWorkflowTriggerRunFailedParams is the domain parameter struct for marking a trigger run as failed.
 type MarkWorkflowTriggerRunFailedParams struct {
 	ID    string `json:"id"`
 	Error string `json:"error"`
 }
 
-// ListDueScheduledWorkflowTemplatesParams 是查询到期调度模板的领域参数结构体。
+// ListDueScheduledWorkflowTemplatesParams is the domain parameter struct for querying due scheduled templates.
 type ListDueScheduledWorkflowTemplatesParams struct {
 	NextRunAt *time.Time `json:"next_run_at"`
 	Limit     int32      `json:"limit"`
 }
 
-// UpdateWorkflowTemplateTriggerScheduleParams 是更新模板触发调度的领域参数结构体。
+// UpdateWorkflowTemplateTriggerScheduleParams is the domain parameter struct for updating a template's trigger schedule.
 type UpdateWorkflowTemplateTriggerScheduleParams struct {
 	ID              string     `json:"id"`
 	NextRunAt       *time.Time `json:"next_run_at"`

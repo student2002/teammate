@@ -1,4 +1,4 @@
-// workspace_dto.go 定义 Workspace 相关的请求/响应结构体和数据转换函数。
+// workspace_dto.go defines Workspace-related request/response structs and data conversion functions.
 package handler
 
 import (
@@ -7,34 +7,34 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// --- 请求 DTO ---
+// --- request DTOs ---
 
-// createWorkspaceRequest 创建工作区请求体。
+// createWorkspaceRequest is the create workspace request body.
 type createWorkspaceRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IssuePrefix string `json:"issue_prefix"`
 }
 
-// updateWorkspaceRequest 更新工作区请求体。
+// updateWorkspaceRequest is the update workspace request body.
 type updateWorkspaceRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-// createMemberRequest 创建成员请求体。
+// createMemberRequest is the create member request body.
 type createMemberRequest struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
 }
 
-// updateMemberRoleRequest 更新成员角色请求体。
+// updateMemberRoleRequest is the update member role request body.
 type updateMemberRoleRequest struct {
 	Role string `json:"role"`
 }
 
-// buildCreateWorkspaceParams 根据 handler 层输入构造 types.CreateWorkspaceParams。
+// buildCreateWorkspaceParams builds types.CreateWorkspaceParams from the handler-layer input.
 func buildCreateWorkspaceParams(
 	name string,
 	description string,
@@ -54,7 +54,7 @@ func buildCreateWorkspaceParams(
 	}
 }
 
-// buildUpdateWorkspaceParams 根据 handler 层输入构造 types.UpdateWorkspaceParams。
+// buildUpdateWorkspaceParams builds types.UpdateWorkspaceParams from the handler-layer input.
 func buildUpdateWorkspaceParams(
 	id uuid.UUID,
 	name string,
@@ -72,7 +72,7 @@ func buildUpdateWorkspaceParams(
 	}
 }
 
-// buildUpdateMemberRoleParams 根据 handler 层输入构造 types.UpdateMemberRoleParams。
+// buildUpdateMemberRoleParams builds types.UpdateMemberRoleParams from the handler-layer input.
 func buildUpdateMemberRoleParams(
 	workspaceID uuid.UUID,
 	role string,

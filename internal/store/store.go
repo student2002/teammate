@@ -1,13 +1,13 @@
-// store.go 提供数据访问层（DAL）的核心定义和初始化方法。
+// store.go provides the core definitions and initialization methods for the data access layer (DAL).
 //
-// Store 是数据访问的统一入口，封装了 sqlc 生成的查询方法和自定义的事务性操作。
-// 所有业务模块通过 Store 访问数据库，不直接操作底层连接。
+// Store is the unified entry point for data access, wrapping the sqlc-generated query methods and custom transactional operations.
+// All business modules access the database through Store and never touch the underlying connection directly.
 //
-// 设计原则：
-//   - 简单 CRUD 操作委托给 sqlc Queries
-//   - 需要事务的操作在 Store 方法内实现（如 ApproveNodeInTx、CreateTask）
-//   - 所有方法接收 context.Context 参数，支持超时和取消
-//   - 错误使用 fmt.Errorf 包装，保留原始错误链
+// Design principles:
+//   - Simple CRUD operations are delegated to sqlc Queries
+//   - Operations that require transactions are implemented within Store methods (e.g. ApproveNodeInTx, CreateTask)
+//   - All methods accept a context.Context parameter to support timeout and cancellation
+//   - Errors are wrapped with fmt.Errorf to preserve the original error chain
 package store
 
 import (
@@ -17,32 +17,32 @@ import (
 	db "github.com/teammate/server/internal/db/generated"
 )
 
-// Store 封装数据库连接和 sqlc 查询对象，提供统一的数据访问入口。
+// Store wraps the database connection and sqlc query object, providing a unified data access entry point.
 //
-// 使用方式：
+// Usage:
 //
 //	s := store.New(pgDB)
 //	node, err := s.GetTaskNode(ctx, nodeID)
 //
-// 对于需要自定义时钟的测试场景，使用 NewWithClock 创建 Store。
+// For test scenarios that require a custom clock, use NewWithClock to create the Store.
 type Store struct {
-	// q 是 sqlc 自动生成的查询对象（私有，强制通过 Store 封装方法访问）。
+	// q is the sqlc auto-generated query object (private, enforcing access through Store wrapper methods).
 	q *db.Queries
 
-	// db 是底层数据库连接，用于 Store 内部自定义 SQL 查询和事务操作。
+	// db is the underlying database connection, used by Store for internal custom SQL queries and transaction operations.
 	db *sql.DB
 
-	// Clock 提供时间抽象，用于测试时注入假时钟。
+	// Clock provides a time abstraction, used to inject a fake clock during testing.
 	Clock clock.Clock
 }
 
-// New 创建一个新的 Store 实例，使用系统时钟。
+// New creates a new Store instance using the system clock.
 //
-// 参数：
-//   - pgDB: 已连接的 PostgreSQL 数据库连接
+// Parameters:
+//   - pgDB: a connected PostgreSQL database connection
 //
-// 返回：
-//   - 初始化完成的 Store 实例
+// Returns:
+//   - an initialized Store instance
 func New(pgDB *sql.DB) *Store {
 	return &Store{
 		q:     db.New(pgDB),
@@ -51,16 +51,16 @@ func New(pgDB *sql.DB) *Store {
 	}
 }
 
-// NewWithClock 创建一个使用自定义时钟的 Store 实例。
+// NewWithClock creates a Store instance that uses a custom clock.
 //
-// 主要用于测试场景，允许控制时间流逝以测试超时、过期等时间相关逻辑。
+// Mainly used in test scenarios, allowing control over the passage of time to test timeout, expiration, and other time-related logic.
 //
-// 参数：
-//   - pgDB: 已连接的 PostgreSQL 数据库连接
-//   - c: 自定义的时钟实现（如 FakeClock）
+// Parameters:
+//   - pgDB: a connected PostgreSQL database connection
+//   - c: a custom clock implementation (e.g. FakeClock)
 //
-// 返回：
-//   - 使用自定义时钟的 Store 实例
+// Returns:
+//   - a Store instance using the custom clock
 func NewWithClock(pgDB *sql.DB, c clock.Clock) *Store {
 	return &Store{
 		q:     db.New(pgDB),

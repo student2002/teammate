@@ -1,6 +1,6 @@
-// task_dto.go 为 task.go 和 subtask.go 提供 domain 类型别名、常量和参数构建器。
-// 约定：类型别名使用 types.Xxx，参数构建器返回 types.XxxParams，
-// 响应转换直接读 types.Task 字段（不使用 sql.NullXxx）。
+// task_dto.go provides domain type aliases, constants, and parameter builders for task.go and subtask.go.
+// Convention: type aliases use types.Xxx, parameter builders return types.XxxParams,
+// response conversion reads types.Task fields directly (does not use sql.NullXxx).
 package handler
 
 import (
@@ -12,14 +12,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- domain 类型别名 ----
+// ---- domain type aliases ----
 
 type Task = types.Task
 type TaskType = string
 type TaskPriority = string
 type TaskStatus = string
 
-// ---- 常量 ----
+// ---- constants ----
 
 const TaskPriorityMedium = types.TaskPriorityMedium
 const TaskTypeTask = types.TaskTypeTask
@@ -27,56 +27,56 @@ const TaskStatusActive = types.TaskStatusActive
 const TaskStatusCompleted = types.TaskStatusCompleted
 const TaskStatusCancelled = types.TaskStatusCancelled
 
-// ---- 请求结构体 ----
+// ---- request structs ----
 
-// createTaskRequest 创建任务请求体。
+// createTaskRequest create task request body.
 type createTaskRequest struct {
-	Title              string          `json:"title"`               // 任务标题
-	Description        string          `json:"description"`         // 任务描述
-	Constraints        string          `json:"constraints"`         // 约束条件
-	Type               TaskType        `json:"type"`                // 任务类型
-	Priority           TaskPriority    `json:"priority"`            // 优先级
-	DueDate            *string         `json:"due_date"`            // 截止日期
-	Labels             []string        `json:"labels"`              // 标签列表
-	WorkflowTemplateID uuid.UUID       `json:"workflow_template_id"` // 工作流模板 ID
+	Title              string          `json:"title"`               // task title
+	Description        string          `json:"description"`         // task description
+	Constraints        string          `json:"constraints"`         // constraints
+	Type               TaskType        `json:"type"`                // task type
+	Priority           TaskPriority    `json:"priority"`            // priority
+	DueDate            *string         `json:"due_date"`            // due date
+	Labels             []string        `json:"labels"`              // label list
+	WorkflowTemplateID uuid.UUID       `json:"workflow_template_id"` // workflow template ID
 }
 
-// updateTaskRequest 更新任务请求体。
+// updateTaskRequest update task request body.
 type updateTaskRequest struct {
-	Title       string       `json:"title"`        // 任务标题
-	Description string       `json:"description"`  // 任务描述
-	Priority    TaskPriority `json:"priority"`     // 优先级
-	Labels      []string     `json:"labels"`       // 标签列表
-	DueDate     *string      `json:"due_date"`     // 截止日期
-	Constraints string       `json:"constraints"`  // 约束条件
-	Status      TaskStatus   `json:"status"`       // 任务状态
+	Title       string       `json:"title"`        // task title
+	Description string       `json:"description"`  // task description
+	Priority    TaskPriority `json:"priority"`     // priority
+	Labels      []string     `json:"labels"`       // label list
+	DueDate     *string      `json:"due_date"`     // due date
+	Constraints string       `json:"constraints"`  // constraints
+	Status      TaskStatus   `json:"status"`       // task status
 }
 
-// ---- 响应转换函数 ----
+// ---- response conversion functions ----
 
-// taskResponse 任务响应 DTO，将 domain 字段转换为 JSON 序列化友好格式。
+// taskResponse task response DTO, converts domain fields to a JSON-serialization-friendly format.
 type taskResponse struct {
-	ID           int32    `json:"id"`            // 任务 ID
-	ProjectID    string   `json:"project_id"`    // 项目 ID
-	WorkflowName string   `json:"workflow_name"` // 工作流名称
-	Title        string   `json:"title"`         // 任务标题
-	Description  string   `json:"description"`   // 任务描述
-	Constraints  string   `json:"constraints"`   // 约束条件
-	Type         string   `json:"type"`          // 任务类型
-	Priority     string   `json:"priority"`      // 优先级
-	Status       string   `json:"status"`        // 任务状态
-	AuthorType   string   `json:"author_type"`   // 作者类型
-	AuthorID     string   `json:"author_id"`     // 作者 ID
-	DueDate      *string  `json:"due_date"`      // 截止日期
-	Labels       []string `json:"labels"`        // 标签列表
-	Sequence     int32    `json:"sequence"`      // 序号
-	ParentTaskID *int32   `json:"parent_task_id"` // 父任务 ID
-	GitBranch    string   `json:"git_branch"`    // Git 分支
-	CreatedAt    string   `json:"created_at"`    // 创建时间
-	UpdatedAt    string   `json:"updated_at"`    // 更新时间
+	ID           int32    `json:"id"`            // task ID
+	ProjectID    string   `json:"project_id"`    // project ID
+	WorkflowName string   `json:"workflow_name"` // workflow name
+	Title        string   `json:"title"`         // task title
+	Description  string   `json:"description"`   // task description
+	Constraints  string   `json:"constraints"`   // constraints
+	Type         string   `json:"type"`          // task type
+	Priority     string   `json:"priority"`      // priority
+	Status       string   `json:"status"`        // task status
+	AuthorType   string   `json:"author_type"`   // author type
+	AuthorID     string   `json:"author_id"`     // author ID
+	DueDate      *string  `json:"due_date"`      // due date
+	Labels       []string `json:"labels"`        // label list
+	Sequence     int32    `json:"sequence"`      // sequence number
+	ParentTaskID *int32   `json:"parent_task_id"` // parent task ID
+	GitBranch    string   `json:"git_branch"`    // Git branch
+	CreatedAt    string   `json:"created_at"`    // creation time
+	UpdatedAt    string   `json:"updated_at"`    // update time
 }
 
-// taskToResponse 将 domain 任务记录转换为 API 响应。
+// taskToResponse converts a domain task record to an API response.
 func taskToResponse(t Task) taskResponse {
 	var dueDate *string
 	if t.DueDate != nil {
@@ -109,7 +109,7 @@ func taskToResponse(t Task) taskResponse {
 	}
 }
 
-// tasksToResponse 将任务列表转换为响应格式。
+// tasksToResponse converts a task list to the response format.
 func tasksToResponse(tasks []Task) []taskResponse {
 	result := make([]taskResponse, 0, len(tasks))
 	for _, t := range tasks {
@@ -118,9 +118,9 @@ func tasksToResponse(tasks []Task) []taskResponse {
 	return result
 }
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateTaskParams 从请求字段构建 types.CreateTaskParams。
+// buildCreateTaskParams builds types.CreateTaskParams from request fields.
 func buildCreateTaskParams(
 	projectID uuid.UUID,
 	title string,
@@ -165,7 +165,7 @@ func buildCreateTaskParams(
 	}
 }
 
-// buildUpdateTaskParams 从请求字段构建 types.UpdateTaskParams。
+// buildUpdateTaskParams builds types.UpdateTaskParams from request fields.
 func buildUpdateTaskParams(
 	taskID int32,
 	title string,
@@ -201,7 +201,7 @@ func buildUpdateTaskParams(
 	}
 }
 
-// buildListTasksParams 从请求字段构建 types.ListTasksParams。
+// buildListTasksParams builds types.ListTasksParams from request fields.
 func buildListTasksParams(projectID uuid.UUID, status TaskStatus) types.ListTasksParams {
 	return types.ListTasksParams{
 		WorkspaceID: projectID.String(),

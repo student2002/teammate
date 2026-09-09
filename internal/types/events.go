@@ -1,30 +1,30 @@
-// events.go 定义 SSE（Server-Sent Events）相关的常量和结构体。
+// events.go defines the constants and structs related to SSE (Server-Sent Events).
 //
-// 本文件包含：
-//   - SSEEvent：Server-Sent Event 的结构定义
-//   - Event* 常量：标准 SSE 事件类型
+// This file contains:
+//   - SSEEvent: the struct definition of a Server-Sent Event
+//   - Event* constants: the standard SSE event types
 //
-// SSE 用于 server → agent 的实时事件推送，支持 Last-Event-ID 重连。
+// SSE is used for real-time event push from server → agent, supporting Last-Event-ID reconnection.
 package types
 
 import "encoding/json"
 
-// SSEEvent 定义 Server-Sent Event 的结构。
-// 用于 server → agent 的实时事件推送。
+// SSEEvent defines the structure of a Server-Sent Event.
+// It is used for real-time event push from server → agent.
 type SSEEvent struct {
-	ID    string          `json:"id"`    // 事件唯一标识，支持 Last-Event-ID 重连
-	Event string          `json:"event"` // 事件类型（如 node:pending、task:interrupt）
-	Data  json.RawMessage `json:"data"`  // 事件数据载荷（JSON）
+	ID    string          `json:"id"`    // Unique event ID, supporting Last-Event-ID reconnection
+	Event string          `json:"event"` // Event type (e.g. node:pending, task:interrupt)
+	Data  json.RawMessage `json:"data"`  // Event data payload (JSON)
 }
 
-// 标准 SSE 事件类型常量。
+// Standard SSE event-type constants.
 const (
-	EventNodePending            = "node:pending"              // 新节点待认领
-	EventNodeContinuationInvite = "node:continuation_invite"  // 节点完成后续约权邀请
-	EventMentionTrigger         = "mention:trigger"           // @提及触发
-	EventTaskInterrupt          = "task:interrupt"            // 任务中断（控制事件）
-	EventNodeTimeout            = "node:timeout"              // 节点超时（控制事件）
-	EventSyncRequired           = "sync:required"             // 需要全量同步（控制事件）
-	EventNodeRejectRollback     = "node:reject_rollback"      // 审查拒绝回滚（控制事件）
-	EventPermissionChanged      = "permission:changed"        // 权限变更（控制事件）
+	EventNodePending            = "node:pending"             // A new node is pending claim
+	EventNodeContinuationInvite = "node:continuation_invite" // Continuation-right invitation after a node completes
+	EventMentionTrigger         = "mention:trigger"          // @mention trigger
+	EventTaskInterrupt          = "task:interrupt"           // Task interruption (control event)
+	EventNodeTimeout            = "node:timeout"             // Node timeout (control event)
+	EventSyncRequired           = "sync:required"            // Full sync required (control event)
+	EventNodeRejectRollback     = "node:reject_rollback"     // Review-reject rollback (control event)
+	EventPermissionChanged      = "permission:changed"       // Permission change (control event)
 )

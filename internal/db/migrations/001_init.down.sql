@@ -1,5 +1,5 @@
 -- 001_init.down.sql
--- 按依赖关系的逆序删除所有对象
+-- Drop all objects in reverse dependency order
 
 DROP TABLE IF EXISTS invitations;
 DROP TABLE IF EXISTS audit_logs;

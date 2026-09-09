@@ -1,4 +1,4 @@
-// mcp_dto.go 为 mcp.go 提供 types 类型别名、参数构建器和响应转换函数。
+// mcp_dto.go provides types aliases, parameter builders, and response conversion functions for mcp.go.
 package handler
 
 import (
@@ -10,31 +10,31 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// ---- 请求结构体 ----
+// ---- request structs ----
 
-// createMcpServerRequest 创建 MCP 服务器请求体。
+// createMcpServerRequest create MCP server request body.
 type createMcpServerRequest struct {
-	Name     string          `json:"name"`      // 服务器名称
-	Url      string          `json:"url"`       // 服务器 URL
-	Type     string          `json:"type"`      // 服务器类型
-	AuthType string          `json:"auth_type"` // 认证类型
-	EnvVars  json.RawMessage `json:"env_vars"`  // 环境变量（JSON）
-	Status   string          `json:"status"`    // 初始状态
+	Name     string          `json:"name"`      // server name
+	Url      string          `json:"url"`       // server URL
+	Type     string          `json:"type"`      // server type
+	AuthType string          `json:"auth_type"` // authentication type
+	EnvVars  json.RawMessage `json:"env_vars"`  // environment variables (JSON)
+	Status   string          `json:"status"`    // initial status
 }
 
-// updateMcpServerRequest 更新 MCP 服务器请求体。
+// updateMcpServerRequest update MCP server request body.
 type updateMcpServerRequest struct {
-	Name     *string         `json:"name,omitempty"`      // 服务器名称（nil=保持）
-	Url      *string         `json:"url,omitempty"`       // 服务器 URL（nil=保持）
-	Type     *string         `json:"type,omitempty"`      // 服务器类型（nil=保持）
-	AuthType *string         `json:"auth_type,omitempty"` // 认证类型（nil=保持）
-	EnvVars  json.RawMessage `json:"env_vars,omitempty"`  // 环境变量（nil=保持，{} = 清空）
-	Status   *string         `json:"status,omitempty"`    // 服务器状态（nil=保持）
+	Name     *string         `json:"name,omitempty"`      // server name (nil=keep)
+	Url      *string         `json:"url,omitempty"`       // server URL (nil=keep)
+	Type     *string         `json:"type,omitempty"`      // server type (nil=keep)
+	AuthType *string         `json:"auth_type,omitempty"` // authentication type (nil=keep)
+	EnvVars  json.RawMessage `json:"env_vars,omitempty"`  // environment variables (nil=keep, {} = clear)
+	Status   *string         `json:"status,omitempty"`    // server status (nil=keep)
 }
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateMcpServerParams 从请求字段构建 types.CreateMcpServerParams。
+// buildCreateMcpServerParams builds types.CreateMcpServerParams from request fields.
 func buildCreateMcpServerParams(
 	workspaceID uuid.UUID,
 	name string,
@@ -55,9 +55,9 @@ func buildCreateMcpServerParams(
 	}
 }
 
-// ---- 响应转换函数 ----
+// ---- response conversion functions ----
 
-// mcpServerResponse 将 types.McpServer 转换为 API 响应。
+// mcpServerResponse converts types.McpServer to an API response.
 func mcpServerResponse(server apitypes.McpServer) apitypes.McpServerResponse {
 	idUUID, _ := uuid.Parse(server.ID)
 	wsUUID, _ := uuid.Parse(server.WorkspaceID)
@@ -74,7 +74,7 @@ func mcpServerResponse(server apitypes.McpServer) apitypes.McpServerResponse {
 	}
 }
 
-// rawObject 将 JSON RawMessage 转换为 map。
+// rawObject converts a JSON RawMessage to a map.
 func rawObject(raw json.RawMessage, valid bool) map[string]interface{} {
 	if !valid || len(raw) == 0 || string(raw) == "null" {
 		return map[string]interface{}{}

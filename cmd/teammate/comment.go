@@ -1,4 +1,4 @@
-// comment.go 实现评论子命令，管理任务评论的创建和查询。
+// comment.go implements the comment subcommand, managing the creation and querying of task comments.
 package main
 
 import (

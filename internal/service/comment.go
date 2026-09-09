@@ -1,13 +1,13 @@
-// comment.go 实现任务评论的业务逻辑，包括创建、列表、更新评论。
+// comment.go implements the business logic for task comments, including creating, listing, and updating comments.
 //
-// 本文件包含：
-//   - CommentService 结构体：评论管理服务，封装评论的 CRUD 操作
-//   - Create：在指定任务上创建评论，支持关联提及的成员列表
-//   - List：列出指定任务的所有评论，按创建时间正序排列
-//   - Update：在 5 分钟编辑窗口内更新评论内容和提及列表
+// This file contains:
+//   - CommentService struct: the comment management service, encapsulating CRUD operations on comments
+//   - Create: creates a comment on the specified task, supporting the associated mentioned member list
+//   - List: lists all comments of the specified task, sorted by creation time in ascending order
+//   - Update: updates the comment content and mention list within a 5-minute editing window
 //
-// 评论支持提及（@mention）功能，编辑有 5 分钟的时间窗口限制。
-// 超过编辑窗口后不允许修改评论内容，确保评论的历史可追溯性。
+// Comments support mentions (@mention); editing has a 5-minute time window restriction.
+// After the editing window expires, modifying comment content is not allowed, ensuring the historical traceability of comments.
 package service
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CommentService 提供评论管理相关的业务逻辑。
+// CommentService provides the business logic for comment management.
 type CommentService struct {
 	svc *Service
 }
@@ -29,38 +29,38 @@ func NewCommentService(svc *Service) *CommentService {
 	return &CommentService{svc: svc}
 }
 
-// Create 在指定任务上创建一条评论，支持关联提及的成员列表。
+// Create creates a comment on the specified task, supporting the associated mentioned member list.
 func (s *CommentService) Create(ctx context.Context, params types.CreateCommentParams) (types.Comment, error) {
 	comment, err := s.svc.Store.CreateComment(ctx, params)
 	if err != nil {
 		return types.Comment{}, err
 	}
-	// 创建后向被 @提及 的 Agent 推送 mention:trigger，通知其查看评论
+	// After creation, push mention:trigger to the @mentioned Agents to notify them to view the comment
 	s.publishMentionTriggers(ctx, params.TaskID, uuidFromStr(comment.ID), params.Mentions)
 	return comment, nil
 }
 
-// List 列出指定任务的所有评论，按创建时间正序排列。
+// List lists all comments of the specified task, sorted by creation time in ascending order.
 func (s *CommentService) List(ctx context.Context, taskID int32) ([]types.Comment, error) {
 	return s.svc.Store.ListComments(ctx, taskID)
 }
 
-// ListTaskLevel 列出指定任务的任务级评论。
+// ListTaskLevel lists the task-level comments of the specified task.
 func (s *CommentService) ListTaskLevel(ctx context.Context, taskID int32) ([]types.Comment, error) {
 	return s.svc.Store.ListTaskLevelComments(ctx, taskID)
 }
 
-// ListNode 列出指定节点评论区的评论。
+// ListNode lists the comments in the specified node's comment section.
 func (s *CommentService) ListNode(ctx context.Context, taskID int32, nodeID uuid.UUID) ([]types.Comment, error) {
 	return s.svc.Store.ListNodeComments(ctx, taskID, nodeID)
 }
 
-// ListExecutionContext 列出执行指定节点时需要注入的评论上下文。
+// ListExecutionContext lists the comment context to inject when executing the specified node.
 func (s *CommentService) ListExecutionContext(ctx context.Context, taskID int32, nodeID uuid.UUID, mentionID uuid.UUID) ([]types.Comment, error) {
 	return s.svc.Store.ListExecutionContextComments(ctx, taskID, nodeID, mentionID)
 }
 
-// GetComment 根据 ID 查询单条评论记录。
+// GetComment queries a single comment record by ID.
 func (s *CommentService) GetComment(ctx context.Context, commentID uuid.UUID) (types.Comment, error) {
 	comment, err := s.svc.Store.GetComment(ctx, commentID)
 	if err != nil {
@@ -69,8 +69,8 @@ func (s *CommentService) GetComment(ctx context.Context, commentID uuid.UUID) (t
 	return comment, nil
 }
 
-// Update 在 5 分钟编辑窗口内更新评论内容和提及列表。
-// 超过 5 分钟后不允许修改，返回错误。
+// Update updates the comment content and mention list within a 5-minute editing window.
+// After 5 minutes, modification is not allowed and an error is returned.
 func (s *CommentService) Update(ctx context.Context, commentID uuid.UUID, content string, mentions []uuid.UUID) (types.Comment, error) {
 	existing, err := s.svc.Store.GetComment(ctx, commentID)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *CommentService) Update(ctx context.Context, commentID uuid.UUID, conten
 	if err != nil {
 		return types.Comment{}, err
 	}
-	// 只对新增的 @提及 发布 mention:trigger，避免编辑重复触发
+	// Only publish mention:trigger for newly added @mentions, to avoid duplicate triggers on edit
 	existingSet := make(map[string]struct{}, len(existing.Mentions))
 	for _, m := range existing.Mentions {
 		existingSet[m] = struct{}{}
@@ -99,9 +99,9 @@ func (s *CommentService) Update(ctx context.Context, commentID uuid.UUID, conten
 	return comment, nil
 }
 
-// publishMentionTriggers 在评论创建/更新后，向被 @提及 的 Agent 推送 mention:trigger 事件。
-// Agent 收到事件后触发轮询（internal/agent/daemon.go handleMentionTrigger）。
-// 被提及的人类成员不推送 SSE（无 runtime/SSE 连接），走现有的拉取式通知（ListMentionComments）。
+// publishMentionTriggers pushes a mention:trigger event to the @mentioned Agents after a comment is created/updated.
+// Agents trigger polling upon receiving the event (internal/agent/daemon.go handleMentionTrigger).
+// Mentioned human members are not pushed via SSE (no runtime/SSE connection); they use the existing pull-based notification (ListMentionComments).
 func (s *CommentService) publishMentionTriggers(ctx context.Context, taskID int32, commentID uuid.UUID, mentions []string) {
 	if len(mentions) == 0 || s.svc.Hub == nil {
 		return

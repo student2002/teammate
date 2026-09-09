@@ -1,4 +1,4 @@
-// reject_test.go 覆盖节点驳回接口的测试。
+// reject_test.go tests the node rejection API.
 package handler_test
 
 import (
@@ -14,9 +14,9 @@ import (
 	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
-// TestRejectCascading 验证驳回节点会级联回退：
-// - 驳回节点 2 指向节点 1 → 节点 1 回到 pending，节点 2 标记为 rejected
-// - 驳回计数递增
+// TestRejectCascading verifies that rejecting a node cascades back:
+// - Rejecting node 2 targeting node 1 → node 1 returns to pending, node 2 marked as rejected
+// - Reject count increments
 func TestRejectCascading(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -26,7 +26,7 @@ func TestRejectCascading(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 准备：项目、包含 3 个节点（code -> review -> deploy）的工作流
+	// Setup: project, workflow with 3 nodes (code -> review -> deploy)
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
@@ -39,24 +39,24 @@ func TestRejectCascading(t *testing.T) {
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
 
-	// 创建包含 3 个节点的任务
+	// Create a task with 3 nodes
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	if len(nodes) != 3 {
 		t.Fatalf("expected 3 nodes, got %d", len(nodes))
 	}
-	// 注意：跳过 deleteTask 清理，因为拒绝操作可能导致无法删除
+	// Note: skip deleteTask cleanup since rejection may prevent deletion
 
 	node1ID := nodes[0]["id"].(string)
 	node2ID := nodes[1]["id"].(string)
 
-	// Agent1 认领并批准节点 1（code）
+	// Agent1 claims and approves node 1 (code)
 	claimNode(t, client, srv.URL, taskID, node1ID, agentID, agentToken)
 	approveNode(t, client, srv.URL, taskID, node1ID, agentID, agentToken)
 
-	// Agent2 认领节点 2（review）——使用不同 Agent 以避免自我审查
+	// Agent2 claims node 2 (review) — using a different agent to avoid self-review
 	claimNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token)
 
-	// 拒绝 node 2 并指向 node 1
+	// Reject node 2 targeting node 1
 	status, rejectedNode := rejectNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token, &node1ID)
 	if status != 200 {
 		t.Fatalf("rejectNode: expected 200, got %d", status)
@@ -65,7 +65,7 @@ func TestRejectCascading(t *testing.T) {
 		t.Fatalf("node2: expected status 'rejected' after reject, got %v", rejectedNode["status"])
 	}
 
-	// 验证拒绝次数已递增
+	// Verify reject count has incremented
 	rejectCount, ok := rejectedNode["reject_count"].(float64)
 	if !ok {
 		t.Fatalf("node2: reject_count is not a number, got %v", rejectedNode["reject_count"])
@@ -75,7 +75,7 @@ func TestRejectCascading(t *testing.T) {
 	}
 	t.Logf("node2 reject_count: %v", rejectCount)
 
-	// 通过数据库查询验证节点 1 回到 in_progress
+	// Verify node 1 returns to in_progress via database query
 	q = dbQueries(t, db)
 	node1UUID := parseUUID(t, node1ID)
 	node1, err := q.GetTaskNode(t.Context(), node1UUID)
@@ -88,7 +88,7 @@ func TestRejectCascading(t *testing.T) {
 	t.Log("node1 is back to pending after reject targeting it (needs re-claim)")
 }
 
-// TestRejectToManualNode 验证驳回至人工/手动节点返回错误
+// TestRejectToManualNode verifies that rejecting to a manual/human node returns an error
 func TestRejectToManualNode(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -100,7 +100,7 @@ func TestRejectToManualNode(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 
-	// 创建第一个节点为 manual、第二个节点为 standard 的工作流
+	// Create a workflow with first node as manual, second node as standard
 	q = dbQueries(t, db)
 
 	wsUUID := parseUUID(t, wsID)
@@ -116,7 +116,7 @@ func TestRejectToManualNode(t *testing.T) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	// 创建 manual 类型的第一个节点
+	// Create the first node of manual type
 	_, err = q.CreateTemplateNode(t.Context(), dbgen.CreateTemplateNodeParams{
 		TemplateID:      tpl.ID,
 		Name:            "manual-review",
@@ -134,7 +134,7 @@ func TestRejectToManualNode(t *testing.T) {
 		t.Fatalf("create manual template node: %v", err)
 	}
 
-	// 创建 standard 类型的第二个节点
+	// Create the second node of standard type
 	_, err = q.CreateTemplateNode(t.Context(), dbgen.CreateTemplateNodeParams{
 		TemplateID:      tpl.ID,
 		Name:            "code",
@@ -152,7 +152,7 @@ func TestRejectToManualNode(t *testing.T) {
 		t.Fatalf("create standard template node: %v", err)
 	}
 
-	// 设置
+	// Setup
 	projUUID := parseUUID(t, projID)
 	_, _ = q.UpdateProject(t.Context(), dbgen.UpdateProjectParams{
 		ID:                projUUID,
@@ -169,7 +169,7 @@ func TestRejectToManualNode(t *testing.T) {
 	addAgentToProject(t, q, projID, agentID)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
-	// 创建任务
+	// Create task
 	taskID, nodes := createTask(t, client, srv.URL, projID, tpl.ID.String(), token)
 	defer deleteTask(t, client, srv.URL, projID, taskID, token)
 
@@ -180,11 +180,11 @@ func TestRejectToManualNode(t *testing.T) {
 	manualNodeID := nodes[0]["id"].(string)
 	codeNodeID := nodes[1]["id"].(string)
 
-	// 认领 code 节点
+	// Claim code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agentID, agentToken)
 
-	// 拒绝并指向 manual 节点——按设计规范应被拒绝
-	// （不能拒绝到 manual 或人工分配的节点）
+	// Reject targeting manual node — should be rejected by design
+	// (cannot reject to a manual or human-assigned node)
 	status, _ := rejectNode(t, client, srv.URL, taskID, codeNodeID, agentID, agentToken, &manualNodeID)
 	if status != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request when rejecting to manual node, got %d", status)

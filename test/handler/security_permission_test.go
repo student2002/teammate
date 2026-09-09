@@ -1,4 +1,4 @@
-// security_permission_test.go 覆盖权限安全相关的测试。
+// security_permission_test.go covers permission security related tests.
 package handler_test
 
 import (
@@ -11,7 +11,7 @@ import (
 	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
-// TestViewerCannotWriteWorkflow 验证只读角色的成员不能创建、更新或删除工作流模板。
+// TestViewerCannotWriteWorkflow verifies that members with read-only roles cannot create, update, or delete workflow templates.
 func TestViewerCannotWriteWorkflow(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -21,23 +21,23 @@ func TestViewerCannotWriteWorkflow(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建第二个用户并将其添加为工作区的只读成员
+	// Create a second user and add them as a read-only member of the workspace
 	viewerToken, _ := registerTestUser(t, client, srv.URL)
-	// 注：在测试设置中，第二个用户属于不同的工作区。
-	// 我们需要将其添加到同一工作区作为只读成员。
-	// 由于测试助手没有直接设置只读角色的方法，
-	// 我们将通过使用现有成员令牌来测试纵深防御，
-	// 并验证路由结构。
+	// Note: in the test setup, the second user belongs to a different workspace.
+	// We need to add them to the same workspace as a read-only member.
+	// Since the test helpers don't have a direct way to set read-only roles,
+	// we will test defense-in-depth by using an existing member token
+	// and verify the route structure.
 
-	// 测试：只读成员不能发起 POST 创建新工作流
-	// 由于当前助手无法在同一工作区中轻松创建只读成员，
-	// 因此我们测试写路由组与读路由组是分开的。
-	// 实际中间件强制执行在集成层面进行测试。
+	// Test: read-only members cannot initiate POST to create new workflows
+	// Since the current helpers cannot easily create read-only members in the same workspace,
+	// we test that the write route group is separated from the read route group.
+	// Actual middleware enforcement is tested at the integration level.
 
-	// 改为测试处理程序拒绝代理执行写操作
+	// Instead, test that the handler rejects agent write operations
 	_, agentToken := createAgent(t, client, srv.URL, wsID, token)
 
-	// 没有 task:approve 权限的代理不应能创建工作流
+	// Agent without task:approve permission should not be able to create workflows
 	body := map[string]interface{}{
 		"name":        "unauthorized-flow",
 		"description": "should fail",
@@ -55,11 +55,11 @@ func TestViewerCannotWriteWorkflow(t *testing.T) {
 		t.Errorf("agent without write permission: expected 403, got %d", status)
 	}
 
-	// 抑制未使用变量的警告
+	// Suppress unused variable warning
 	_ = viewerToken
 }
 
-// TestAgentCannotAccessNonMemberProjectGitCredentials 验证代理无法访问其未加入的项目的 Git 凭证。
+// TestAgentCannotAccessNonMemberProjectGitCredentials verifies that agents cannot access Git credentials for projects they are not members of.
 func TestAgentCannotAccessNonMemberProjectGitCredentials(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -69,16 +69,16 @@ func TestAgentCannotAccessNonMemberProjectGitCredentials(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建项目
+	// Create project
 	projID := createProject(t, client, srv.URL, wsID, token)
 
-	// 创建代理（未添加到项目）
+	// Create agent (not added to project)
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
-	// 授予 git:push 权限，但不将代理添加到项目
+	// Grant git:push permission but do not add agent to project
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "git:push", token)
 
-	// 代理尝试获取 Git 凭证——应失败（如果路由不在测试路由器中则返回 404，
-	// 如果路由存在且代理不是项目成员则返回 403）
+	// Agent attempts to get Git credentials — should fail (404 if route not in test router,
+	// 403 if route exists and agent is not a project member)
 	url := fmt.Sprintf("%s/api/projects/%s/git-credentials", srv.URL, projID)
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodGet, url, agentToken, nil)
 	if status != http.StatusForbidden && status != http.StatusNotFound {
@@ -86,7 +86,7 @@ func TestAgentCannotAccessNonMemberProjectGitCredentials(t *testing.T) {
 	}
 }
 
-// TestAgentCannotRegisterRuntimeForOtherAgent 验证代理不能为其他代理注册运行时。
+// TestAgentCannotRegisterRuntimeForOtherAgent verifies that an agent cannot register a runtime for another agent.
 func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -96,11 +96,11 @@ func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建两个代理
+	// Create two agents
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, _ := createAgent(t, client, srv.URL, wsID, token)
 
-	// Agent1 尝试为 Agent2 注册运行时
+	// Agent1 attempts to register a runtime for Agent2
 	body := map[string]interface{}{
 		"agent_id": agent2ID,
 		"provider": "claude",
@@ -113,7 +113,7 @@ func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
 		t.Errorf("agent registering runtime for other agent: expected 403, got %d", status)
 	}
 
-	// Agent1 可以为自己注册运行时
+	// Agent1 can register a runtime for itself
 	body2 := map[string]interface{}{
 		"agent_id": agent1ID,
 		"provider": "claude",
@@ -126,7 +126,7 @@ func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
 	}
 }
 
-// TestAgentCannotAccessOtherAgentRuntimeSSE 验证代理不能订阅其他代理的运行时 SSE 流。
+// TestAgentCannotAccessOtherAgentRuntimeSSE verifies that an agent cannot subscribe to another agent's runtime SSE stream.
 func TestAgentCannotAccessOtherAgentRuntimeSSE(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -136,14 +136,14 @@ func TestAgentCannotAccessOtherAgentRuntimeSSE(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建两个 Agent
+	// Create two agents
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	_, agent2Token := createAgent(t, client, srv.URL, wsID, token)
 
-	// Agent1 注册一个 runtime
+	// Agent1 registers a runtime
 	runtimeID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agent1ID, agent1Token)
 
-	// Agent2 尝试订阅 Agent1 的 runtime SSE
+	// Agent2 attempts to subscribe to Agent1's runtime SSE
 	url := fmt.Sprintf("%s/api/workspaces/%s/runtimes/%s/events", srv.URL, wsID, runtimeID)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -156,14 +156,14 @@ func TestAgentCannotAccessOtherAgentRuntimeSSE(t *testing.T) {
 		t.Fatalf("do request: %v", err)
 	}
 	defer resp.Body.Close()
-	// SSE 路由不在测试路由器中，因此我们期望 404
-	// 在生产环境中，SSE 处理器会对非 owner 的 Agent 返回 403
+	// SSE route is not in the test router, so we expect 404
+	// In production, the SSE handler would return 403 for non-owner agents
 	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusNotFound {
 		t.Errorf("agent subscribing to other agent runtime: expected 403/404, got %d", resp.StatusCode)
 	}
 }
 
-// TestMemoryAgentVerifiedEnforcement 验证代理不能创建 verified=true 的记忆。
+// TestMemoryAgentVerifiedEnforcement verifies that agents cannot create memories with verified=true.
 func TestMemoryAgentVerifiedEnforcement(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -175,11 +175,11 @@ func TestMemoryAgentVerifiedEnforcement(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
-	// 将 Agent 添加到项目并授予 memory:create
+	// Add agent to project and grant memory:create
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "memory:create", token)
 
-	// Agent 尝试创建 verified=true 的记忆
+	// Agent attempts to create memory with verified=true
 	body := map[string]interface{}{
 		"agent_id":     agentID,
 		"project_id":   projID,
@@ -198,13 +198,13 @@ func TestMemoryAgentVerifiedEnforcement(t *testing.T) {
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// verified 应被强制设为 false
+	// verified should be forced to false
 	if result["verified"] == true {
 		t.Errorf("agent should not be able to set verified=true, got verified=%v", result["verified"])
 	}
 }
 
-// TestMemoryAgentCannotSetVerified 验证代理在创建记忆时不能设置 verified=true。
+// TestMemoryAgentCannotSetVerified verifies that agents cannot set verified=true when creating memories.
 func TestMemoryAgentCannotSetVerified(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -217,7 +217,7 @@ func TestMemoryAgentCannotSetVerified(t *testing.T) {
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "memory:create", token)
 
-	// Agent 尝试创建 verified=true 的记忆
+	// Agent attempts to create memory with verified=true
 	body := map[string]interface{}{
 		"workspace_id": wsID,
 		"type":         "decision",
@@ -235,7 +235,7 @@ func TestMemoryAgentCannotSetVerified(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	// verified 应被强制设为 false
+	// verified should be forced to false
 	if result["verified"] == true {
 		t.Errorf("agent should not be able to set verified=true, got verified=%v", result["verified"])
 	}

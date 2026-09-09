@@ -1,4 +1,4 @@
-// workflow_trigger.go 实现工作流触发器运行记录的业务逻辑。
+// workflow_trigger.go implements the business logic for workflow trigger run records.
 package service
 
 import (
@@ -276,5 +276,5 @@ func firstNonEmpty(values ...string) string {
 			return value
 		}
 	}
-	return "工作流触发任务"
+	return "Workflow triggered task"
 }

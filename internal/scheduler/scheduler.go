@@ -1,16 +1,16 @@
-// scheduler.go 提供服务器端定时任务调度器，负责各类周期性维护任务的自动执行。
-// 调度器使用 Redis 分布式锁确保多实例部署时任务不重复执行。
+// scheduler.go provides the server-side scheduler, responsible for automatically running various periodic maintenance tasks.
+// The scheduler uses Redis distributed locks to ensure tasks are not executed redundantly across multiple instances.
 //
-// 包含的定时任务：
-//   - 心跳超时检测（15秒）：标记离线运行时，更新代理状态
-//   - 续接预留清理（30秒）：清除过期的节点续接预留
-//   - 认领超时释放（60分钟）：释放长时间无进展的 in_progress 节点
-//   - 节点超时处理（5分钟）：处理超出模板超时时间的节点
-//   - 离线回退（5分钟）：将离线代理持有的节点转为人工干预
-//   - 代理自动恢复（60秒）：将无任务的 busy 代理恢复为 online
-//   - 待认领节点重通知（30秒）：重新通知长时间未认领的 pending 节点
-//   - 低置信度记忆清理（每日3点）：删除超过30天的低置信度记忆
-//   - 旧工作区清理（每日4点）：识别超过7天的已完成任务供后续清理
+// Scheduled tasks:
+//   - Heartbeat-timeout detection (15s): marks offline runtimes and updates agent status
+//   - Continuation-reservation cleanup (30s): clears expired node continuation reservations
+//   - Claim-timeout release (60min): releases in_progress nodes with no progress for a long time
+//   - Node-timeout handling (5min): handles nodes that exceed the template timeout
+//   - Offline fallback (5min): moves nodes held by offline agents to manual intervention
+//   - Agent auto-recover (60s): recovers busy agents with no tasks back to online
+//   - Pending-node renotify (30s): re-notifies pending nodes that have gone unclaimed for a long time
+//   - Low-confidence memory GC (daily at 3:00): deletes low-confidence memories older than 30 days
+//   - Old-workspace cleanup (daily at 4:00): identifies completed tasks older than 7 days for later cleanup
 package scheduler
 
 import (
@@ -29,14 +29,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// EventPublisher 定义调度器所需的最小事件发布接口。
+// EventPublisher defines the minimal event-publishing interface required by the scheduler.
 type EventPublisher interface {
 	Publish(ctx context.Context, subscriberID string, event types.SSEEvent) error
 	BufferEvent(ctx context.Context, subscriberID string, event types.SSEEvent) error
 }
 
-// Scheduler 是服务器端定时任务调度器，负责管理各类周期性维护任务。
-// 使用 Redis 分布式锁确保多实例部署时同一任务不会被重复执行。
+// Scheduler is the server-side scheduler, responsible for managing various periodic maintenance tasks.
+// It uses Redis distributed locks to ensure the same task is not executed concurrently across instances.
 type Scheduler struct {
 	Store *store.Store
 	Hub   EventPublisher
@@ -44,22 +44,22 @@ type Scheduler struct {
 	Clock clock.Clock
 }
 
-// NewScheduler 创建一个新的调度器实例。
+// NewScheduler creates a new scheduler instance.
 //
-// 参数：
-//   - q: sqlc 生成的数据库查询实例
-//   - db: 数据库连接池，用于需要事务的操作
-//   - hub: SSE 事件发布器（ws.Hub 满足此接口）
-//   - rdb: Redis 客户端，用于分布式锁
+// Parameters:
+//   - q: the sqlc-generated database query instance
+//   - db: the database connection pool, used for operations that require a transaction
+//   - hub: the SSE event publisher (ws.Hub satisfies this interface)
+//   - rdb: the Redis client, used for distributed locks
 //
-// 返回：
-//   - *Scheduler: 初始化后的调度器实例，默认使用系统真实时间
+// Returns:
+//   - *Scheduler: the initialized scheduler instance, using real system time by default
 func NewScheduler(st *store.Store, hub EventPublisher, rdb *redis.Client) *Scheduler {
 	return &Scheduler{Store: st, Hub: hub, Redis: rdb, Clock: clock.RealClock{}}
 }
 
-// Start 启动所有定时任务并阻塞直到上下文取消。
-// 启动后会创建多个 goroutine 分别运行不同周期的任务。
+// Start launches all scheduled tasks and blocks until the context is canceled.
+// It spawns multiple goroutines to run tasks at different intervals.
 func (s *Scheduler) Start(ctx context.Context) {
 	slog.Info("scheduler started")
 
@@ -79,16 +79,16 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 // ---------------------------------------------------------------------------
-// 调度原语
+// Scheduling primitives
 // ---------------------------------------------------------------------------
 
-// runPeriodic 按固定间隔周期性执行任务，使用 Redis 分布式锁防止多实例并发。
+// runPeriodic runs a task at a fixed interval, using a Redis distributed lock to prevent concurrent execution across instances.
 //
-// 参数：
-//   - ctx: 上下文，用于取消任务
-//   - interval: 执行间隔
-//   - name: 任务名称，用于 Redis 锁键
-//   - fn: 要执行的任务函数
+// Parameters:
+//   - ctx: context, used to cancel the task
+//   - interval: the execution interval
+//   - name: the task name, used as the Redis lock key
+//   - fn: the task function to execute
 func (s *Scheduler) runPeriodic(ctx context.Context, interval time.Duration, name string, fn func(context.Context) error) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -102,14 +102,14 @@ func (s *Scheduler) runPeriodic(ctx context.Context, interval time.Duration, nam
 	}
 }
 
-// runDaily 在每天指定时间执行任务，适用于低频维护任务。
+// runDaily runs a task at a specified time every day, suitable for low-frequency maintenance tasks.
 //
-// 参数：
-//   - ctx: 上下文，用于取消任务
-//   - hour: 执行时间的小时（0-23）
-//   - minute: 执行时间的分钟（0-59）
-//   - name: 任务名称，用于 Redis 锁键
-//   - fn: 要执行的任务函数
+// Parameters:
+//   - ctx: context, used to cancel the task
+//   - hour: the hour of execution (0-23)
+//   - minute: the minute of execution (0-59)
+//   - name: the task name, used as the Redis lock key
+//   - fn: the task function to execute
 func (s *Scheduler) runDaily(ctx context.Context, hour, minute int, name string, fn func(context.Context) error) {
 	for {
 		now := time.Now()
@@ -128,24 +128,24 @@ func (s *Scheduler) runDaily(ctx context.Context, hour, minute int, name string,
 	}
 }
 
-// WithLock 使用 Redis 分布式锁执行任务，防止多实例并发执行同一任务。
-// 锁的 TTL 略大于任务间隔（+5秒），确保任务完成前锁不会过期。
+// WithLock executes a task under a Redis distributed lock, preventing concurrent execution of the same task across instances.
+// The lock TTL is slightly longer than the task interval (+5s) to ensure the lock does not expire before the task completes.
 //
-// 参数：
-//   - ctx: 上下文
-//   - name: 任务名称，作为 Redis 锁键的后缀
-//   - lockTTL: 锁的过期时间
-//   - fn: 要执行的任务函数
+// Parameters:
+//   - ctx: context
+//   - name: the task name, used as the suffix of the Redis lock key
+//   - lockTTL: the lock expiration time
+//   - fn: the task function to execute
 func (s *Scheduler) WithLock(ctx context.Context, name string, lockTTL time.Duration, fn func(context.Context) error) {
 	lockKey := fmt.Sprintf("scheduler:lock:%s", name)
-	// 使用 SETNX 获取锁，TTL 设为任务间隔+5秒，避免锁过期导致重复执行
+	// Acquire the lock with SETNX; set the TTL to the task interval + 5s to avoid duplicate execution caused by lock expiry
 	ok, err := s.Redis.SetNX(ctx, lockKey, "locked", lockTTL+5*time.Second).Result()
 	if err != nil {
 		slog.Error("redis setnx error", "task", name, "err", err)
 		return
 	}
 	if !ok {
-		return // 其他实例已持有锁
+		return // Another instance already holds the lock
 	}
 	defer s.Redis.Del(ctx, lockKey)
 
@@ -155,11 +155,11 @@ func (s *Scheduler) WithLock(ctx context.Context, name string, lockTTL time.Dura
 }
 
 // ---------------------------------------------------------------------------
-// 任务实现
+// Task implementations
 // ---------------------------------------------------------------------------
 
-// CheckHeartbeatTimeout 将过期的运行时标记为离线，并更新所有运行时离线的代理状态。
-// 每 15 秒执行一次，检测超过 100 秒未发送心跳的运行时。
+// CheckHeartbeatTimeout marks stale runtimes offline and updates the status of all agents whose runtimes are offline.
+// It runs every 15 seconds, detecting runtimes that have not sent a heartbeat in over 100 seconds.
 func (s *Scheduler) CheckHeartbeatTimeout(ctx context.Context) error {
 	staleRuntimes, err := s.Store.MarkStaleRuntimes(ctx, s.Clock.Now().Add(-100*time.Second))
 	if err != nil {
@@ -182,8 +182,8 @@ func (s *Scheduler) CheckHeartbeatTimeout(ctx context.Context) error {
 	return nil
 }
 
-// ClearExpiredReservations 清除续接节点上过期的预留。
-// 每 30 秒执行一次，释放超过 30 秒未认领的续接预留，允许其他代理认领。
+// ClearExpiredReservations clears expired reservations on continuation nodes.
+// It runs every 30 seconds, releasing continuation reservations unclaimed for over 30 seconds so other agents can claim them.
 func (s *Scheduler) ClearExpiredReservations(ctx context.Context) error {
 	clearedReservations, err := s.Store.ClearExpiredReservations(ctx, s.Clock.Now().Add(-30*time.Second))
 	if err != nil {
@@ -196,9 +196,9 @@ func (s *Scheduler) ClearExpiredReservations(ctx context.Context) error {
 	return nil
 }
 
-// ReleaseClaimTimeoutNodes 释放认领超时的节点（in_progress 超过 30 分钟无进展），
-// 将其设为 manual_intervention 并向原始代理发送中断事件。
-// 每 60 秒执行一次。
+// ReleaseClaimTimeoutNodes releases nodes that have exceeded the claim timeout (in_progress with no progress for 30 minutes),
+// setting them to manual_intervention and sending an interrupt event to the original agent.
+// It runs every 60 seconds.
 func (s *Scheduler) ReleaseClaimTimeoutNodes(ctx context.Context) error {
 	releasedNodes, err := s.Store.ReleaseClaimTimeoutNodes(ctx, s.Clock.Now().Add(-30*time.Minute))
 	if err != nil {
@@ -208,14 +208,14 @@ func (s *Scheduler) ReleaseClaimTimeoutNodes(ctx context.Context) error {
 	if len(releasedNodes) > 0 {
 		slog.Info("claim timeout nodes detected", "count", len(releasedNodes))
 		for _, node := range releasedNodes {
-			// 向原始代理发送中断事件（SQL 保留了 assignee_id）
+			// Send an interrupt event to the original agent (the SQL retains the assignee_id)
 			if node.AssigneeID != nil {
 				assigneeUUID, _ := uuid.Parse(*node.AssigneeID)
 				nodeUUID, _ := uuid.Parse(node.ID)
 				s.publishNodeTimeout(ctx, nodeUUID, assigneeUUID)
 			}
 
-			// 创建状态转换记录
+			// Create a state-transition record
 			_, _ = s.Store.CreateNodeTransition(ctx, types.CreateNodeTransitionParams{
 				TaskNodeID:   node.ID,
 				FromStatus:   types.TaskNodeStatusInProgress,
@@ -228,8 +228,8 @@ func (s *Scheduler) ReleaseClaimTimeoutNodes(ctx context.Context) error {
 	return nil
 }
 
-// CheckNodeTimeout 处理超出模板 timeout_minutes 的节点，将其设为 manual_intervention。
-// 每 5 分钟执行一次，每个节点使用事务确保状态变更和过渡记录的原子性。
+// CheckNodeTimeout handles nodes that exceed the template timeout_minutes, setting them to manual_intervention.
+// It runs every 5 minutes; each node uses a transaction to ensure the atomicity of the status change and the transition record.
 func (s *Scheduler) CheckNodeTimeout(ctx context.Context) error {
 	timedOutNodes, err := s.Store.GetTimedOutNodes(ctx, s.Clock.Now())
 	if err != nil {
@@ -256,9 +256,9 @@ func (s *Scheduler) CheckNodeTimeout(ctx context.Context) error {
 	return nil
 }
 
-// OfflineAgentFallback 将离线超过 1 小时的代理所持有的 in_progress 节点
-// 移至 manual_intervention，确保离线代理不会永久阻塞任务流转。
-// 每 5 分钟执行一次。
+// OfflineAgentFallback moves in_progress nodes held by agents that have been offline for over 1 hour
+// to manual_intervention, ensuring offline agents do not permanently block task flow.
+// It runs every 5 minutes.
 func (s *Scheduler) OfflineAgentFallback(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-1 * time.Hour)
 	affectedNodes, err := s.Store.OfflineAgentFallback(ctx, cutoff)
@@ -272,9 +272,9 @@ func (s *Scheduler) OfflineAgentFallback(ctx context.Context) error {
 	return nil
 }
 
-// AgentAutoRecoverOnline 将没有 in_progress 节点且状态为 "busy" 的代理
-// 恢复为 "online"，防止代理在所有节点完成后卡在 "busy" 状态。
-// 每 60 秒执行一次。
+// AgentAutoRecoverOnline recovers agents with no in_progress nodes and a "busy" status
+// back to "online", preventing agents from being stuck in "busy" after all nodes complete.
+// It runs every 60 seconds.
 func (s *Scheduler) AgentAutoRecoverOnline(ctx context.Context) error {
 	n, err := s.Store.AutoRecoverIdleAgents(ctx)
 	if err != nil {
@@ -287,8 +287,8 @@ func (s *Scheduler) AgentAutoRecoverOnline(ctx context.Context) error {
 	return nil
 }
 
-// lowConfidenceMemoryGC 删除置信度低于 0.1、未验证且超过 30 天的记忆。
-// 每日凌晨 3 点执行，清理低质量记忆以节省存储空间。
+// lowConfidenceMemoryGC deletes memories with confidence below 0.1, unverified, and older than 30 days.
+// It runs daily at 3:00 AM, cleaning low-quality memories to save storage space.
 func (s *Scheduler) lowConfidenceMemoryGC(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-30 * 24 * time.Hour)
 	n, err := s.Store.DeleteLowConfidenceMemories(ctx, cutoff)
@@ -302,9 +302,9 @@ func (s *Scheduler) lowConfidenceMemoryGC(ctx context.Context) error {
 	return nil
 }
 
-// RenotifyPendingNodes 扫描长时间未认领的 pending 节点，重新向其项目成员 Agent 发布 node:pending 事件。
-// 每 30 秒执行一次，补偿因运行时不在线而丢失的 SSE 事件。
-// 按项目粒度投递：只通知项目成员 Agent（与 service.publishToProject 语义一致）。
+// RenotifyPendingNodes scans pending nodes that have gone unclaimed for a long time and re-publishes node:pending events to their project-member agents.
+// It runs every 30 seconds, compensating for SSE events lost while runtimes were offline.
+// Delivery is at the project granularity: only project-member agents are notified (consistent with service.publishToProject semantics).
 func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-30 * time.Second)
 	projectIDs, err := s.Store.ListPendingRenotifyProjectIDs(ctx, cutoff)
@@ -352,7 +352,7 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 			}
 		}
 
-		// 无在线成员运行时：缓冲到成员 Agent 的所有运行时（含离线），恢复后回放
+		// No online member runtimes: buffer to all runtimes of the member agents (including offline ones) for replay upon reconnection
 		if !onlineSent {
 			for _, m := range members {
 				if m.MemberType != "agent" || m.AgentID == nil {
@@ -381,9 +381,9 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 	return nil
 }
 
-// CleanupOldWorkspaces 识别超过 7 天的已完成/已取消任务，
-// 记录为清理候选。实际文件清理由 CLI 命令或代理接收清理事件执行。
-// 每日凌晨 4 点执行，分批查询（每批 500 条）避免内存占用过高。
+// CleanupOldWorkspaces identifies completed/cancelled tasks older than 7 days
+// and records them as cleanup candidates. The actual file cleanup is performed by the CLI command or by the agent upon receiving a cleanup event.
+// It runs daily at 4:00 AM, querying in batches (500 per batch) to keep memory usage low.
 func (s *Scheduler) ProcessWorkflowTriggers(ctx context.Context) error {
 	svc := &service.Service{
 		Store: s.Store,
@@ -421,7 +421,7 @@ func (s *Scheduler) CleanupOldWorkspaces(ctx context.Context) error {
 		return nil
 	}
 
-	// 按工作区分组记录日志
+	// Log grouped by workspace
 	byWorkspace := make(map[uuid.UUID][]types.GetCompletedTasksOlderThanRow)
 	for _, r := range allCandidates {
 		wsUUID, _ := uuid.Parse(r.WorkspaceID)
@@ -449,15 +449,15 @@ func (s *Scheduler) CleanupOldWorkspaces(ctx context.Context) error {
 }
 
 // ---------------------------------------------------------------------------
-// 辅助函数
+// Helpers
 // ---------------------------------------------------------------------------
 
-// publishNodeTimeout 向指定代理发送节点超时的 SSE 事件。
+// publishNodeTimeout sends a node-timeout SSE event to the specified agent.
 //
-// 参数：
-//   - ctx: 上下文
-//   - nodeID: 超时的节点 ID
-//   - agentID: 节点代理的 ID
+// Parameters:
+//   - ctx: context
+//   - nodeID: the ID of the timed-out node
+//   - agentID: the ID of the node's agent
 func (s *Scheduler) publishNodeTimeout(ctx context.Context, nodeID, agentID uuid.UUID) {
 	rt, err := s.Store.GetRuntimeByAgent(ctx, agentID)
 	if err != nil {

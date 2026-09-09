@@ -1,4 +1,4 @@
-// service_test.go 覆盖 Service 层基础逻辑的测试。
+// service_test.go covers tests for Service layer core logic.
 package service_test
 
 import (
@@ -19,17 +19,17 @@ import (
 	"github.com/teammate/server/test/testdb"
 )
 
-// strPtr 返回字符串指针，用于 types 领域结构体中 *string 字段。
+// strPtr returns a string pointer, used for *string fields in types domain structs.
 func strPtr(s string) *string {
 	return &s
 }
 
-// int32Ptr 返回 int32 指针，用于 types 领域结构体中 *int32 字段。
+// int32Ptr returns an int32 pointer, used for *int32 fields in types domain structs.
 func int32Ptr(i int32) *int32 {
 	return &i
 }
 
-// TestMain 设置测试数据库。
+// TestMain sets up the test database.
 func TestMain(m *testing.M) {
 	if _, err := testdb.SetupTestDB(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to setup test database: %v\n", err)
@@ -39,12 +39,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// svcGetTestDSN 返回服务测试用的数据库连接字符串。
+// svcGetTestDSN returns the database connection string for service tests.
 func svcGetTestDSN() string {
 	return testdb.GetTestDSN()
 }
 
-// svcConnectTestDB 连接测试数据库并返回连接实例。
+// svcConnectTestDB connects to the test database and returns the connection.
 func svcConnectTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	testDB, err := sql.Open("pgx", svcGetTestDSN())
@@ -58,8 +58,8 @@ func svcConnectTestDB(t *testing.T) *sql.DB {
 	return testDB
 }
 
-// setupServiceTest 创建完整的测试环境：工作区、项目、工作流、代理和任务。
-// 返回服务实例、数据库连接和所有测试引用的 ID。
+// setupServiceTest creates a complete test environment: workspace, project, workflow, agents, and task.
+// Returns the service instance, database connection, and all test-referenced IDs.
 func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 	t.Helper()
 	pgDB := svcConnectTestDB(t)
@@ -67,7 +67,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 	svc := service.New(pgDB, nil, nil)
 	ctx := context.Background()
 
-	// 创建工作区
+	// Create workspace
 	ws, err := svc.Store.CreateWorkspace(ctx, types.CreateWorkspaceParams{
 		Name:        "svc-test-" + uuid.New().String()[:8],
 		Description: strPtr("service test"),
@@ -80,7 +80,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		_ = testdb.DeleteWorkspace(pgDB, ws.ID)
 	})
 
-	// 创建用于权限授权的成员
+	// Create a member for granting permissions
 	member, err := svc.Store.CreateMember(ctx, types.CreateMemberParams{
 		Name:  "test-granter",
 		Email: "granter-" + uuid.New().String()[:8] + "@test.local",
@@ -92,7 +92,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		_ = testdb.DeleteMember(pgDB, member.ID)
 	})
 
-	// 以管理员角色添加成员到工作区
+	// Add member to workspace as admin
 	_, err = svc.Store.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
 		WorkspaceID: ws.ID,
 		MemberID:    member.ID,
@@ -102,7 +102,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("create workspace member: %v", err)
 	}
 
-	// 创建项目
+	// Create project
 	proj, err := svc.Store.CreateProject(ctx, types.CreateProjectParams{
 		WorkspaceID: ws.ID,
 		Name:        "proj-" + uuid.New().String()[:8],
@@ -113,7 +113,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	// 创建包含3个节点的工作流模板：code(标准) -> review(审核) -> deploy(标准)
+	// Create workflow template with 3 nodes: code (standard) -> review (review) -> deploy (standard)
 	tpl, templateNodes, err := svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: ws.ID,
 		Name:        "flow-" + uuid.New().String()[:8],
@@ -127,7 +127,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	// 设置项目默认工作流
+	// Set project default workflow
 	_, err = svc.Store.UpdateProject(ctx, types.UpdateProjectParams{
 		ID:                proj.ID,
 		Name:              proj.Name,
@@ -139,7 +139,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("update project workflow: %v", err)
 	}
 
-	// 创建代理
+	// Create agents
 	agent1, _, err := svc.Store.CreateAgent(ctx, types.CreateAgentParams{
 		WorkspaceID:  ws.ID,
 		Name:         "agent1-" + uuid.New().String()[:8],
@@ -168,7 +168,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("create agent2: %v", err)
 	}
 
-	// 添加代理到项目并授予权限
+	// Add agents to project and grant permissions
 	for _, aid := range []string{agent1.ID, agent2.ID} {
 		_, err = svc.Store.CreateProjectMember(ctx, types.CreateProjectMemberParams{
 			ProjectID:  proj.ID,
@@ -179,11 +179,11 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		if err != nil {
 			t.Fatalf("add agent to project: %v", err)
 		}
-		// 授予默认权限（task:claim、task:execute、task:comment、memory:read）
+		// Grant default permissions (task:claim, task:execute, task:comment, memory:read)
 		if err := svc.Store.GrantDefaultPermissions(ctx, uuid.MustParse(aid), uuid.MustParse(member.ID)); err != nil {
 			t.Fatalf("grant default permissions for agent %s: %v", aid, err)
 		}
-		// 同时授予 task:approve 和 task:reject 权限（默认拒绝，但测试中需要）
+		// Also grant task:approve and task:reject permissions (denied by default, but needed in tests)
 		for _, perm := range []string{"task:approve", "task:reject"} {
 			_, err = svc.Store.GrantAgentPermission(ctx, uuid.MustParse(aid), perm, "*", nil, uuid.MustParse(member.ID))
 			if err != nil {
@@ -192,7 +192,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		}
 	}
 
-	// 使用 Store.CreateTask 创建任务（同时创建任务节点）
+	// Create task using Store.CreateTask (also creates task nodes)
 	task, taskNodes, err := svc.Store.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:    proj.ID,
 		WorkflowName: tpl.Name,
@@ -203,7 +203,7 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		Status:       "active",
 		AuthorType:   "agent",
 		AuthorID:     agent1.ID,
-		Sequence:     0, // 将由 Store.CreateTask 设置为 task.ID
+		Sequence:     0, // Will be set to task.ID by Store.CreateTask
 	}, templateNodes)
 	if err != nil {
 		t.Fatalf("create task: %v", err)
@@ -234,16 +234,16 @@ type testEnv struct {
 	taskNodes   []types.TaskNode
 }
 
-// ---------- 服务层测试 ----------
+// ---------- Service layer tests ----------
 
-// TestOptimisticLockClaimVersionConflict 验证两个代理同时认领同一节点只有一个能成功。
+// TestOptimisticLockClaimVersionConflict verifies that when two agents concurrently claim the same node, only one succeeds.
 func TestOptimisticLockClaimVersionConflict(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
 	nodeID := env.taskNodes[0].ID
 
-	// 代理1成功认领
+	// Agent1 claims successfully
 	result, err := service.NewNodeService(svc).Claim(ctx, uuid.MustParse(nodeID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("agent1 claim should succeed: %v", err)
@@ -252,7 +252,7 @@ func TestOptimisticLockClaimVersionConflict(t *testing.T) {
 		t.Fatalf("expected in_progress, got %s", result.Node.Status)
 	}
 
-	// 代理2尝试认领同一节点——应失败（版本冲突）
+	// Agent2 attempts to claim the same node — should fail (version conflict)
 	_, err = service.NewNodeService(svc).Claim(ctx, uuid.MustParse(nodeID), uuid.MustParse(env.agent2ID), "agent")
 	if err == nil {
 		t.Fatal("agent2 claim should fail with version conflict, but succeeded")
@@ -260,7 +260,7 @@ func TestOptimisticLockClaimVersionConflict(t *testing.T) {
 	t.Logf("agent2 claim correctly failed: %v", err)
 }
 
-// TestOptimisticLockVersionIncrementOnClaim 验证设计文档 §10.1：认领成功后 version 必须 +1。
+// TestOptimisticLockVersionIncrementOnClaim verifies design doc §10.1: version must increment by +1 after a successful claim.
 func TestOptimisticLockVersionIncrementOnClaim(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -277,7 +277,7 @@ func TestOptimisticLockVersionIncrementOnClaim(t *testing.T) {
 		t.Fatalf("claim should succeed: %v", err)
 	}
 
-	// 认领后内存返回值与落库值都应 version+1
+	// Both the in-memory return value and persisted value should have version+1 after claim
 	if result.Node.Version != versionBefore+1 {
 		t.Fatalf("returned version: expected %d, got %d", versionBefore+1, result.Node.Version)
 	}
@@ -292,7 +292,7 @@ func TestOptimisticLockVersionIncrementOnClaim(t *testing.T) {
 	t.Logf("claim incremented version %d -> %d", versionBefore, got.Version)
 }
 
-// TestOptimisticLockVersionIncrementOnApprove 验证设计文档 §10.1/§5.1：审批通过后当前节点 version +1。
+// TestOptimisticLockVersionIncrementOnApprove verifies design doc §10.1/§5.1: the current node's version increments by +1 after approval.
 func TestOptimisticLockVersionIncrementOnApprove(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -300,7 +300,7 @@ func TestOptimisticLockVersionIncrementOnApprove(t *testing.T) {
 
 	node1ID := env.taskNodes[0].ID
 
-	// 认领节点1
+	// Claim node1
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -311,7 +311,7 @@ func TestOptimisticLockVersionIncrementOnApprove(t *testing.T) {
 	}
 	versionBefore := before.Version
 
-	// 审批通过
+	// Approve
 	result, err := nodeSvc.Approve(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent", "done")
 	if err != nil {
 		t.Fatalf("approve node1: %v", err)
@@ -333,19 +333,19 @@ func TestOptimisticLockVersionIncrementOnApprove(t *testing.T) {
 	t.Logf("approve incremented version %d -> %d (status=completed)", versionBefore, got.Version)
 }
 
-// TestConcurrentClaim 使用 goroutine 模拟同一节点的并发认领，只有一个应成功。
+// TestConcurrentClaim uses goroutines to simulate concurrent claims on the same node; only one should succeed.
 func TestConcurrentClaim(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// 使用第一个待处理节点
+	// Use the first pending node
 	nodeID := env.taskNodes[0].ID
 
 	var successCount int32
 	var failCount int32
 	var wg sync.WaitGroup
 
-	// 启动10个goroutine并发认领同一节点
+	// Launch 10 goroutines to concurrently claim the same node
 	numGoroutines := 10
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
@@ -366,14 +366,14 @@ func TestConcurrentClaim(t *testing.T) {
 
 	wg.Wait()
 
-	// 至少有一个认领必须成功，且节点只能由单个 Agent 认领。
-	// 由于重复认领具有幂等性，同一 Agent 可能会多次成功，
-	// 但节点只能被一个 Agent 认领。
+	// At least one claim must succeed, and the node can only be claimed by a single Agent.
+	// Since repeated claims are idempotent, the same Agent may succeed multiple times,
+	// but the node can only be claimed by one Agent.
 	if successCount < 1 {
 		t.Fatalf("expected at least 1 successful claim, got %d (failures: %d)", successCount, failCount)
 	}
 
-	// 验证节点只被一个代理认领
+	// Verify the node is only claimed by one agent
 	claimedNode, err := svc.Store.GetTaskNode(ctx, uuid.MustParse(nodeID))
 	if err != nil {
 		t.Fatalf("get claimed node: %v", err)
@@ -385,7 +385,7 @@ func TestConcurrentClaim(t *testing.T) {
 		t.Fatal("expected node to have an assignee")
 	}
 
-	// 验证两个代理中只有一个持有认领
+	// Verify only one of the two agents holds the claim
 	assigneeIsAgent1 := *claimedNode.AssigneeID == env.agent1ID
 	assigneeIsAgent2 := *claimedNode.AssigneeID == env.agent2ID
 	if !assigneeIsAgent1 && !assigneeIsAgent2 {
@@ -393,7 +393,7 @@ func TestConcurrentClaim(t *testing.T) {
 	}
 }
 
-// TestNodeRejectCascadingIntermediateReset 验证驳回节点会将中间节点重置为 pending。
+// TestNodeRejectCascadingIntermediateReset verifies that rejecting a node resets intermediate nodes to pending.
 func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -402,7 +402,7 @@ func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 	node1ID := env.taskNodes[0].ID // code
 	node2ID := env.taskNodes[1].ID // review
 
-	// 代理1认领并审批节点1（code）
+	// Agent1 claims and approves node1 (code)
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -412,20 +412,20 @@ func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 		t.Fatalf("approve node1: %v", err)
 	}
 
-	// 代理2认领节点2（review）——不同代理以避免自审
+	// Agent2 claims node2 (review) — different agent to avoid self-review
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent2ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node2: %v", err)
 	}
 
-	// 驳回节点2，目标节点1（回退到code）
+	// Reject node2 targeting node1 (rollback to code)
 	targetNodeID := uuid.MustParse(node1ID)
 	_, err = nodeSvc.Reject(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent2ID), "agent", &targetNodeID, "needs rework")
 	if err != nil {
 		t.Fatalf("reject node2: %v", err)
 	}
 
-	// 验证节点1回到待处理（审批人已清除，reserved_for_agent_id已设置）
+	// Verify node1 is back to pending (assignee cleared, reserved_for_agent_id set)
 	node1, err := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node1ID))
 	if err != nil {
 		t.Fatalf("get node1: %v", err)
@@ -434,7 +434,7 @@ func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 		t.Fatalf("node1: expected pending after reject, got %s", node1.Status)
 	}
 
-	// 验证节点2已驳回
+	// Verify node2 is rejected
 	node2, err := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node2ID))
 	if err != nil {
 		t.Fatalf("get node2: %v", err)
@@ -443,7 +443,7 @@ func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 		t.Fatalf("node2: expected rejected, got %s", node2.Status)
 	}
 
-	// 验证节点1的reject_count已增加
+	// Verify node1's reject_count has been incremented
 	if node1.RejectCount < 1 {
 		t.Fatalf("node1: expected reject_count >= 1, got %d", node1.RejectCount)
 	}
@@ -451,13 +451,13 @@ func TestNodeRejectCascadingIntermediateReset(t *testing.T) {
 		node1.Status, node1.RejectCount, node2.Status)
 }
 
-// TestMaxRejectCycleCircuitBreaker 验证当 reject_count >= max_review_cycles 时目标节点升级为 manual_intervention。
+// TestMaxRejectCycleCircuitBreaker verifies that when reject_count >= max_review_cycles, the target node is escalated to manual_intervention.
 func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 	nodeSvc := service.NewNodeService(svc)
 
-	// 更新项目max_review_cycles为2，以便CreateTask将其传播到任务节点
+	// Update project max_review_cycles to 2 so that CreateTask propagates it to task nodes
 	maxCycles := int32(2)
 	desc := "test"
 	_, err := env.svc.Store.UpdateProject(ctx, types.UpdateProjectParams{
@@ -471,7 +471,7 @@ func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 		t.Fatalf("update project: %v", err)
 	}
 
-	// 创建新任务，使CreateTask将项目的max_review_cycles传播到任务节点
+	// Create a new task so that CreateTask propagates the project's max_review_cycles to task nodes
 	tpl, tplNodes, err := env.svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
 		Name:        "flow-circuit-" + uuid.New().String()[:8],
@@ -505,7 +505,7 @@ func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 	node2ID := taskNodes[1].ID // review
 	targetNodeID := uuid.MustParse(node1ID)
 
-	// 第1周期：认领->审批节点1->认领节点2->驳回目标节点1
+	// Cycle 1: claim -> approve node1 -> claim node2 -> reject targeting node1
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("cycle1 claim node1: %v", err)
@@ -523,14 +523,14 @@ func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 		t.Fatalf("cycle1 reject: %v", err)
 	}
 
-	// 验证节点1的reject_count = 1
+	// Verify node1's reject_count = 1
 	node1, _ := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node1ID))
 	if node1.RejectCount != 1 {
 		t.Fatalf("expected reject_count 1 after first reject, got %d", node1.RejectCount)
 	}
 
-	// 第2周期：认领节点1（驳回后回到待处理）->审批->认领节点2->驳回目标节点1
-	// 注意：驳回后，节点1处于待处理状态并带有reserved_for_agent_id，需要重新认领
+	// Cycle 2: claim node1 (back to pending after reject) -> approve -> claim node2 -> reject targeting node1
+	// Note: after reject, node1 is in pending state with reserved_for_agent_id and needs to be re-claimed
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("cycle2 claim node1: %v", err)
@@ -548,7 +548,7 @@ func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 		t.Fatalf("cycle2 reject: %v", err)
 	}
 
-	// 现在 node1 应处于 manual_intervention（reject_count >= max_review_cycles=2）
+	// Now node1 should be in manual_intervention (reject_count >= max_review_cycles=2)
 	node1, _ = env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node1ID))
 	if node1.Status != "manual_intervention" {
 		t.Fatalf("expected manual_intervention after max cycles, got %s", node1.Status)
@@ -556,13 +556,13 @@ func TestMaxRejectCycleCircuitBreaker(t *testing.T) {
 	t.Logf("circuit breaker: node1 status=%s, reject_count=%d — correct", node1.Status, node1.RejectCount)
 }
 
-// TestContinuationRightConflict 验证当节点有延续权时其他代理认领会收到冲突错误。
+// TestContinuationRightConflict verifies that when a node has a continuation right, other agents get a conflict error when claiming.
 func TestContinuationRightConflict(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 	nodeSvc := service.NewNodeService(svc)
 
-	// 创建所有节点均为 standard 的工作流（因此会设置续行权）
+	// Create a workflow where all nodes are standard (so continuation rights will be set)
 	tpl, tplNodes, err := env.svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
 		Name:        "flow-continuation-" + uuid.New().String()[:8],
@@ -575,7 +575,7 @@ func TestContinuationRightConflict(t *testing.T) {
 		t.Fatalf("create template: %v", err)
 	}
 
-	// 使用此模板通过 Store.CreateTask 创建任务
+	// Create a task from this template using Store.CreateTask
 	_, taskNodes, err := svc.Store.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:    env.projectID,
 		WorkflowName: tpl.Name,
@@ -586,13 +586,13 @@ func TestContinuationRightConflict(t *testing.T) {
 		Status:       "active",
 		AuthorType:   "agent",
 		AuthorID:     env.agent1ID,
-		Sequence:     0, // 将由 Store.CreateTask 设置为 task.ID
+		Sequence:     0, // Will be set to task.ID by Store.CreateTask
 	}, tplNodes)
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
 
-	// Agent1 认领并批准 node1
+	// Agent1 claims and approves node1
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(taskNodes[0].ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -602,7 +602,7 @@ func TestContinuationRightConflict(t *testing.T) {
 		t.Fatalf("approve node1: %v", err)
 	}
 
-	// 批准后，node2 的 reserved_for_agent_id 应为 agent1（续行权）
+	// After approval, node2's reserved_for_agent_id should be agent1 (continuation right)
 	node2, err := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(taskNodes[1].ID))
 	if err != nil {
 		t.Fatalf("get node2: %v", err)
@@ -611,7 +611,7 @@ func TestContinuationRightConflict(t *testing.T) {
 		t.Fatalf("expected reserved_for_agent_id = agent1, got %v", node2.ReservedForAgentID)
 	}
 
-	// Agent2 尝试认领 node2——应发生冲突（续行权）
+	// Agent2 attempts to claim node2 — should conflict (continuation right)
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(taskNodes[1].ID), uuid.MustParse(env.agent2ID), "agent")
 	if err == nil {
 		t.Fatal("agent2 should be blocked by continuation right, but claim succeeded")
@@ -619,7 +619,7 @@ func TestContinuationRightConflict(t *testing.T) {
 	t.Logf("continuation right conflict correctly blocked: %v", err)
 }
 
-// TestSelfReviewAvoidance 验证完成前一个标准节点的代理不能认领审核节点。
+// TestSelfReviewAvoidance verifies that an agent who completed a previous standard node cannot claim a review node.
 func TestSelfReviewAvoidance(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -628,7 +628,7 @@ func TestSelfReviewAvoidance(t *testing.T) {
 	node1ID := env.taskNodes[0].ID // code (standard)
 	node2ID := env.taskNodes[1].ID // review
 
-	// Agent1 认领并批准 code 节点
+	// Agent1 claims and approves the code node
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -638,27 +638,27 @@ func TestSelfReviewAvoidance(t *testing.T) {
 		t.Fatalf("approve node1: %v", err)
 	}
 
-	// 同一 Agent 尝试认领 review 节点——应失败（自我审查）
+	// Same Agent attempts to claim the review node — should fail (self-review)
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent1ID), "agent")
 	if err == nil {
 		t.Fatal("self-review should be blocked, but claim succeeded")
 	}
 	t.Logf("self-review correctly blocked: %v", err)
 
-	// 不同 Agent 应该能够认领 review 节点
+	// A different Agent should be able to claim the review node
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent2ID), "agent")
 	if err != nil {
 		t.Fatalf("agent2 should be able to claim review node: %v", err)
 	}
 }
 
-// TestSkipClaimReleasesContinuationRight 验证 SkipClaim 清除 reserved_for_agent_id 使其他代理可认领。
+// TestSkipClaimReleasesContinuationRight verifies that SkipClaim clears reserved_for_agent_id, allowing other agents to claim.
 func TestSkipClaimReleasesContinuationRight(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 	nodeSvc := service.NewNodeService(svc)
 
-	// 创建包含 2 个 standard 节点的工作流以测试续行权
+	// Create a workflow with 2 standard nodes to test continuation rights
 	tpl, tplNodes, err := env.svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
 		Name:        "flow-skip-" + uuid.New().String()[:8],
@@ -681,13 +681,13 @@ func TestSkipClaimReleasesContinuationRight(t *testing.T) {
 		Status:       "active",
 		AuthorType:   "agent",
 		AuthorID:     env.agent1ID,
-		Sequence:     0, // 将由 Store.CreateTask 设置为 task.ID
+		Sequence:     0, // Will be set to task.ID by Store.CreateTask
 	}, tplNodes)
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
 
-	// Agent1 认领并批准 node1
+	// Agent1 claims and approves node1
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(taskNodes[0].ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -697,19 +697,19 @@ func TestSkipClaimReleasesContinuationRight(t *testing.T) {
 		t.Fatalf("approve node1: %v", err)
 	}
 
-	// 验证 node2 具有续行权
+	// Verify node2 has a continuation right
 	node2, _ := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(taskNodes[1].ID))
 	if node2.ReservedForAgentID == nil || *node2.ReservedForAgentID != env.agent1ID {
 		t.Fatalf("expected continuation right for agent1, got %v", node2.ReservedForAgentID)
 	}
 
-	// Agent1 跳过认领
+	// Agent1 skips claim
 	err = nodeSvc.SkipClaim(ctx, uuid.MustParse(taskNodes[1].ID), uuid.MustParse(env.agent1ID))
 	if err != nil {
 		t.Fatalf("skip claim: %v", err)
 	}
 
-	// 现在 agent2 应该能够认领 node2
+	// Now agent2 should be able to claim node2
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(taskNodes[1].ID), uuid.MustParse(env.agent2ID), "agent")
 	if err != nil {
 		t.Fatalf("agent2 should claim after skip: %v", err)
@@ -717,7 +717,7 @@ func TestSkipClaimReleasesContinuationRight(t *testing.T) {
 	t.Log("skip-claim correctly released continuation right")
 }
 
-// TestManualInterventionAndResolve 验证手工干预流程：节点进入 manual_intervention 后解决回到 pending。
+// TestManualInterventionAndResolve verifies the manual intervention flow: a node enters manual_intervention and is resolved back to pending.
 func TestManualInterventionAndResolve(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -725,13 +725,13 @@ func TestManualInterventionAndResolve(t *testing.T) {
 
 	node1ID := env.taskNodes[0].ID
 
-	// 先认领该节点
+	// First, claim the node
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
 	}
 
-	// 设置为 manual_intervention
+	// Set to manual_intervention
 	node, err := nodeSvc.ManualIntervention(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "system", "stuck")
 	if err != nil {
 		t.Fatalf("manual intervention: %v", err)
@@ -740,7 +740,7 @@ func TestManualInterventionAndResolve(t *testing.T) {
 		t.Fatalf("expected manual_intervention, got %s", node.Status)
 	}
 
-	// 重新解析为 pending（以便 Agent 可以重新认领）
+	// Resolve back to pending (so the Agent can re-claim)
 	node, err = nodeSvc.Resolve(ctx, uuid.MustParse(node1ID), uuid.New(), "member", "resolved", nil, service.ResolveActionReExecute)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -751,7 +751,7 @@ func TestManualInterventionAndResolve(t *testing.T) {
 	t.Log("manual_intervention -> resolve flow works correctly")
 }
 
-// TestInterruptTask 验证中断任务会将所有 in_progress 节点设置为 manual_intervention。
+// TestInterruptTask verifies that interrupting a task sets all in_progress nodes to manual_intervention.
 func TestInterruptTask(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -759,13 +759,13 @@ func TestInterruptTask(t *testing.T) {
 
 	node1ID := env.taskNodes[0].ID
 
-	// 认领 node1（使其变为 in_progress）
+	// Claim node1 (set it to in_progress)
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
 	}
 
-	// 中断任务
+	// Interrupt task
 	result, err := nodeSvc.InterruptTask(ctx, env.taskID, uuid.New(), "member", "emergency stop")
 	if err != nil {
 		t.Fatalf("interrupt task: %v", err)
@@ -774,7 +774,7 @@ func TestInterruptTask(t *testing.T) {
 		t.Fatalf("expected 1 interrupted node, got %d", result.InterruptedNodes)
 	}
 
-	// 验证 node1 现在为 manual_intervention
+	// Verify node1 is now in manual_intervention
 	node1, _ := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node1ID))
 	if node1.Status != "manual_intervention" {
 		t.Fatalf("expected manual_intervention after interrupt, got %s", node1.Status)
@@ -782,7 +782,7 @@ func TestInterruptTask(t *testing.T) {
 	t.Log("interrupt task correctly set in_progress nodes to manual_intervention")
 }
 
-// TestClaimNonExistentNode 验证认领不存在的节点返回错误。
+// TestClaimNonExistentNode verifies that claiming a non-existent node returns an error.
 func TestClaimNonExistentNode(t *testing.T) {
 	svc, _, _ := setupServiceTest(t)
 	ctx := context.Background()
@@ -794,15 +794,15 @@ func TestClaimNonExistentNode(t *testing.T) {
 	t.Logf("claim non-existent node correctly failed: %v", err)
 }
 
-// TestApproveNonInProgressNode 验证审批非 in_progress 状态的节点失败。
+// TestApproveNonInProgressNode verifies that approving a non-in_progress node fails.
 func TestApproveNonInProgressNode(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// 尝试批准 pending 节点（而非 in_progress）——应在存储层失败
+	// Attempt to approve a pending node (not in_progress) — should fail at the store layer
 	node1ID := env.taskNodes[0].ID
 	_, err := service.NewNodeService(svc).Approve(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent", "approve")
-	// 批准应失败，因为该节点是 pending 而非 in_progress
+	// Approve should fail because the node is pending, not in_progress
 	if err != nil {
 		t.Logf("approve pending node correctly failed: %v", err)
 	} else {
@@ -810,7 +810,7 @@ func TestApproveNonInProgressNode(t *testing.T) {
 	}
 }
 
-// TestRejectToForwardNode 验证驳回至排序更大的节点失败。
+// TestRejectToForwardNode verifies that rejecting to a node with a higher sort order fails.
 func TestRejectToForwardNode(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -819,7 +819,7 @@ func TestRejectToForwardNode(t *testing.T) {
 	node1ID := env.taskNodes[0].ID
 	node2ID := env.taskNodes[1].ID
 
-	// 认领并批准 node1
+	// Claim and approve node1
 	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node1: %v", err)
@@ -829,13 +829,13 @@ func TestRejectToForwardNode(t *testing.T) {
 		t.Fatalf("approve node1: %v", err)
 	}
 
-	// 认领 node2
+	// Claim node2
 	_, err = nodeSvc.Claim(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent2ID), "agent")
 	if err != nil {
 		t.Fatalf("claim node2: %v", err)
 	}
 
-	// 尝试拒绝 node2 并指向 node3（前向）——应失败
+	// Attempt to reject node2 targeting node3 (forward) — should fail
 	node3ID := env.taskNodes[2].ID
 	targetNodeID := uuid.MustParse(node3ID)
 	_, err = nodeSvc.Reject(ctx, uuid.MustParse(node2ID), uuid.MustParse(env.agent2ID), "agent", &targetNodeID, "bad reject")
@@ -845,18 +845,18 @@ func TestRejectToForwardNode(t *testing.T) {
 	t.Logf("reject to forward node correctly failed: %v", err)
 }
 
-// TestMaxRejectCyclesDefaultInheritance 验证设计文档 §6 的默认值传播：
-// 当模板节点未设置 MaxRejectCycles（=0）且项目未设置 MaxReviewCycles 时，
-// CreateTask 应回退到项目的 MaxReviewCycles（DB schema DEFAULT 5），
-// 使每个任务节点的 MaxRejectCycles = 5。
+// TestMaxRejectCyclesDefaultInheritance verifies the design doc §6 default propagation:
+// when a template node does not set MaxRejectCycles (=0) and the project does not set MaxReviewCycles,
+// CreateTask should fall back to the project's MaxReviewCycles (DB schema DEFAULT 5),
+// so each task node's MaxRejectCycles = 5.
 func TestMaxRejectCyclesDefaultInheritance(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// setupServiceTest 创建项目时未设置 MaxReviewCycles（→ DB 默认 5），
-	// 模板节点也未设置 MaxRejectCycles（→ 0），因此应回退到 5。
+	// setupServiceTest creates the project without MaxReviewCycles (→ DB default 5),
+	// and the template nodes do not set MaxRejectCycles (→ 0), so it should fall back to 5.
 	for i, tn := range env.taskNodes {
-		// 通过 Store 重新读取以确认落库值
+		// Re-read from the Store to confirm the persisted value
 		got, err := svc.Store.GetTaskNode(ctx, uuid.MustParse(tn.ID))
 		if err != nil {
 			t.Fatalf("get task node %d: %v", i, err)
@@ -869,14 +869,14 @@ func TestMaxRejectCyclesDefaultInheritance(t *testing.T) {
 	t.Logf("all %d task nodes inherited default MaxRejectCycles=5", len(env.taskNodes))
 }
 
-// TestMaxRejectCyclesFromTemplateNode 验证设计文档 §6 的优先级：
-// 当模板节点显式设置 MaxRejectCycles 时，应优先使用模板节点的值，
-// 而非项目的 MaxReviewCycles。
+// TestMaxRejectCyclesFromTemplateNode verifies the design doc §6 priority:
+// when a template node explicitly sets MaxRejectCycles, it should take precedence
+// over the project's MaxReviewCycles.
 func TestMaxRejectCyclesFromTemplateNode(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// 创建模板，显式设置节点的 MaxRejectCycles=3（项目默认仍为 5）
+	// Create a template with explicit MaxRejectCycles=3 on nodes (project default is still 5)
 	tpl, tplNodes, err := env.svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
 		Name:        "flow-explicit-cycles-" + uuid.New().String()[:8],
@@ -918,7 +918,7 @@ func TestMaxRejectCyclesFromTemplateNode(t *testing.T) {
 	t.Logf("task nodes used template MaxRejectCycles=3 (not project default 5)")
 }
 
-// TestListNodes 验证列出任务节点。
+// TestListNodes verifies listing task nodes.
 func TestListNodes(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
@@ -933,14 +933,14 @@ func TestListNodes(t *testing.T) {
 	t.Logf("listed %d nodes for task %d", len(nodes), env.taskID)
 }
 
-// TestTemplateStatsUsageCountAndCompletion 验证设计文档《工作流模板与触发设计》§六：
-// TemplateStatsService.GetStats 按 tasks.workflow_name 聚合返回 usage_count /
-// avg_completion_seconds / reject_rate 三项指标。
+// TestTemplateStatsUsageCountAndCompletion verifies the design doc "Workflow Template & Trigger Design" §6:
+// TemplateStatsService.GetStats aggregates by tasks.workflow_name and returns usage_count /
+// avg_completion_seconds / reject_rate metrics.
 func TestTemplateStatsUsageCountAndCompletion(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// setupServiceTest 已经用该模板创建了 1 个任务（env.taskID），故 usage_count >= 1。
+	// setupServiceTest already created 1 task with this template (env.taskID), so usage_count >= 1.
 	statsSvc := service.NewTemplateStatsService(svc)
 	stats, err := statsSvc.GetStats(ctx, uuid.MustParse(env.templateID))
 	if err != nil {
@@ -950,11 +950,11 @@ func TestTemplateStatsUsageCountAndCompletion(t *testing.T) {
 	if stats.UsageCount < 1 {
 		t.Fatalf("expected usage_count >= 1, got %d", stats.UsageCount)
 	}
-	// 该任务刚创建且未完成，avg_completion_seconds 至少应为非负数
+	// The task was just created and not completed, so avg_completion_seconds should at least be non-negative
 	if stats.AvgCompletionSeconds < 0 {
 		t.Fatalf("expected avg_completion_seconds >= 0, got %v", stats.AvgCompletionSeconds)
 	}
-	// 没有被取消的任务，reject_rate 应为 0
+	// No cancelled tasks, so reject_rate should be 0
 	if stats.RejectRate != 0 {
 		t.Fatalf("expected reject_rate 0 (no cancelled tasks), got %v", stats.RejectRate)
 	}
@@ -962,14 +962,14 @@ func TestTemplateStatsUsageCountAndCompletion(t *testing.T) {
 		stats.UsageCount, stats.AvgCompletionSeconds, stats.RejectRate)
 }
 
-// TestTemplateStatsRejectRateOnCancelled 验证设计文档 §六：reject_rate 按
-// status='cancelled' 任务占比计算（0–1）。
+// TestTemplateStatsRejectRateOnCancelled verifies the design doc §6: reject_rate is
+// calculated as the proportion of status='cancelled' tasks (0–1).
 func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// setupServiceTest 已创建 1 个 active 任务；再额外创建 1 个用同一模板名、
-	// 状态为 cancelled 的任务，使 reject_rate = 1/2 = 0.5。
+	// setupServiceTest already created 1 active task; additionally create 1 more
+	// with the same template name and status=cancelled, so reject_rate = 1/2 = 0.5.
 	tpl, _, err := svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
 		Name:        "stats-cancel-" + uuid.New().String()[:8],
@@ -981,7 +981,7 @@ func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
 		t.Fatalf("create template: %v", err)
 	}
 
-	// active 任务
+	// active task
 	_, _, err = svc.Store.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:    env.projectID,
 		WorkflowName: tpl.Name,
@@ -998,7 +998,7 @@ func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
 		t.Fatalf("create active task: %v", err)
 	}
 
-	// cancelled 任务（用 db 直接创建以避免 CreateTask 默认 active 限制）
+	// cancelled task (created directly via DB to bypass CreateTask's default active status constraint)
 	pgDB := svcConnectTestDB(t)
 	defer pgDB.Close()
 	dbq := dbgen.New(pgDB)
@@ -1029,7 +1029,7 @@ func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
 	if stats.UsageCount != 2 {
 		t.Fatalf("expected usage_count 2, got %d", stats.UsageCount)
 	}
-	// 2 个任务中 1 个 cancelled → reject_rate = 0.5
+	// 1 cancelled out of 2 tasks → reject_rate = 0.5
 	if stats.RejectRate < 0.49 || stats.RejectRate > 0.51 {
 		t.Fatalf("expected reject_rate ~0.5, got %v", stats.RejectRate)
 	}

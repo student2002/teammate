@@ -1,17 +1,17 @@
-// stats.go 实现项目和代理的统计数据查询业务逻辑。
-// 提供项目维度（任务总数、完成数、Token 消耗等）和代理维度（完成任务数、
-// Token 消耗、成功率等）的聚合统计查询。
+// stats.go implements the business logic for statistics queries on projects and agents.
+// It provides project-dimension aggregation queries (total tasks, completed count, token consumption, etc.)
+// and agent-dimension aggregation queries (completed task count, token consumption, success rate, etc.).
 //
-// 本文件包含：
-//   - StatsService 结构体：提供统计查询相关的业务逻辑封装
-//   - GetProjectStats：获取指定项目的聚合统计数据，包括任务计数、Token 消耗等
-//   - GetAgentStats：获取指定代理的聚合统计数据，包括完成任务数、Token 消耗等
+// This file contains:
+//   - StatsService struct: provides the business-logic encapsulation for statistics queries
+//   - GetProjectStats: retrieves aggregated statistics for a specified project, including task counts, token consumption, etc.
+//   - GetAgentStats: retrieves aggregated statistics for a specified agent, including completed task count, token consumption, etc.
 //
-// 统计维度：
-//   - 项目维度：任务总数、已完成数、进行中数、已拒绝数、Token 总消耗等
-//   - 代理维度：已完成任务数、Token 总消耗、平均完成时间等
+// Statistics dimensions:
+//   - Project dimension: total tasks, completed count, in-progress count, rejected count, total token consumption, etc.
+//   - Agent dimension: completed task count, total token consumption, average completion time, etc.
 //
-// 数据来源：统计数据通过 Store 层的 SQL 聚合查询获取，支持实时计算。
+// Data source: statistics are obtained via SQL aggregation queries in the Store layer, supporting real-time computation.
 package service
 
 import (
@@ -23,26 +23,26 @@ import (
 	"github.com/teammate/server/internal/store"
 )
 
-// StatsService 提供统计查询相关的业务逻辑。
+// StatsService provides the business logic for statistics queries.
 type StatsService struct {
 	svc *Service
 }
 
-// NewStatsService 创建一个新的 StatsService 实例。
+// NewStatsService creates a new StatsService instance.
 func NewStatsService(svc *Service) *StatsService {
 	return &StatsService{svc: svc}
 }
 
-// GetProjectStats 获取指定项目的统计数据，包括任务总数、完成数、进行中数、
-// 拒绝数、Token 总消耗等聚合指标。
+// GetProjectStats retrieves the statistics for the specified project, including total task count, completed count,
+// in-progress count, rejected count, total token consumption, and other aggregated metrics.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - *store.ProjectStats: 项目统计数据（任务计数、Token 消耗等）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - *store.ProjectStats: project statistics (task counts, token consumption, etc.)
+//   - error: possible errors (database query failure)
 func (s *StatsService) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*store.ProjectStats, error) {
 	stats, err := s.svc.Store.GetProjectStats(ctx, projectID)
 	if err != nil {
@@ -51,16 +51,16 @@ func (s *StatsService) GetProjectStats(ctx context.Context, projectID uuid.UUID)
 	return stats, nil
 }
 
-// GetAgentStats 获取指定代理的统计数据，包括已完成任务数、Token 总消耗、
-// 平均完成时间等聚合指标。
+// GetAgentStats retrieves the statistics for the specified agent, including completed task count, total token consumption,
+// average completion time, and other aggregated metrics.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: 代理 ID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent ID
 //
-// 返回：
-//   - *store.AgentStats: 代理统计数据（任务计数、Token 消耗等）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - *store.AgentStats: agent statistics (task counts, token consumption, etc.)
+//   - error: possible errors (database query failure)
 func (s *StatsService) GetAgentStats(ctx context.Context, agentID uuid.UUID) (*store.AgentStats, error) {
 	stats, err := s.svc.Store.GetAgentStats(ctx, agentID)
 	if err != nil {

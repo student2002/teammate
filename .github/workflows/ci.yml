@@ -1,4 +1,4 @@
-# CI：Go 测试/vet + 前端 lint/build + sqlc 生成一致性校验
+# CI: Go test/vet + frontend lint/build + sqlc generate consistency check
 name: CI
 
 on:

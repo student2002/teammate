@@ -1,15 +1,15 @@
-// search.go 实现全局搜索的业务逻辑，支持按关键词搜索任务和代理。
+// search.go implements the business logic for global search, supporting keyword search over tasks and agents.
 //
-// 本文件包含：
-//   - SearchService 结构体：提供搜索相关的业务逻辑封装
-//   - SearchTasks：按关键词搜索任务，支持 ILIKE 模糊匹配标题和描述，可选按项目过滤
-//   - SearchAgents：按关键词搜索代理，支持 ILIKE 模糊匹配名称，可选按工作区过滤
-//   - 搜索结果按创建时间倒序排列
+// This file contains:
+//   - SearchService struct: provides encapsulation of search-related business logic
+//   - SearchTasks: searches tasks by keyword, supporting ILIKE fuzzy matching on title and description, with optional project filtering
+//   - SearchAgents: searches agents by keyword, supporting ILIKE fuzzy matching on name, with optional workspace filtering
+//   - search results are ordered by creation time descending
 //
-// 搜索策略：
-//   - 使用 PostgreSQL ILIKE 进行大小写不敏感的模糊匹配
-//   - 关键词自动包裹 % 通配符实现子串匹配
-//   - 支持全局搜索（不指定范围）和限定范围搜索（指定项目或工作区 ID）
+// Search strategy:
+//   - Uses PostgreSQL ILIKE for case-insensitive fuzzy matching
+//   - Keywords are automatically wrapped with % wildcards to implement substring matching
+//   - Supports global search (no scope specified) and scoped search (specifying a project or workspace ID)
 package service
 
 import (
@@ -20,28 +20,28 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// SearchService 提供搜索相关的业务逻辑。
+// SearchService provides the search-related business logic.
 type SearchService struct {
 	svc *Service
 }
 
-// NewSearchService 创建一个新的 SearchService 实例。
+// NewSearchService creates a new SearchService instance.
 func NewSearchService(svc *Service) *SearchService {
 	return &SearchService{svc: svc}
 }
 
-// SearchTasks 在指定工作区内按关键词搜索任务，可选按项目 ID 过滤。
-// 使用 ILIKE 进行标题和描述的模糊匹配，结果按创建时间倒序排列。
+// SearchTasks searches tasks by keyword within the specified workspace, with optional filtering by project ID.
+// Uses ILIKE for fuzzy matching on title and description; results are ordered by creation time descending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - keyword: 搜索关键词
-//   - workspaceID: 工作区 ID
-//   - projectID: 可选，按项目 ID 过滤
+// Parameters:
+//   - ctx: request context
+//   - keyword: search keyword
+//   - workspaceID: workspace ID
+//   - projectID: optional, filter by project ID
 //
-// 返回：
-//   - []db.Task: 匹配的任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []db.Task: list of matching tasks
+//   - error: possible error (database query failure)
 func (s *SearchService) SearchTasks(ctx context.Context, keyword string, workspaceID uuid.UUID, projectID *uuid.UUID) ([]types.Task, error) {
 	pattern := "%" + keyword + "%"
 	if projectID != nil {
@@ -50,17 +50,17 @@ func (s *SearchService) SearchTasks(ctx context.Context, keyword string, workspa
 	return s.svc.Store.SearchTasksByWorkspace(ctx, workspaceID, pattern)
 }
 
-// SearchAgents 在指定工作区内按关键词搜索代理。
-// 使用 ILIKE 进行名称的模糊匹配，结果按创建时间倒序排列。
+// SearchAgents searches agents by keyword within the specified workspace.
+// Uses ILIKE for fuzzy matching on name; results are ordered by creation time descending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - keyword: 搜索关键词
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - keyword: search keyword
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - []db.Agent: 匹配的代理列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []db.Agent: list of matching agents
+//   - error: possible error (database query failure)
 func (s *SearchService) SearchAgents(ctx context.Context, keyword string, workspaceID uuid.UUID) ([]types.Agent, error) {
 	return s.svc.Store.SearchAgentsByWorkspace(ctx, workspaceID, "%"+keyword+"%")
 }

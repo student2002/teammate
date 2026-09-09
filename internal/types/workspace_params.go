@@ -1,7 +1,7 @@
-// workspace_params.go 定义 Workspace/Member 领域操作的领域参数结构体。
+// workspace_params.go defines the domain parameter structs for Workspace/Member domain operations.
 //
-// 这些结构体是 sqlc 生成的 db.XxxParams 的 domain 对应物，
-// 字段一一对应，类型按 domain 风格映射：
+// These structs are the domain counterparts of the sqlc-generated db.XxxParams,
+// with fields mapped one-to-one and types mapped in the domain style:
 //   - uuid.UUID → string
 //   - uuid.NullUUID → *string
 //   - sql.NullString → *string
@@ -11,61 +11,61 @@ package types
 
 import "time"
 
-// CreateMemberParams 是创建成员的领域参数结构体。
+// CreateMemberParams is the domain parameter struct for creating a member.
 type CreateMemberParams struct {
-	Name        string    `json:"name"`
-	Email       string    `json:"email"`
-	PasswordHash string   `json:"password_hash"`
-	Role        string    `json:"role"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+	Role         string `json:"role"`
 }
 
-// CreateWorkspaceParams 是创建工作区的领域参数结构体。
+// CreateWorkspaceParams is the domain parameter struct for creating a workspace.
 type CreateWorkspaceParams struct {
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	IssuePrefix string    `json:"issue_prefix"`
-	IsDefault   bool      `json:"is_default"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	IssuePrefix string  `json:"issue_prefix"`
+	IsDefault   bool    `json:"is_default"`
 }
 
-// CreateWorkspaceMemberParams 是创建工作区成员关联的领域参数结构体。
+// CreateWorkspaceMemberParams is the domain parameter struct for creating a workspace-member association.
 type CreateWorkspaceMemberParams struct {
-	WorkspaceID string    `json:"workspace_id"`
-	MemberID    string    `json:"member_id"`
-	Role        string    `json:"role"`
+	WorkspaceID string `json:"workspace_id"`
+	MemberID    string `json:"member_id"`
+	Role        string `json:"role"`
 }
 
-// DeleteWorkspaceMemberParams 是删除工作区成员关联的领域参数结构体。
+// DeleteWorkspaceMemberParams is the domain parameter struct for deleting a workspace-member association.
 type DeleteWorkspaceMemberParams struct {
-	WorkspaceID string    `json:"workspace_id"`
-	MemberID    string    `json:"member_id"`
+	WorkspaceID string `json:"workspace_id"`
+	MemberID    string `json:"member_id"`
 }
 
-// GetWorkspaceMemberParams 是获取工作区成员的领域参数结构体。
+// GetWorkspaceMemberParams is the domain parameter struct for fetching a workspace member.
 type GetWorkspaceMemberParams struct {
-	WorkspaceID string    `json:"workspace_id"`
-	MemberID    string    `json:"member_id"`
+	WorkspaceID string `json:"workspace_id"`
+	MemberID    string `json:"member_id"`
 }
 
-// GetWorkspaceMemberRoleParams 是查询工作区成员角色的领域参数结构体。
+// GetWorkspaceMemberRoleParams is the domain parameter struct for querying a workspace member's role.
 type GetWorkspaceMemberRoleParams struct {
-	WorkspaceID string    `json:"workspace_id"`
-	MemberID    string    `json:"member_id"`
+	WorkspaceID string `json:"workspace_id"`
+	MemberID    string `json:"member_id"`
 }
 
-// UpdateMemberPasswordHashParams 是更新成员密码哈希的领域参数结构体。
+// UpdateMemberPasswordHashParams is the domain parameter struct for updating a member's password hash.
 type UpdateMemberPasswordHashParams struct {
-	ID           string    `json:"id"`
-	PasswordHash string    `json:"password_hash"`
+	ID           string `json:"id"`
+	PasswordHash string `json:"password_hash"`
 }
 
-// UpdateMemberRoleParams 是更新成员角色的领域参数结构体。
+// UpdateMemberRoleParams is the domain parameter struct for updating a member's role.
 type UpdateMemberRoleParams struct {
-	WorkspaceID string    `json:"workspace_id"`
-	MemberID    string    `json:"member_id"`
-	Role        string    `json:"role"`
+	WorkspaceID string `json:"workspace_id"`
+	MemberID    string `json:"member_id"`
+	Role        string `json:"role"`
 }
 
-// UpdateWorkspaceParams 是更新工作区的领域参数结构体。
+// UpdateWorkspaceParams is the domain parameter struct for updating a workspace.
 type UpdateWorkspaceParams struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`

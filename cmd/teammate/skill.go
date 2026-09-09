@@ -1,4 +1,4 @@
-// skill.go 实现技能子命令，管理技能的新增、查询、更新和删除。
+// skill.go implements the skill subcommand, managing the creation, querying, updating, and deletion of skills.
 package main
 
 import (

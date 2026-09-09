@@ -66,7 +66,7 @@ type CreateExecutionSessionParams struct {
 	ClaudeSessionID sql.NullString `db:"claude_session_id" json:"claude_session_id"`
 }
 
-// 执行会话查询
+// Execution session queries
 func (q *Queries) CreateExecutionSession(ctx context.Context, arg CreateExecutionSessionParams) (ExecutionSession, error) {
 	row := q.db.QueryRowContext(ctx, createExecutionSession,
 		arg.RuntimeID,

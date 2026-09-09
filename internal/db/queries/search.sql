@@ -1,4 +1,4 @@
--- 搜索查询
+-- Search queries
 
 -- name: SearchTasksByWorkspace :many
 SELECT t.*

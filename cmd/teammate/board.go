@@ -1,4 +1,4 @@
-// board.go 实现看板子命令，以看板视图展示项目任务。
+// board.go implements the board subcommand, displaying project tasks in a board view.
 package main
 
 import (

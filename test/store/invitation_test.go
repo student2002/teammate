@@ -1,4 +1,4 @@
-// invitation_test.go 覆盖邀请数据访问的测试。
+// invitation_test.go covers invitation data access tests.
 package store_test
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestCreateInvitation_TokenHash 验证创建邀请并返回 Token。
+// TestCreateInvitation_TokenHash verifies creating an invitation and returning a Token.
 func TestCreateInvitation_TokenHash(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -28,7 +28,7 @@ func TestCreateInvitation_TokenHash(t *testing.T) {
 	}
 }
 
-// TestGetInvitationByToken 验证通过 Token 查询邀请信息。
+// TestGetInvitationByToken verifies querying invitation info by Token.
 func TestGetInvitationByToken(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -50,7 +50,7 @@ func TestGetInvitationByToken(t *testing.T) {
 	}
 }
 
-// TestAcceptInvitation 验证接受邀请功能。
+// TestAcceptInvitation verifies the accept invitation functionality.
 func TestAcceptInvitation(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -72,7 +72,7 @@ func TestAcceptInvitation(t *testing.T) {
 	}
 }
 
-// TestListInvitations 验证按工作区列出所有邀请。
+// TestListInvitations verifies listing all invitations by workspace.
 func TestListInvitations(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -80,7 +80,7 @@ func TestListInvitations(t *testing.T) {
 	ws := createTestWorkspace(t, s)
 	inviter := createTestMember(t, s, ws.ID)
 
-	// 创建 2 个邀请
+	// Create 2 invitations
 	_, _, err := s.CreateInvitation(ctx, uuid.MustParse(ws.ID), "one@test.com", "member", uuid.MustParse(inviter.ID))
 	if err != nil {
 		t.Fatalf("CreateInvitation: %v", err)
@@ -99,7 +99,7 @@ func TestListInvitations(t *testing.T) {
 	}
 }
 
-// TestDeleteInvitation 验证删除邀请功能。
+// TestDeleteInvitation verifies the delete invitation functionality.
 func TestDeleteInvitation(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -117,7 +117,7 @@ func TestDeleteInvitation(t *testing.T) {
 		t.Fatalf("DeleteInvitation: %v", err)
 	}
 
-	// 通过列出邀请验证它已删除
+	// Verify it's deleted by listing invitations
 	invitations, err := s.ListInvitations(ctx, uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("ListInvitations: %v", err)
@@ -129,7 +129,7 @@ func TestDeleteInvitation(t *testing.T) {
 	}
 }
 
-// TestGetInvitationByToken_InvalidToken 验证无效 Token 返回错误。
+// TestGetInvitationByToken_InvalidToken verifies that an invalid Token returns an error.
 func TestGetInvitationByToken_InvalidToken(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()

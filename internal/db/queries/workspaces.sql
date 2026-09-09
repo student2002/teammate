@@ -1,4 +1,4 @@
--- 工作区
+-- Workspaces
 
 -- name: CreateWorkspace :one
 INSERT INTO workspaces (name, description, issue_prefix, is_default)
@@ -31,7 +31,7 @@ RETURNING *;
 DELETE FROM workspaces
 WHERE id = $1;
 
--- 成员
+-- Members
 
 -- name: CreateMember :one
 INSERT INTO members (name, email)
@@ -56,7 +56,7 @@ WHERE id = $1;
 DELETE FROM members
 WHERE id = $1;
 
--- 工作区成员
+-- Workspace members
 
 -- name: CreateWorkspaceMember :one
 INSERT INTO workspace_members (workspace_id, member_id, role)

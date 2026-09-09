@@ -1,4 +1,4 @@
-// auth_test.go 覆盖认证数据访问的测试。
+// auth_test.go tests for authentication data access.
 package store_test
 
 import (
@@ -76,7 +76,7 @@ func TestRegister_Success(t *testing.T) {
 	if result.Member.Name != "Test User" {
 		t.Fatalf("expected name 'Test User', got %s", result.Member.Name)
 	}
-	// 注册创建工作区和成员——注册清理
+	// Register creates a workspace and member — register cleanup
 	t.Cleanup(func() {
 		if testDB != nil {
 			_ = testdb.DeleteWorkspace(testDB, result.WorkspaceID.String())
@@ -133,7 +133,7 @@ func TestChangePassword_Success(t *testing.T) {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 
-	// 验证新密码有效
+	// Verify the new password works
 	result, err := s.Login(ctx, member.Email, "new-password-123", testJWTSecret)
 	if err != nil {
 		t.Fatalf("Login with new password: %v", err)
@@ -163,7 +163,7 @@ func TestCreatePasswordResetToken_And_Reset(t *testing.T) {
 	ws := createTestWorkspace(t, s)
 	member := createTestMember(t, s, ws.ID)
 
-	// 创建重置 Token
+	// Create reset token
 	token, err := s.CreatePasswordResetToken(ctx, member.Email)
 	if err != nil {
 		t.Fatalf("CreatePasswordResetToken: %v", err)
@@ -172,13 +172,13 @@ func TestCreatePasswordResetToken_And_Reset(t *testing.T) {
 		t.Fatal("expected non-empty reset token")
 	}
 
-	// 重置密码
+	// Reset password
 	err = s.ResetPasswordWithToken(ctx, token, "reset-password-123")
 	if err != nil {
 		t.Fatalf("ResetPasswordWithToken: %v", err)
 	}
 
-	// 验证新密码有效
+	// Verify the new password works
 	result, err := s.Login(ctx, member.Email, "reset-password-123", testJWTSecret)
 	if err != nil {
 		t.Fatalf("Login after reset: %v", err)

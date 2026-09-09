@@ -1,7 +1,7 @@
-// agent_params.go 定义 Agent/Skill/Mcp 领域操作的领域参数结构体。
+// agent_params.go defines the domain parameter structs for Agent/Skill/Mcp domain operations.
 //
-// 这些结构体是 sqlc 生成的 db.XxxParams 的 domain 对应物，
-// 字段一一对应，类型按 domain 风格映射：
+// These structs are the domain counterparts of the sqlc-generated db.XxxParams,
+// with fields mapped one-to-one and types mapped in domain style:
 //   - uuid.UUID → string
 //   - uuid.NullUUID → *string
 //   - sql.NullString → *string
@@ -12,21 +12,21 @@ import (
 	"encoding/json"
 )
 
-// AddAgentMcpServerParams 是关联 Agent 与 MCP 服务器的领域参数结构体。
+// AddAgentMcpServerParams is the domain parameter struct for associating an Agent with an MCP server.
 type AddAgentMcpServerParams struct {
 	AgentID     string `json:"agent_id"`
 	McpServerID string `json:"mcp_server_id"`
 	Enabled     bool   `json:"enabled"`
 }
 
-// AddAgentSkillParams 是关联 Agent 与技能的领域参数结构体。
+// AddAgentSkillParams is the domain parameter struct for associating an Agent with a skill.
 type AddAgentSkillParams struct {
 	AgentID string `json:"agent_id"`
 	SkillID string `json:"skill_id"`
 	Enabled bool   `json:"enabled"`
 }
 
-// CreateAgentParams 是创建 Agent 的领域参数结构体。
+// CreateAgentParams is the domain parameter struct for creating an Agent.
 type CreateAgentParams struct {
 	WorkspaceID  string          `json:"workspace_id"`
 	Name         string          `json:"name"`
@@ -40,7 +40,7 @@ type CreateAgentParams struct {
 	GitEmail     *string         `json:"git_email"`
 }
 
-// CreateMcpServerParams 是创建 MCP 服务器的领域参数结构体。
+// CreateMcpServerParams is the domain parameter struct for creating an MCP server.
 type CreateMcpServerParams struct {
 	WorkspaceID string          `json:"workspace_id"`
 	Name        string          `json:"name"`
@@ -50,7 +50,7 @@ type CreateMcpServerParams struct {
 	EnvVars     json.RawMessage `json:"env_vars"`
 }
 
-// CreateSkillParams 是创建技能的领域参数结构体。
+// CreateSkillParams is the domain parameter struct for creating a skill.
 type CreateSkillParams struct {
 	WorkspaceID   string  `json:"workspace_id"`
 	Name          string  `json:"name"`
@@ -59,19 +59,19 @@ type CreateSkillParams struct {
 	PromptTemplate *string `json:"prompt_template"`
 }
 
-// RemoveAgentMcpServerParams 是解除 Agent 与 MCP 服务器关联的领域参数结构体。
+// RemoveAgentMcpServerParams is the domain parameter struct for removing the association between an Agent and an MCP server.
 type RemoveAgentMcpServerParams struct {
 	AgentID     string `json:"agent_id"`
 	McpServerID string `json:"mcp_server_id"`
 }
 
-// RemoveAgentSkillParams 是解除 Agent 与技能关联的领域参数结构体。
+// RemoveAgentSkillParams is the domain parameter struct for removing the association between an Agent and a skill.
 type RemoveAgentSkillParams struct {
 	AgentID string `json:"agent_id"`
 	SkillID string `json:"skill_id"`
 }
 
-// UpdateAgentParams 是更新 Agent 的领域参数结构体。
+// UpdateAgentParams is the domain parameter struct for updating an Agent.
 type UpdateAgentParams struct {
 	ID            string          `json:"id"`
 	Name          string          `json:"name"`
@@ -85,13 +85,13 @@ type UpdateAgentParams struct {
 	GitEmail      *string         `json:"git_email"`
 }
 
-// UpdateAgentStatusParams 是更新 Agent 状态的领域参数结构体。
+// UpdateAgentStatusParams is the domain parameter struct for updating an Agent's status.
 type UpdateAgentStatusParams struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-// UpdateMcpServerParams 是更新 MCP 服务器的领域参数结构体。
+// UpdateMcpServerParams is the domain parameter struct for updating an MCP server.
 type UpdateMcpServerParams struct {
 	ID       string          `json:"id"`
 	Name     string          `json:"name"`
@@ -101,13 +101,13 @@ type UpdateMcpServerParams struct {
 	EnvVars  json.RawMessage `json:"env_vars"`
 }
 
-// UpdateMcpServerStatusParams 是更新 MCP 服务器状态的领域参数结构体。
+// UpdateMcpServerStatusParams is the domain parameter struct for updating an MCP server's status.
 type UpdateMcpServerStatusParams struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-// UpdateSkillParams 是更新技能的领域参数结构体。
+// UpdateSkillParams is the domain parameter struct for updating a skill.
 type UpdateSkillParams struct {
 	ID            string  `json:"id"`
 	Name          string  `json:"name"`
@@ -116,7 +116,7 @@ type UpdateSkillParams struct {
 	PromptTemplate *string `json:"prompt_template"`
 }
 
-// CreateAgentPermissionParams 是授予 Agent 权限的领域参数结构体。
+// CreateAgentPermissionParams is the domain parameter struct for granting a permission to an Agent.
 type CreateAgentPermissionParams struct {
 	AgentID      string  `json:"agent_id"`
 	Permission   string  `json:"permission"`
@@ -125,7 +125,7 @@ type CreateAgentPermissionParams struct {
 	GrantedBy    *string `json:"granted_by"`
 }
 
-// HasAgentPermissionParams 是校验 Agent 是否持有指定权限的领域参数结构体。
+// HasAgentPermissionParams is the domain parameter struct for verifying whether an Agent holds the specified permission.
 type HasAgentPermissionParams struct {
 	AgentID      string  `json:"agent_id"`
 	Permission   string  `json:"permission"`
@@ -133,7 +133,7 @@ type HasAgentPermissionParams struct {
 	ResourceID   *string `json:"resource_id"`
 }
 
-// HasAgentPermissionAnyParams 是校验 Agent 是否持有任一指定权限的领域参数结构体。
+// HasAgentPermissionAnyParams is the domain parameter struct for verifying whether an Agent holds any of the specified permissions.
 type HasAgentPermissionAnyParams struct {
 	AgentID    string `json:"agent_id"`
 	Permission string `json:"permission"`

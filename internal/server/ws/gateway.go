@@ -1,8 +1,9 @@
-// gateway.go 提供 WebSocket 日志网关，管理日志的发布、订阅和跨实例同步。
-// 基于 Redis Pub/Sub 实现多服务器实例间的日志分发，每个任务有独立的日志频道。
-// 支持日志历史查询：日志消息缓冲到 Redis 有序集合中，保留 2 小时。
-// 安全特性：所有日志消息在发布前自动进行脱敏处理（见 desensitize.go）。
-// 事件类型：日志类型包括 "stdout"（标准输出）、"stderr"（标准错误）、"system"（系统消息）。
+// gateway.go provides a WebSocket log gateway that manages log publishing, subscription, and cross-instance synchronization.
+// It uses Redis Pub/Sub for log distribution across multiple server instances; each task has an independent log channel.
+// It supports log history queries: log messages are buffered into a Redis sorted set and retained for 2 hours.
+//
+// Security feature: all log messages are automatically masked before publishing (see desensitize.go).
+// Event types: log types include "stdout" (standard output), "stderr" (standard error), and "system" (system message).
 package ws
 
 import (
@@ -18,43 +19,43 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// LogMessage 表示推送给 WebSocket 客户端的单条日志消息。
+// LogMessage represents a single log message pushed to WebSocket clients.
 type LogMessage struct {
-	// TaskID 是日志所属任务的唯一标识符。
+	// TaskID is the unique identifier of the task the log belongs to.
 	TaskID string `json:"task_id"`
-	// NodeID 是日志所属工作流节点的唯一标识符。
+	// NodeID is the unique identifier of the workflow node the log belongs to.
 	NodeID string `json:"node_id"`
-	// Type 是日志类型："stdout"（标准输出）、"stderr"（标准错误）、"system"（系统消息）。
-	Type string `json:"type"` // "stdout"、"stderr"、"system"
-	// Content 是日志内容（已脱敏处理）。
+	// Type is the log type: "stdout" (standard output), "stderr" (standard error), "system" (system message).
+	Type string `json:"type"` // "stdout", "stderr", "system"
+	// Content is the log content (already masked).
 	Content string `json:"content"`
-	// Timestamp 是日志生成的 Unix 毫秒时间戳。
+	// Timestamp is the Unix millisecond timestamp when the log was generated.
 	Timestamp int64 `json:"timestamp"`
 }
 
 const (
-	// LogBufferTTL 是日志消息在 Redis 有序集合缓冲区中的保留时间（2 小时）。
+	// LogBufferTTL is the retention time of log messages in the Redis sorted-set buffer (2 hours).
 	LogBufferTTL = 2 * time.Hour
-	// LogBufferKeyPrefix 是 Redis 中日志缓冲区的键前缀，格式为 "log_buffer:{taskID}"。
+	// LogBufferKeyPrefix is the Redis key prefix for the log buffer, formatted as "log_buffer:{taskID}".
 	LogBufferKeyPrefix = "log_buffer:"
 )
 
-// Gateway 是 WebSocket 日志网关，管理日志的发布、订阅和跨实例同步。
-// 每个服务器实例维护本地订阅者列表，通过 Redis Pub/Sub 实现跨实例日志分发。
+// Gateway is the WebSocket log gateway, managing log publishing, subscription, and cross-instance synchronization.
+// Each server instance maintains a local subscriber list and uses Redis Pub/Sub for cross-instance log distribution.
 type Gateway struct {
 	redis   *redis.Client
 	mu      sync.RWMutex
-	clients map[string][]chan LogMessage // task_id -> 订阅通道列表
-	id      string                       // 唯一实例 ID，用于避免自我投递（发布→订阅时跳过本实例的消息）
+	clients map[string][]chan LogMessage // task_id -> list of subscribe channels
+	id      string                       // unique instance ID, used to avoid self-delivery (skip this instance's messages on publish→subscribe)
 }
 
-// NewGateway 创建一个新的 Gateway 实例，使用给定的 Redis 客户端。
+// NewGateway creates a new Gateway instance using the given Redis client.
 //
-// 参数：
-//   - rdb: Redis 客户端，用于 Pub/Sub 和日志缓冲
+// Parameters:
+//   - rdb: Redis client, used for Pub/Sub and log buffering
 //
-// 返回：
-//   - *Gateway: 初始化后的网关实例
+// Returns:
+//   - *Gateway: the initialized gateway instance
 func NewGateway(rdb *redis.Client) *Gateway {
 	return &Gateway{
 		redis:   rdb,
@@ -63,26 +64,26 @@ func NewGateway(rdb *redis.Client) *Gateway {
 	}
 }
 
-// LogChannel 返回指定任务的 Redis Pub/Sub 频道名，格式为 "logs:{taskID}"。
+// LogChannel returns the Redis Pub/Sub channel name for the specified task, formatted as "logs:{taskID}".
 //
-// 参数：
-//   - taskID: 任务的唯一标识符
+// Parameters:
+//   - taskID: the unique identifier of the task
 //
-// 返回：
-//   - string: Redis 频道名
+// Returns:
+//   - string: the Redis channel name
 func LogChannel(taskID string) string {
 	return fmt.Sprintf("logs:%s", taskID)
 }
 
-// Subscribe 订阅指定任务的日志消息，返回接收通道和取消订阅函数。
-// 客户端断开连接时必须调用取消订阅函数以释放资源。
+// Subscribe subscribes to log messages for the specified task, returning a receive channel and an unsubscribe function.
+// The unsubscribe function must be called when the client disconnects to release resources.
 //
-// 参数：
-//   - taskID: 要订阅的任务 ID
+// Parameters:
+//   - taskID: the task ID to subscribe to
 //
-// 返回：
-//   - <-chan LogMessage: 日志消息接收通道（缓冲大小 64）
-//   - func(): 取消订阅函数，客户端断开时必须调用
+// Returns:
+//   - <-chan LogMessage: the log message receive channel (buffer size 64)
+//   - func(): the unsubscribe function, must be called when the client disconnects
 func (g *Gateway) Subscribe(taskID string) (<-chan LogMessage, func()) {
 	ch := make(chan LogMessage, 64)
 
@@ -110,32 +111,32 @@ func (g *Gateway) Subscribe(taskID string) (<-chan LogMessage, func()) {
 	return ch, unsub
 }
 
-// redisLogMessage 是 Redis 传输中包装 LogMessage 的结构体，包含源实例 ID 用于去重。
+// redisLogMessage is the struct that wraps a LogMessage during Redis transport, including the source instance ID for deduplication.
 type redisLogMessage struct {
-	// Source 是发送消息的服务器实例 UUID，接收端用于跳过自我投递的消息。
+	// Source is the UUID of the server instance that sent the message; the receiver uses it to skip self-delivered messages.
 	Source string     `json:"source"`
-	// Msg 是实际的日志消息内容。
+	// Msg is the actual log message content.
 	Msg LogMessage `json:"msg"`
 }
 
-// PublishLog 对消息内容进行脱敏处理，投递给本地订阅者，并发布到 Redis 供其他服务器实例投递。
+// PublishLog masks the message content, delivers it to local subscribers, and publishes it to Redis for delivery by other server instances.
 //
-// 处理流程：
-//  1. 对消息内容进行脱敏处理（API Key、Token、密码等）
-//  2. 设置时间戳和任务 ID
-//  3. 投递给本地订阅者（非阻塞，通道满时丢弃消息）
-//  4. 缓冲到 Redis 有序集合（用于历史查询）
-//  5. 发布到 Redis Pub/Sub 频道（供其他实例投递）
+// Processing flow:
+//  1. Mask the message content (API Key, Token, password, etc.)
+//  2. Set the timestamp and task ID
+//  3. Deliver to local subscribers (non-blocking; messages are dropped when the channel is full)
+//  4. Buffer into a Redis sorted set (for history queries)
+//  5. Publish to the Redis Pub/Sub channel (for delivery by other instances)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 日志所属任务的 ID
-//   - msg: 日志消息（Content 会被脱敏处理）
+// Parameters:
+//   - ctx: request context
+//   - taskID: the ID of the task the log belongs to
+//   - msg: the log message (Content will be masked)
 //
-// 返回：
-//   - error: Redis 发布失败时返回错误
+// Returns:
+//   - error: returned when Redis publishing fails
 func (g *Gateway) PublishLog(ctx context.Context, taskID string, msg LogMessage) error {
-	// 发布前对内容进行脱敏处理
+	// Mask the content before publishing
 	msg.Content = Desensitize(msg.Content)
 
 	if msg.Timestamp == 0 {
@@ -143,7 +144,7 @@ func (g *Gateway) PublishLog(ctx context.Context, taskID string, msg LogMessage)
 	}
 	msg.TaskID = taskID
 
-	// 投递给本地客户端
+	// Deliver to local clients
 	g.mu.RLock()
 	subs := g.clients[taskID]
 	localSubs := make([]chan LogMessage, len(subs))
@@ -158,7 +159,7 @@ func (g *Gateway) PublishLog(ctx context.Context, taskID string, msg LogMessage)
 		}
 	}
 
-	// 发布到 Redis 供跨实例投递（包含源实例 ID 用于去重）
+	// Publish to Redis for cross-instance delivery (includes the source instance ID for deduplication)
 	if g.redis == nil {
 		return nil
 	}
@@ -168,7 +169,7 @@ func (g *Gateway) PublishLog(ctx context.Context, taskID string, msg LogMessage)
 		return fmt.Errorf("marshal log message: %w", err)
 	}
 
-	// 将消息缓冲到 Redis 有序集合中，用于历史查询
+	// Buffer the message into a Redis sorted set for history queries
 	bufKey := LogBufferKeyPrefix + taskID
 	bufData, _ := json.Marshal(msg)
 	pipe := g.redis.Pipeline()
@@ -181,17 +182,17 @@ func (g *Gateway) PublishLog(ctx context.Context, taskID string, msg LogMessage)
 	return g.redis.Publish(ctx, LogChannel(taskID), data).Err()
 }
 
-// Start 开始监听 Redis Pub/Sub 的 "logs:*" 模式消息，并将日志分发给本地订阅者。
-// 阻塞直到 ctx 被取消。来自本实例的消息会被跳过以避免重复投递。
+// Start begins listening for "logs:*" pattern messages on Redis Pub/Sub and distributes logs to local subscribers.
+// It blocks until ctx is canceled. Messages from this instance are skipped to avoid duplicate delivery.
 //
-// 工作流程：
-//  1. 使用 PSubscribe 订阅所有 "logs:*" 频道
-//  2. 接收消息后反序列化为 redisLogMessage
-//  3. 跳过来自本实例的消息（通过 Source 字段匹配）
-//  4. 从频道名提取 taskID，分发给对应的本地订阅者
+// Workflow:
+//  1. Use PSubscribe to subscribe to all "logs:*" channels
+//  2. After receiving a message, deserialize it into a redisLogMessage
+//  3. Skip messages from this instance (matched by the Source field)
+//  4. Extract the taskID from the channel name and dispatch to the corresponding local subscribers
 //
-// 参数：
-//   - ctx: 上下文，取消后停止监听
+// Parameters:
+//   - ctx: context; listening stops when canceled
 func (g *Gateway) Start(ctx context.Context) {
 	sub := g.redis.PSubscribe(ctx, "logs:*")
 	defer sub.Close()
@@ -211,12 +212,12 @@ func (g *Gateway) Start(ctx context.Context) {
 				continue
 			}
 
-			// 跳过本实例的消息 — 已在本地投递
+			// Skip this instance's messages — already delivered locally
 			if wrapped.Source == g.id {
 				continue
 			}
 
-			// 从频道名 "logs:{taskID}" 中提取 taskID
+			// Extract the taskID from the channel name "logs:{taskID}"
 			taskID := strings.TrimPrefix(msg.Channel, "logs:")
 
 			g.mu.RLock()
@@ -236,16 +237,16 @@ func (g *Gateway) Start(ctx context.Context) {
 	}
 }
 
-// GetBufferedLogs 从 Redis 中获取指定任务的所有缓冲日志消息，按时间戳升序返回。
-// 用于客户端重连后恢复历史日志。
+// GetBufferedLogs retrieves all buffered log messages for the specified task from Redis, returned in ascending timestamp order.
+// Used to restore historical logs after a client reconnects.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务的唯一标识符
+// Parameters:
+//   - ctx: request context
+//   - taskID: the unique identifier of the task
 //
-// 返回：
-//   - []LogMessage: 缓冲的日志消息列表（按时间戳升序）
-//   - error: Redis 查询失败时返回错误
+// Returns:
+//   - []LogMessage: the list of buffered log messages (in ascending timestamp order)
+//   - error: returned when the Redis query fails
 func (g *Gateway) GetBufferedLogs(ctx context.Context, taskID string) ([]LogMessage, error) {
 	if g.redis == nil {
 		return nil, nil
@@ -271,20 +272,20 @@ func (g *Gateway) GetBufferedLogs(ctx context.Context, taskID string) ([]LogMess
 	return msgs, nil
 }
 
-// ClientCount 返回指定任务的订阅者数量。
+// ClientCount returns the number of subscribers for the specified task.
 //
-// 参数：
-//   - taskID: 任务的唯一标识符
+// Parameters:
+//   - taskID: the unique identifier of the task
 //
-// 返回：
-//   - int: 当前订阅者数量
+// Returns:
+//   - int: the current number of subscribers
 func (g *Gateway) ClientCount(taskID string) int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return len(g.clients[taskID])
 }
 
-// Close 关闭所有客户端通道，清理资源。在服务器关闭时调用。
+// Close closes all client channels and releases resources. Called when the server shuts down.
 func (g *Gateway) Close() {
 	g.mu.Lock()
 	defer g.mu.Unlock()

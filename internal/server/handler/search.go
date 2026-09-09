@@ -1,6 +1,6 @@
-// search.go 提供任务和代理的关键词搜索 HTTP API 端点。
+// search.go provides HTTP API endpoints for keyword search of tasks and agents.
 //
-// 支持按关键词搜索任务和 Agent，任务搜索可按项目 ID 过滤，Agent 搜索可按工作区 ID 过滤。
+// Supports keyword search of tasks and Agents; task search can be filtered by project ID, and Agent search can be filtered by workspace ID.
 
 package handler
 
@@ -15,17 +15,17 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// SearchHandler 处理搜索相关的 HTTP 请求，支持任务和代理的关键词搜索。
+// SearchHandler handles HTTP requests related to search, supporting keyword search of tasks and agents.
 type SearchHandler struct {
 	Svc *service.Service
 }
 
-// NewSearchHandler 创建 SearchHandler 实例。
+// NewSearchHandler creates a SearchHandler instance.
 func NewSearchHandler(svc *service.Service) *SearchHandler {
 	return &SearchHandler{Svc: svc}
 }
 
-// Routes 返回搜索的路由表。
+// Routes returns the route table for search.
 func (h *SearchHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -35,20 +35,20 @@ func (h *SearchHandler) Routes() chi.Router {
 	return r
 }
 
-// SearchTasks 处理 GET /workspaces/{workspaceId}/search/tasks 端点，按关键词搜索任务，支持按项目 ID 过滤。
+// SearchTasks handles the GET /workspaces/{workspaceId}/search/tasks endpoint, searching tasks by keyword, supports filtering by project ID.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 查询参数：
-//   - q: string，搜索关键词（必填）
-//   - projectId: UUID，项目 ID（可选，按项目过滤）
+// Query parameters:
+//   - q: string, search keyword (required)
+//   - projectId: UUID, project ID (optional, filter by project)
 //
-// 响应：
-//   - 200: 成功返回搜索结果
-//   - 400: 缺少搜索关键词或项目 ID 无效
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns search results
+//   - 400: missing search keyword or invalid project ID
+//   - 401: not authenticated
 func (h *SearchHandler) SearchTasks(w http.ResponseWriter, r *http.Request) {
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
@@ -56,14 +56,14 @@ func (h *SearchHandler) SearchTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 获取搜索关键词
+	// get the search keyword
 	keyword := r.URL.Query().Get("q")
 	if keyword == "" {
 		response.BadRequest(w, "missing query parameter: q")
 		return
 	}
 
-	// 解析可选的项目 ID
+	// parse the optional project ID
 	projectIDStr := r.URL.Query().Get("projectId")
 	var projectID *uuid.UUID
 	if projectIDStr != "" {
@@ -72,14 +72,14 @@ func (h *SearchHandler) SearchTasks(w http.ResponseWriter, r *http.Request) {
 			response.BadRequest(w, "invalid project id")
 			return
 		}
-		// 验证项目属于当前工作区
+		// verify the project belongs to the current workspace
 		if checkProjectWorkspace(h.Svc, w, r, parsed) == nil {
 			return
 		}
 		projectID = &parsed
 	}
 
-	// 调用 service 搜索任务（现已直接返回 []types.Task）
+	// call service to search tasks (now returns []types.Task directly)
 	searchSvc := service.NewSearchService(h.Svc)
 	tasks, err := searchSvc.SearchTasks(r.Context(), keyword, ws.WorkspaceID, projectID)
 	if err != nil {
@@ -87,23 +87,23 @@ func (h *SearchHandler) SearchTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 转换为响应格式
+	// convert to response format
 	response.JSON(w, r, tasksToResponse(tasks))
 }
 
-// SearchAgents 处理 GET /workspaces/{workspaceId}/search/agents 端点，按关键词搜索 AI 代理。
+// SearchAgents handles the GET /workspaces/{workspaceId}/search/agents endpoint, searching AI agents by keyword.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 查询参数：
-//   - q: string，搜索关键词（必填）
+// Query parameters:
+//   - q: string, search keyword (required)
 //
-// 响应：
-//   - 200: 成功返回搜索结果
-//   - 400: 缺少搜索关键词或工作区 ID 无效
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns search results
+//   - 400: missing search keyword or invalid workspace ID
+//   - 401: not authenticated
 func (h *SearchHandler) SearchAgents(w http.ResponseWriter, r *http.Request) {
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
@@ -111,14 +111,14 @@ func (h *SearchHandler) SearchAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 获取搜索关键词
+	// get the search keyword
 	keyword := r.URL.Query().Get("q")
 	if keyword == "" {
 		response.BadRequest(w, "missing query parameter: q")
 		return
 	}
 
-	// 调用 service 搜索 Agent
+	// call service to search Agents
 	searchSvc := service.NewSearchService(h.Svc)
 	agents, err := searchSvc.SearchAgents(r.Context(), keyword, ws.WorkspaceID)
 	if err != nil {

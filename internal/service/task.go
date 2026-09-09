@@ -1,9 +1,10 @@
-// task.go 实现任务管理的业务逻辑，包括任务创建、查询、更新、删除，
-// 以及任务节点（task_nodes）的状态流转和子任务管理。
+// task.go implements the business logic for Task management, including Task creation, query, update, delete,
+// as well as the state transitions of task nodes (task_nodes) and subtask management.
 //
-// 本文件是 Task 领域的 Service 层入口，依赖 Store 层提供的数据访问方法。
-// 类型一律使用 internal/types 的 domain 类型；仅剩少量 db.NullTaskStatus 等
-// nullable 枚举引用（未来引入 types.NullTaskStatus 后可清理）。
+// This file is the Service layer entry point for the Task domain, relying on data access methods
+// provided by the Store layer. All types use the domain types from internal/types; only a few
+// nullable enum references such as db.NullTaskStatus remain (can be cleaned up once
+// types.NullTaskStatus is introduced in the future).
 package service
 
 import (
@@ -17,14 +18,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TaskService 提供任务管理相关的业务逻辑。
+// TaskService provides the business logic related to Task management.
 type TaskService struct {
 	svc *Service
 }
 
-// ParseDueDate 解析截止日期字符串，支持 RFC3339 和 YYYY-MM-DD 格式。
-// 解析失败时返回 Valid=false 的 sql.NullTime。
-// 使 handler 层无需直接导入 store 包。
+// ParseDueDate parses a due date string, supporting RFC3339 and YYYY-MM-DD formats.
+// Returns sql.NullTime with Valid=false when parsing fails.
+// Allows the handler layer to avoid importing the store package directly.
 func ParseDueDate(dateStr *string) sql.NullTime {
 	if dateStr == nil || *dateStr == "" {
 		return sql.NullTime{}
@@ -39,34 +40,34 @@ func ParseDueDate(dateStr *string) sql.NullTime {
 	return sql.NullTime{Time: parsed, Valid: true}
 }
 
-// NewTaskService 创建一个新的 TaskService 实例。
+// NewTaskService creates a new TaskService instance.
 func NewTaskService(svc *Service) *TaskService {
 	return &TaskService{svc: svc}
 }
 
-// CreateTaskResult 保存创建任务操作的结果。
+// CreateTaskResult stores the result of a create Task operation.
 type CreateTaskResult struct {
-	Task  types.Task       // 创建的任务
-	Nodes []types.TaskNode // 根据工作流模板生成的工作流节点
+	Task  types.Task       // the created Task
+	Nodes []types.TaskNode // Workflow nodes generated from the Workflow template
 }
 
-// Create 创建一个任务并根据工作流模板生成有序节点。
-// 创建后通过 SSE 事件通知代理有待认领的节点。
+// Create creates a Task and generates ordered nodes from the Workflow template.
+// After creation, it notifies agents via SSE events that there are nodes to claim.
 //
-// 步骤：
-//  1. 查询工作流模板的节点定义
-//  2. 调用 Store 创建任务并生成工作流节点（在事务中完成）
-//  3. 通过 SSE 发布 node:pending 事件通知代理
+// Steps:
+//  1. Query the node definitions of the Workflow template
+//  2. Call the Store to create the Task and generate Workflow nodes (within a transaction)
+//  3. Publish node:pending SSE events to notify agents
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
-//   - params: 创建任务的参数，包含标题、描述、优先级、工作流名称等
-//   - workflowTemplateID: 工作流模板 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: Project ID
+//   - params: parameters for creating the Task, including title, description, priority, Workflow name, etc.
+//   - workflowTemplateID: Workflow template ID
 //
-// 返回：
-//   - *CreateTaskResult: 包含任务和生成的节点列表
-//   - error: 可能的错误（模板不存在、数据库写入失败）
+// Returns:
+//   - *CreateTaskResult: contains the Task and the generated node list
+//   - error: possible errors (template not found, database write failure)
 func (s *TaskService) Create(ctx context.Context, projectID uuid.UUID, params types.CreateTaskParams, workflowTemplateID uuid.UUID) (*CreateTaskResult, error) {
 	templateNodes, err := s.svc.Store.ListTemplateNodes(ctx, workflowTemplateID)
 	if err != nil {
@@ -83,20 +84,20 @@ func (s *TaskService) Create(ctx context.Context, projectID uuid.UUID, params ty
 	return &CreateTaskResult{Task: task, Nodes: nodes}, nil
 }
 
-// publishNodePendingEvents 为新创建的任务节点发布 node:pending 或
-// node:continuation_invite SSE 事件。
+// publishNodePendingEvents publishes node:pending or
+// node:continuation_invite SSE events for newly created task nodes.
 //
-// 步骤：
-//  1. 查询项目信息以获取工作区 ID
-//  2. 遍历节点，找到第一个需要处理的节点：
-//     - pending 状态：发布 node:pending 事件（广播到工作区）
-//     - in_progress 且有续约权：发布 node:continuation_invite 事件（定向发送）
-//  3. 一条事件足以触发所有代理轮询，因此找到第一个即返回
+// Steps:
+//  1. Query project info to get the Workspace ID
+//  2. Iterate nodes to find the first node that needs handling:
+//     - pending status: publish node:pending event (broadcast to Workspace)
+//     - in_progress with continuation rights: publish node:continuation_invite event (directed)
+//  3. A single event is enough to trigger all agents to poll, so return after the first one
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
-//   - nodes: 新创建的节点列表
+// Parameters:
+//   - ctx: request context
+//   - projectID: Project ID
+//   - nodes: the newly created node list
 func (s *TaskService) publishNodePendingEvents(ctx context.Context, projectID uuid.UUID, nodes []types.TaskNode) {
 	for _, node := range nodes {
 		if node.Status == types.TaskNodeStatusPending {
@@ -122,51 +123,51 @@ func (s *TaskService) publishNodePendingEvents(ctx context.Context, projectID uu
 	}
 }
 
-// Get 根据 ID 获取任务信息。
+// Get retrieves Task info by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - id: Task ID
 //
-// 返回：
-//   - types.Task: 任务信息
-//   - error: 可能的错误（任务不存在）
+// Returns:
+//   - types.Task: Task info
+//   - error: possible errors (Task not found)
 func (s *TaskService) Get(ctx context.Context, id int32) (types.Task, error) {
 	return s.svc.Store.GetTask(ctx, id)
 }
 
-// TaskWithNodes 包含任务及其工作流节点和富化元数据。
+// TaskWithNodes contains a Task along with its Workflow nodes and enriched metadata.
 type TaskWithNodes struct {
-	Task         types.Task                `json:"task"`          // 任务基本信息
-	Nodes        []types.TaskNode          `json:"nodes"`         // 工作流节点列表
-	WorkflowName string                   `json:"workflow_name"` // 工作流模板名称
-	GitBranch    string                   `json:"git_branch"`    // 关联的 Git 分支
-	NodeTokens   map[string]NodeTokenUsage `json:"node_tokens"`   // 各节点 Token 用量
+	Task         types.Task                `json:"task"`          // basic Task info
+	Nodes        []types.TaskNode          `json:"nodes"`         // Workflow node list
+	WorkflowName string                   `json:"workflow_name"` // Workflow template name
+	GitBranch    string                   `json:"git_branch"`    // associated Git branch
+	NodeTokens   map[string]NodeTokenUsage `json:"node_tokens"`   // Token usage per node
 }
 
-// NodeTokenUsage 封装单个节点的 Token 用量。
+// NodeTokenUsage wraps the Token usage of a single node.
 type NodeTokenUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 }
 
-// PaginatedTaskResult 包含分页任务查询的结果。
+// PaginatedTaskResult contains the result of a paginated Task query.
 type PaginatedTaskResult struct {
-	Tasks  []TaskWithNodes `json:"tasks"`  // 当前页的任务列表
-	Total  int64           `json:"total"`  // 符合条件的总任务数
-	Limit  int32           `json:"limit"`  // 每页数量
-	Offset int32           `json:"offset"` // 偏移量
+	Tasks  []TaskWithNodes `json:"tasks"`  // Task list for the current page
+	Total  int64           `json:"total"`  // total number of Tasks matching the criteria
+	Limit  int32           `json:"limit"`  // page size
+	Offset int32           `json:"offset"` // offset
 }
 
-// ListWithNodes 列出项目中的任务及其节点，按状态过滤。
+// ListWithNodes lists Tasks in a Project along with their nodes, filtered by status.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 查询参数，包含项目 ID 和状态过滤条件
+// Parameters:
+//   - ctx: request context
+//   - params: query parameters, including Project ID and status filter
 //
-// 返回：
-//   - []TaskWithNodes: 任务列表（含节点和元数据）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []TaskWithNodes: Task list (with nodes and metadata)
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListWithNodes(ctx context.Context, params types.ListTasksParams) ([]TaskWithNodes, error) {
 	tasks, err := s.svc.Store.ListTasks(ctx, params)
 	if err != nil {
@@ -176,15 +177,15 @@ func (s *TaskService) ListWithNodes(ctx context.Context, params types.ListTasksP
 	return s.enrichWithNodes(ctx, tasks, projectID)
 }
 
-// ListAllWithNodes 列出项目中的所有任务（不限状态）及其节点。
+// ListAllWithNodes lists all Tasks in a Project (regardless of status) along with their nodes.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: Project ID
 //
-// 返回：
-//   - []TaskWithNodes: 任务列表（含节点和元数据）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []TaskWithNodes: Task list (with nodes and metadata)
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListAllWithNodes(ctx context.Context, projectID uuid.UUID) ([]TaskWithNodes, error) {
 	tasks, err := s.svc.Store.ListAllTasks(ctx, projectID)
 	if err != nil {
@@ -193,23 +194,25 @@ func (s *TaskService) ListAllWithNodes(ctx context.Context, projectID uuid.UUID)
 	return s.enrichWithNodes(ctx, tasks, projectID)
 }
 
-// ListTasksPaginatedWithNodes 分页查询项目中的任务及其节点，支持状态过滤和搜索。
-// 不过滤历史任务，供历史任务页面使用。
+// ListTasksPaginatedWithNodes paginates Tasks in a Project along with their nodes,
+// supporting status filtering and search. Does not filter historical Tasks;
+// used by the historical Tasks page.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
-//   - status: 任务状态过滤（空字符串表示不过滤状态）
-//   - searchQuery: 搜索关键词（匹配标题或描述，空字符串表示不搜索）
-//   - limit: 每页数量
-//   - offset: 偏移量
+// Parameters:
+//   - ctx: request context
+//   - projectID: Project ID
+//   - status: Task status filter (empty string means no status filter)
+//   - searchQuery: search keyword (matches title or description; empty string means no search)
+//   - limit: page size
+//   - offset: offset
 //
-// 返回：
-//   - *PaginatedTaskResult: 分页结果，包含当前页任务列表和总数
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - *PaginatedTaskResult: paginated result, including the Task list for the current page and the total count
+//   - error: possible errors (database query failure)
 //
-// 注意：本方法使用 db.NullTaskStatus 等 nullable 枚举构造 db.CountTasksByStatusParams
-// 和 db.ListTasksPaginatedParams。未来引入 types.NullTaskStatus 后可统一类型。
+// Note: This method uses nullable enums such as db.NullTaskStatus to construct
+// db.CountTasksByStatusParams and db.ListTasksPaginatedParams. Once types.NullTaskStatus
+// is introduced in the future, the types can be unified.
 func (s *TaskService) ListTasksPaginatedWithNodes(ctx context.Context, projectID uuid.UUID, status string, searchQuery string, limit, offset int32) (*PaginatedTaskResult, error) {
 	var statuses []string
 	if status != "" {
@@ -249,22 +252,22 @@ func (s *TaskService) ListTasksPaginatedWithNodes(ctx context.Context, projectID
 	}, nil
 }
 
-// enrichWithNodes 批量加载项目中所有任务的节点并按 task_id 分组。
-// 同时为每个任务填充工作流名称和 Git 分支信息。
+// enrichWithNodes batch-loads nodes for all Tasks in a Project and groups them by task_id.
+// It also fills in the Workflow name and Git branch info for each Task.
 //
-// 步骤：
-//  1. 批量查询项目下所有任务的节点（避免 N+1 查询）
-//  2. 按 task_id 分组到 map 中
-//  3. 遍历任务列表，组装 TaskWithNodes 结构
+// Steps:
+//  1. Batch query nodes for all Tasks under the Project (avoids N+1 queries)
+//  2. Group them into a map by task_id
+//  3. Iterate the Task list to assemble the TaskWithNodes structure
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - tasks: 任务列表
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - tasks: Task list
+//   - projectID: Project ID
 //
-// 返回：
-//   - []TaskWithNodes: 任务列表（含节点和元数据）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []TaskWithNodes: Task list (with nodes and metadata)
+//   - error: possible errors (database query failure)
 func (s *TaskService) enrichWithNodes(ctx context.Context, tasks []types.Task, projectID uuid.UUID) ([]TaskWithNodes, error) {
 	allNodes, err := s.svc.Store.ListTaskNodesByProject(ctx, projectID)
 	if err != nil {
@@ -276,7 +279,7 @@ func (s *TaskService) enrichWithNodes(ctx context.Context, tasks []types.Task, p
 		nodesByTask[n.TaskID] = append(nodesByTask[n.TaskID], n)
 	}
 
-	// 批量查询所有节点的 Token 用量（一次查询）
+	// Batch query Token usage for all nodes (single query)
 	var allNodeIDs []uuid.UUID
 	for _, n := range allNodes {
 		if id, err := uuid.Parse(n.ID); err == nil {
@@ -297,7 +300,7 @@ func (s *TaskService) enrichWithNodes(ctx context.Context, tasks []types.Task, p
 			gitBranch = *t.GitBranch
 		}
 
-		// 构建该任务的节点 Token 用量 map
+		// Build the node Token usage map for this Task
 		nodeTokens := make(map[string]NodeTokenUsage, len(nodes))
 		for _, n := range nodes {
 			if tu, ok := tokenMap[uuid.MustParse(n.ID)]; ok && tu.TotalTokens > 0 {
@@ -319,132 +322,132 @@ func (s *TaskService) enrichWithNodes(ctx context.Context, tasks []types.Task, p
 	return result, nil
 }
 
-// List 列出项目中的任务，按状态过滤。
+// List lists the tasks in a project, filtered by status.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 查询参数，包含项目 ID 和状态过滤条件
+// Parameters:
+//   - ctx: request context
+//   - params: query parameters, including the project ID and status filter conditions
 //
-// 返回：
-//   - []types.Task: 任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Task: task list
+//   - error: possible errors (database query failure)
 func (s *TaskService) List(ctx context.Context, params types.ListTasksParams) ([]types.Task, error) {
 	return s.svc.Store.ListTasks(ctx, params)
 }
 
-// ListAll 列出项目中的所有任务（不限状态）。
+// ListAll lists all tasks (regardless of status) in a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - []types.Task: 任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Task: task list
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListAll(ctx context.Context, projectID uuid.UUID) ([]types.Task, error) {
 	return s.svc.Store.ListAllTasks(ctx, projectID)
 }
 
-// Update 更新任务信息。
+// Update updates task info.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新任务的参数，包含 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for updating the task, including the ID and the fields to update
 //
-// 返回：
-//   - types.Task: 更新后的任务信息
-//   - error: 可能的错误（任务不存在、数据库更新失败）
+// Returns:
+//   - types.Task: updated task info
+//   - error: possible errors (task not found, database update failure)
 func (s *TaskService) Update(ctx context.Context, params types.UpdateTaskParams) (types.Task, error) {
 	return s.svc.Store.UpdateTask(ctx, params)
 }
 
-// Delete 软删除一个任务并取消其所有未完成的节点。
+// Delete soft-deletes a task and cancels all its unfinished nodes.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
 //
-// 返回：
-//   - error: 可能的错误（任务不存在、数据库删除失败）
+// Returns:
+//   - error: possible errors (task not found, database deletion failure)
 func (s *TaskService) Delete(ctx context.Context, taskID int32) error {
 	return s.svc.Store.DeleteTask(ctx, taskID)
 }
 
-// CancelTaskNodes 取消任务中所有未完成/未取消的节点。
-// 将节点状态设为 cancelled，终止执行中的工作流。
+// CancelTaskNodes cancels all unfinished/uncancelled nodes in a task.
+// It sets the node status to cancelled, terminating the in-progress workflow.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
 //
-// 返回：
-//   - error: 可能的错误（数据库更新失败）
+// Returns:
+//   - error: possible errors (database update failure)
 func (s *TaskService) CancelTaskNodes(ctx context.Context, taskID int32) error {
 	return s.svc.Store.CancelTaskNodes(ctx, taskID)
 }
 
-// ListTaskNodes 列出指定任务的所有工作流节点。
+// ListTaskNodes lists all workflow nodes of the specified task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
 //
-// 返回：
-//   - []types.TaskNode: 节点列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.TaskNode: node list
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListTaskNodes(ctx context.Context, taskID int32) ([]types.TaskNode, error) {
 	return s.svc.Store.ListTaskNodes(ctx, taskID)
 }
 
-// ListNodeTransitions 列出指定节点的所有状态转换记录。
-// 转换记录用于追踪节点的完整状态变更历史。
+// ListNodeTransitions lists all state-transition records of the specified node.
+// Transition records are used to track the full state-change history of a node.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - nodeID: 节点 ID
+// Parameters:
+//   - ctx: request context
+//   - nodeID: node ID
 //
-// 返回：
-//   - []types.NodeTransition: 状态转换记录列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.NodeTransition: state-transition record list
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListNodeTransitions(ctx context.Context, nodeID uuid.UUID) ([]types.NodeTransition, error) {
 	return s.svc.Store.ListNodeTransitions(ctx, nodeID)
 }
 
-// CreateSubtask 在父任务下创建一个子任务。
+// CreateSubtask creates a subtask under a parent task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 创建子任务的参数，包含父任务 ID、标题、描述等
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for creating a subtask, including the parent task ID, title, description, etc.
 //
-// 返回：
-//   - types.Task: 创建的子任务
-//   - error: 可能的错误（父任务不存在、数据库写入失败）
+// Returns:
+//   - types.Task: the created subtask
+//   - error: possible errors (parent task not found, database write failure)
 func (s *TaskService) CreateSubtask(ctx context.Context, params types.CreateSubtaskParams) (types.Task, error) {
 	return s.svc.Store.CreateSubtask(ctx, params)
 }
 
-// UpdateTaskGitBranch 更新任务关联的 Git 分支名。
+// UpdateTaskGitBranch updates the Git branch name associated with the task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
-//   - gitBranch: Git 分支名
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
+//   - gitBranch: Git branch name
 //
-// 返回：
-//   - error: 可能的错误（数据库更新失败）
+// Returns:
+//   - error: possible errors (database update failure)
 func (s *TaskService) UpdateTaskGitBranch(ctx context.Context, taskID int32, gitBranch string) error {
 	return s.svc.Store.UpdateTaskGitBranch(ctx, taskID, gitBranch)
 }
 
-// ListSubtasks 列出父任务的所有子任务。
+// ListSubtasks lists all subtasks of a parent task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - parentTaskID: 父任务 ID
+// Parameters:
+//   - ctx: request context
+//   - parentTaskID: parent task ID
 //
-// 返回：
-//   - []types.Task: 子任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Task: subtask list
+//   - error: possible errors (database query failure)
 func (s *TaskService) ListSubtasks(ctx context.Context, parentTaskID int32) ([]types.Task, error) {
 	return s.svc.Store.ListSubtasks(ctx, sql.NullInt32{Int32: parentTaskID, Valid: true})
 }

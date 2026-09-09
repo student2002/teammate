@@ -1,4 +1,4 @@
-// comment_test.go 覆盖评论数据访问的测试。
+// comment_test.go tests for comment data access.
 package store_test
 
 import (

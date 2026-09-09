@@ -1,11 +1,11 @@
-// helpers_dto.go 为 helpers.go 中使用的 db 模型类型提供别名。
+// helpers_dto.go provides aliases for db model types used in helpers.go.
 package handler
 
 import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- 模型类型别名，消除 handler 层对 db/generated 的直接依赖 ----
+// ---- model type aliases, removing the handler layer's direct dependency on db/generated ----
 // Note: Project is defined in project_dto.go, NodeType/AssigneeType in workflow_dto.go.
 
 type TaskNode = types.TaskNode

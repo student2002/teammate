@@ -1,4 +1,4 @@
-// routes_auth.go 注册认证相关路由：登录、注册、Token 交换。
+// routes_auth.go registers authentication-related routes: login, registration, token exchange.
 package server
 
 import (
@@ -7,7 +7,7 @@ import (
 	"github.com/teammate/server/internal/server/handler"
 )
 
-// registerAuthRoutes 注册无需认证的认证路由（登录、注册、Token 交换）。
+// registerAuthRoutes registers authentication routes that require no auth (login, registration, token exchange).
 func (reg *routeRegistrar) registerAuthRoutes(r chi.Router) {
 	svc := reg.svc
 
@@ -15,7 +15,7 @@ func (reg *routeRegistrar) registerAuthRoutes(r chi.Router) {
 	r.Mount("/auth", authHandler.Routes())
 }
 
-// registerAuthProtectedRoutes 注册需要认证的认证路由（身份查询、工作区切换）。
+// registerAuthProtectedRoutes registers authentication routes that require auth (identity query, workspace switch).
 func (reg *routeRegistrar) registerAuthProtectedRoutes(r chi.Router) {
 	svc := reg.svc
 	s := reg.server

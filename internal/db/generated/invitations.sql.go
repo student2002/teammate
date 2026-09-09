@@ -52,7 +52,7 @@ type CreateInvitationParams struct {
 	ExpiresAt   time.Time     `db:"expires_at" json:"expires_at"`
 }
 
-// 邀请
+// Invitations
 func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error) {
 	row := q.db.QueryRowContext(ctx, createInvitation,
 		arg.WorkspaceID,

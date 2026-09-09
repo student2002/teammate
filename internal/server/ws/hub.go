@@ -1,18 +1,18 @@
-// hub.go 提供 Server-Sent Events (SSE) Hub，管理事件的发布、订阅和跨实例同步。
-// 基于 Redis Pub/Sub 实现多服务器实例间的事件分发，每个运行时（Runtime）有独立的事件频道。
-// 支持事件缓冲和重放：事件存储到 Redis 有序集合中，Agent 重连时通过 Last-Event-ID 恢复丢失事件。
+// hub.go provides the Server-Sent Events (SSE) Hub, managing event publishing, subscription, and cross-instance synchronization.
+// It uses Redis Pub/Sub for event distribution across multiple server instances; each runtime (Runtime) has an independent event channel.
+// It supports event buffering and replay: events are stored in a Redis sorted set, and on agent reconnect, lost events are recovered via Last-Event-ID.
 //
-// SSE 事件类型：
-//   - node:pending — 新节点待认领
-//   - node:continuation_invite — 节点完成后续约权邀请
-//   - mention:trigger — @提及触发
-//   - task:interrupt — 任务中断（控制事件，保证送达）
-//   - node:timeout — 节点超时（控制事件）
-//   - node:reject_rollback — 审查拒绝回滚（控制事件）
-//   - sync:required — 需要全量同步（控制事件）
-//   - permission:changed — 权限变更（控制事件）
+// SSE event types:
+//   - node:pending — a new node pending claim
+//   - node:continuation_invite — a node completed; continuation-invitation
+//   - mention:trigger — @mention triggered
+//   - task:interrupt — task interrupt (control event, guaranteed delivery)
+//   - node:timeout — node timeout (control event)
+//   - node:reject_rollback — review reject rollback (control event)
+//   - sync:required — full sync required (control event)
+//   - permission:changed — permission changed (control event)
 //
-// 控制事件（interrupt/rollback/timeout/sync/permission）使用带超时的阻塞发送确保送达。
+// Control events (interrupt/rollback/timeout/sync/permission) use a blocking send with a timeout to guarantee delivery.
 package ws
 
 import (
@@ -30,13 +30,13 @@ import (
 )
 
 const (
-	// BufferTTL 是事件在 Redis 有序集合缓冲区中的保留时间（1 小时）。
+	// BufferTTL is the retention time of events in the Redis sorted-set buffer (1 hour).
 	BufferTTL = 1 * time.Hour
-	// BufferKeyPrefix 是 Redis 中 SSE 事件缓冲区的键前缀，格式为 "sse_buffer:{runtimeID}"。
+	// BufferKeyPrefix is the Redis key prefix for the SSE event buffer, formatted as "sse_buffer:{runtimeID}".
 	BufferKeyPrefix = "sse_buffer:"
 )
 
-// 标准 SSE 事件类型常量，从 types 包 re-export 以保持向后兼容。
+// Standard SSE event type constants, re-exported from the types package for backward compatibility.
 const (
 	EventNodePending            = types.EventNodePending
 	EventNodeContinuationInvite = types.EventNodeContinuationInvite
@@ -48,14 +48,14 @@ const (
 	EventPermissionChanged      = types.EventPermissionChanged
 )
 
-// IsControlEvent 判断指定事件类型是否为控制事件（需要保证送达的高优先级事件）。
-// 控制事件使用带超时的阻塞发送，非控制事件使用尽力投递（通道满时丢弃）。
+// IsControlEvent determines whether the specified event type is a control event (a high-priority event that requires guaranteed delivery).
+// Control events use a blocking send with a timeout; non-control events use best-effort delivery (dropped when the channel is full).
 //
-// 参数：
-//   - eventType: 事件类型字符串
+// Parameters:
+//   - eventType: the event type string
 //
-// 返回：
-//   - bool: 是否为控制事件
+// Returns:
+//   - bool: whether it is a control event
 func IsControlEvent(eventType string) bool {
 	switch eventType {
 	case EventTaskInterrupt, EventNodeRejectRollback, EventNodeTimeout, EventSyncRequired, EventPermissionChanged:
@@ -65,24 +65,24 @@ func IsControlEvent(eventType string) bool {
 	}
 }
 
-// SSEEvent 是 types.SSEEvent 的别名，保持向后兼容。
+// SSEEvent is an alias for types.SSEEvent, for backward compatibility.
 type SSEEvent = types.SSEEvent
 
-// Hub 是 SSE 事件中心，管理事件的发布、订阅和跨实例同步。
-// 每个服务器实例维护本地订阅者列表，通过 Redis Pub/Sub 实现跨实例事件分发。
+// Hub is the SSE event center, managing event publishing, subscription, and cross-instance synchronization.
+// Each server instance maintains a local subscriber list and uses Redis Pub/Sub for cross-instance event distribution.
 type Hub struct {
 	redis   *redis.Client
 	mu      sync.RWMutex
-	clients map[string][]chan SSEEvent // runtime_id -> 订阅通道列表
+	clients map[string][]chan SSEEvent // runtime_id -> list of subscribe channels
 }
 
-// NewHub 创建一个新的 Hub 实例，使用给定的 Redis 客户端。
+// NewHub creates a new Hub instance using the given Redis client.
 //
-// 参数：
-//   - rdb: Redis 客户端，用于 Pub/Sub 和事件缓冲
+// Parameters:
+//   - rdb: Redis client, used for Pub/Sub and event buffering
 //
-// 返回：
-//   - *Hub: 初始化后的 Hub 实例
+// Returns:
+//   - *Hub: the initialized Hub instance
 func NewHub(rdb *redis.Client) *Hub {
 	return &Hub{
 		redis:   rdb,
@@ -90,48 +90,48 @@ func NewHub(rdb *redis.Client) *Hub {
 	}
 }
 
-// RedisChannel 返回指定运行时的 Redis Pub/Sub 频道名，格式为 "sse:{runtimeID}"。
+// RedisChannel returns the Redis Pub/Sub channel name for the specified runtime, formatted as "sse:{runtimeID}".
 //
-// 参数：
-//   - runtimeID: 运行时的唯一标识符
+// Parameters:
+//   - runtimeID: the unique identifier of the runtime
 //
-// 返回：
-//   - string: Redis 频道名
+// Returns:
+//   - string: the Redis channel name
 func RedisChannel(runtimeID string) string {
 	return fmt.Sprintf("sse:%s", runtimeID)
 }
 
-// BufferKey 返回指定运行时的 Redis 缓冲区键名，格式为 "sse_buffer:{runtimeID}"。
+// BufferKey returns the Redis buffer key name for the specified runtime, formatted as "sse_buffer:{runtimeID}".
 //
-// 参数：
-//   - runtimeID: 运行时的唯一标识符
+// Parameters:
+//   - runtimeID: the unique identifier of the runtime
 //
-// 返回：
-//   - string: Redis 缓冲区键名
+// Returns:
+//   - string: the Redis buffer key name
 func BufferKey(runtimeID string) string {
 	return BufferKeyPrefix + runtimeID
 }
 
-// BufferEvent 将事件存储到 Redis 有序集合缓冲区中，用于后续重放。
-// 事件 ID（Unix 纳秒时间戳字符串）作为分数，支持 Last-Event-ID 重连的高效范围查询。
+// BufferEvent stores an event into the Redis sorted-set buffer for later replay.
+// The event ID (a Unix nanosecond timestamp string) is used as the score, supporting efficient range queries for Last-Event-ID reconnection.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: 运行时的唯一标识符
-//   - event: 要缓冲的 SSE 事件
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: the unique identifier of the runtime
+//   - event: the SSE event to buffer
 //
-// 返回：
-//   - error: Redis 写入失败时返回错误
+// Returns:
+//   - error: returned when the Redis write fails
 func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent) error {
 	if h.redis == nil {
 		return nil
 	}
 	key := BufferKey(runtimeID)
 
-	// 将事件 ID 解析为分数，事件 ID 是 Unix 纳秒时间戳
+	// Parse the event ID as the score; the event ID is a Unix nanosecond timestamp
 	score, err := strconv.ParseFloat(event.ID, 64)
 	if err != nil {
-		// 降级：如果 ID 不是时间戳格式，使用当前时间
+		// Fallback: if the ID is not in timestamp format, use the current time
 		score = float64(time.Now().UnixNano())
 	}
 
@@ -149,23 +149,23 @@ func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent)
 	return nil
 }
 
-// GetBufferedEvents 获取缓冲区中 ID 大于 afterEventID 的所有事件，按 ID 升序返回。
-// 用于 Agent 重连时恢复丢失的事件（Last-Event-ID 机制）。
+// GetBufferedEvents retrieves all events in the buffer with an ID greater than afterEventID, returned in ascending ID order.
+// Used to recover lost events when an agent reconnects (Last-Event-ID mechanism).
 //
-// 重连流程：
-//  1. Agent 重连时发送 Last-Event-ID 头
-//  2. Server 查询缓冲区中大于该 ID 的所有事件
-//  3. 将缓冲事件按顺序发送给 Agent
-//  4. 如果缓冲区为空或已过期，推送 sync:required 事件触发全量同步
+// Reconnection flow:
+//  1. On reconnect the agent sends the Last-Event-ID header
+//  2. The server queries all events in the buffer with an ID greater than it
+//  3. The buffered events are sent to the agent in order
+//  4. If the buffer is empty or expired, a sync:required event is pushed to trigger a full sync
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: 运行时的唯一标识符
-//   - afterEventID: 上次接收的事件 ID（Unix 纳秒时间戳字符串），为空则返回 nil
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: the unique identifier of the runtime
+//   - afterEventID: the ID of the last received event (a Unix nanosecond timestamp string); if empty, returns nil
 //
-// 返回：
-//   - []SSEEvent: 缓冲的事件列表（按 ID 升序）
-//   - error: Redis 查询失败时返回错误
+// Returns:
+//   - []SSEEvent: the list of buffered events (in ascending ID order)
+//   - error: returned when the Redis query fails
 func (h *Hub) GetBufferedEvents(ctx context.Context, runtimeID string, afterEventID string) ([]SSEEvent, error) {
 	if afterEventID == "" || h.redis == nil {
 		return nil, nil
@@ -173,14 +173,14 @@ func (h *Hub) GetBufferedEvents(ctx context.Context, runtimeID string, afterEven
 
 	key := BufferKey(runtimeID)
 
-	// 将 afterEventID 解析为最小分数（开区间）
+	// Parse afterEventID as the minimum score (open interval)
 	minScore, err := strconv.ParseFloat(afterEventID, 64)
 	if err != nil {
-		// 无法解析 ID 格式 — 返回空以触发全量同步
+		// Cannot parse the ID format — return empty to trigger a full sync
 		return nil, nil
 	}
 
-	// ZRANGEBYSCORE 开区间查询 (minScore, +inf)
+	// ZRANGEBYSCORE open-interval query (minScore, +inf)
 	results, err := h.redis.ZRangeByScore(ctx, key, &redis.ZRangeBy{
 		Min: fmt.Sprintf("(%f", minScore),
 		Max: "+inf",
@@ -202,15 +202,15 @@ func (h *Hub) GetBufferedEvents(ctx context.Context, runtimeID string, afterEven
 	return events, nil
 }
 
-// Subscribe 订阅指定运行时的 SSE 事件，返回接收通道和取消订阅函数。
-// 客户端断开连接时必须调用取消订阅函数以释放资源。
+// Subscribe subscribes to SSE events for the specified runtime, returning a receive channel and an unsubscribe function.
+// The unsubscribe function must be called when the client disconnects to release resources.
 //
-// 参数：
-//   - runtimeID: 要订阅的运行时 ID
+// Parameters:
+//   - runtimeID: the runtime ID to subscribe to
 //
-// 返回：
-//   - <-chan SSEEvent: SSE 事件接收通道（缓冲大小 64）
-//   - func(): 取消订阅函数，客户端断开时必须调用
+// Returns:
+//   - <-chan SSEEvent: the SSE event receive channel (buffer size 64)
+//   - func(): the unsubscribe function, must be called when the client disconnects
 func (h *Hub) Subscribe(runtimeID string) (<-chan SSEEvent, func()) {
 	ch := make(chan SSEEvent, 64)
 
@@ -232,7 +232,7 @@ func (h *Hub) Subscribe(runtimeID string) (<-chan SSEEvent, func()) {
 		if len(h.clients[runtimeID]) == 0 {
 			delete(h.clients, runtimeID)
 		}
-		// 使用 recover 防止关闭时的重复关闭 panic
+		// Use recover to prevent a double-close panic during closing
 		func() {
 			defer func() { recover() }()
 			close(ch)
@@ -242,41 +242,41 @@ func (h *Hub) Subscribe(runtimeID string) (<-chan SSEEvent, func()) {
 	return ch, unsub
 }
 
-// Publish 将事件投递给本地客户端，缓冲到 Redis 用于重放，并发布到 Redis Pub/Sub 供其他实例投递。
-// 控制事件（interrupt/rollback/timeout 等）使用带超时的阻塞发送确保送达。
+// Publish delivers the event to local clients, buffers it to Redis for replay, and publishes it to Redis Pub/Sub for delivery by other instances.
+// Control events (interrupt/rollback/timeout, etc.) use a blocking send with a timeout to guarantee delivery.
 //
-// 处理流程：
-//  1. 缓冲事件到 Redis 有序集合（用于 Last-Event-ID 重连）
-//  2. 投递给本地订阅者：
-//     - 控制事件：带 2 秒超时的阻塞发送，确保送达
-//     - 非控制事件：非阻塞发送，通道满时丢弃并记录警告日志
-//  3. 发布到 Redis Pub/Sub 频道（供其他实例投递）
+// Processing flow:
+//  1. Buffer the event into a Redis sorted set (for Last-Event-ID reconnection)
+//  2. Deliver to local subscribers:
+//     - Control events: blocking send with a 2-second timeout, guaranteeing delivery
+//     - Non-control events: non-blocking send, dropped and logged as a warning when the channel is full
+//  3. Publish to the Redis Pub/Sub channel (for delivery by other instances)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: 事件目标运行时的 ID
-//   - event: 要发布的 SSE 事件
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: the ID of the runtime the event targets
+//   - event: the SSE event to publish
 //
-// 返回：
-//   - error: Redis 发布失败时返回错误
+// Returns:
+//   - error: returned when Redis publishing fails
 func (h *Hub) Publish(ctx context.Context, runtimeID string, event SSEEvent) error {
-	// 缓冲事件用于 Last-Event-ID 重连
+	// Buffer the event for Last-Event-ID reconnection
 	if err := h.BufferEvent(ctx, runtimeID, event); err != nil {
-		// 记录日志但不失败 — 缓冲是尽力而为的
+		// Log but do not fail — buffering is best-effort
 		slog.Error("buffer SSE event", "runtime_id", runtimeID, "event_id", event.ID, "err", err)
 	}
 
-	// 投递给本地客户端
+	// Deliver to local clients
 	h.mu.RLock()
 	subs := h.clients[runtimeID]
-	// 复制切片以避免在发送时持有锁
+	// Copy the slice to avoid holding the lock while sending
 	localSubs := make([]chan SSEEvent, len(subs))
 	copy(localSubs, subs)
 	h.mu.RUnlock()
 
 	for _, ch := range localSubs {
 		if IsControlEvent(event.Event) {
-			// 控制事件：带超时的阻塞发送，确保送达
+			// Control event: blocking send with a timeout, guaranteeing delivery
 			select {
 			case ch <- event:
 			case <-time.After(2 * time.Second):
@@ -284,7 +284,7 @@ func (h *Hub) Publish(ctx context.Context, runtimeID string, event SSEEvent) err
 					"runtime_id", runtimeID, "event_id", event.ID, "event_type", event.Event)
 			}
 		} else {
-			// 非控制事件：尽力投递
+			// Non-control event: best-effort delivery
 			select {
 			case ch <- event:
 			default:
@@ -293,7 +293,7 @@ func (h *Hub) Publish(ctx context.Context, runtimeID string, event SSEEvent) err
 		}
 	}
 
-	// 发布到 Redis 供跨实例投递
+	// Publish to Redis for cross-instance delivery
 	if h.redis == nil {
 		return nil
 	}
@@ -304,19 +304,19 @@ func (h *Hub) Publish(ctx context.Context, runtimeID string, event SSEEvent) err
 	return h.redis.Publish(ctx, RedisChannel(runtimeID), data).Err()
 }
 
-// Start 开始监听 Redis Pub/Sub 消息并分发给本地订阅者。
-// 使用模式订阅接收所有运行时的消息，阻塞直到 ctx 被取消。
+// Start begins listening for Redis Pub/Sub messages and dispatching them to local subscribers.
+// It uses pattern subscription to receive messages for all runtimes, and blocks until ctx is canceled.
 //
-// 工作流程：
-//  1. 使用 PSubscribe 订阅所有 "sse:*" 频道
-//  2. 接收消息后反序列化为 SSEEvent
-//  3. 从频道名提取 runtimeID
-//  4. 分发给对应的本地订阅者
+// Workflow:
+//  1. Use PSubscribe to subscribe to all "sse:*" channels
+//  2. After receiving a message, deserialize it into an SSEEvent
+//  3. Extract the runtimeID from the channel name
+//  4. Dispatch to the corresponding local subscribers
 //
-// 参数：
-//   - ctx: 上下文，取消后停止监听
+// Parameters:
+//   - ctx: context; listening stops when canceled
 func (h *Hub) Start(ctx context.Context) {
-	// 使用模式订阅，接收所有运行时的消息
+	// Use pattern subscription to receive messages for all runtimes
 	sub := h.redis.PSubscribe(ctx, "sse:*")
 	defer sub.Close()
 
@@ -335,7 +335,7 @@ func (h *Hub) Start(ctx context.Context) {
 				continue
 			}
 
-			// 从频道名 "sse:{runtimeID}" 中提取 runtimeID
+			// Extract the runtimeID from the channel name "sse:{runtimeID}"
 			runtimeID := msg.Channel[len("sse:"):]
 
 			h.mu.RLock()
@@ -355,20 +355,20 @@ func (h *Hub) Start(ctx context.Context) {
 	}
 }
 
-// ClientCount 返回指定运行时的订阅者数量。
+// ClientCount returns the number of subscribers for the specified runtime.
 //
-// 参数：
-//   - runtimeID: 运行时的唯一标识符
+// Parameters:
+//   - runtimeID: the unique identifier of the runtime
 //
-// 返回：
-//   - int: 当前订阅者数量
+// Returns:
+//   - int: the current number of subscribers
 func (h *Hub) ClientCount(runtimeID string) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients[runtimeID])
 }
 
-// Close 关闭所有客户端通道，清理资源。在服务器关闭时调用。
+// Close closes all client channels and releases resources. Called when the server shuts down.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

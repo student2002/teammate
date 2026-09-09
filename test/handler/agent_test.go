@@ -1,4 +1,4 @@
-// agent_test.go 覆盖 Agent 管理接口的测试。
+// agent_test.go covers tests for Agent management API endpoints.
 package handler_test
 
 import (
@@ -18,7 +18,7 @@ import (
 )
 
 // ==========================================
-// 代理CRUD测试
+// Agent CRUD Tests
 // ==========================================
 
 func setupAgentTestRouter(t *testing.T) (*httptest.Server, *http.Client) {
@@ -57,7 +57,7 @@ func TestCreateAgent(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	// 验证代理字段
+	// Verify agent fields
 	if result["name"] != "Test Agent" {
 		t.Fatalf("expected name 'Test Agent', got %v", result["name"])
 	}
@@ -68,7 +68,7 @@ func TestCreateAgent(t *testing.T) {
 		t.Fatalf("expected status 'offline', got %v", result["status"])
 	}
 
-	// 验证API令牌已返回
+	// Verify API token was returned
 	apiToken, ok := result["api_token"].(string)
 	if !ok || apiToken == "" {
 		t.Fatal("expected api_token to be returned on creation")
@@ -108,7 +108,7 @@ func TestListAgents(t *testing.T) {
 	ts, client := setupAgentTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	// 创建2个代理
+	// Create 2 agents
 	for i := 0; i < 2; i++ {
 		body := map[string]interface{}{
 			"name":      "Agent " + uuid.New().String()[:8],
@@ -123,7 +123,7 @@ func TestListAgents(t *testing.T) {
 		}
 	}
 
-	// 列出 Agent
+	// List agents
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
 		ts.URL+"/api/workspaces/"+wsID+"/agents", token, nil)
 
@@ -195,7 +195,7 @@ func TestDeleteAgent(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	agentID, _ := createAgent(t, client, ts.URL, wsID, token)
 
-	// 删除 Agent
+	// Delete agent
 	_, status, _ := doRequestWithToken(t, client, http.MethodDelete,
 		ts.URL+"/api/workspaces/"+wsID+"/agents/"+agentID, token, nil)
 
@@ -203,7 +203,7 @@ func TestDeleteAgent(t *testing.T) {
 		t.Fatalf("expected 204, got %d", status)
 	}
 
-	// 验证 Agent 已被删除
+	// Verify agent was deleted
 	_, status, _ = doRequestWithToken(t, client, http.MethodGet,
 		ts.URL+"/api/workspaces/"+wsID+"/agents/"+agentID, token, nil)
 
@@ -221,7 +221,7 @@ func TestDeleteAgentWithAssignedNodes(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 准备：项目 -> 工作流 -> 任务 -> 认领节点 -> 删除 Agent
+	// Setup: project -> workflow -> task -> claim node -> delete agent
 	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
 	projID := createProject(t, client, srv.URL, wsID, token)
@@ -232,13 +232,13 @@ func TestDeleteAgentWithAssignedNodes(t *testing.T) {
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	nodeID := nodes[0]["id"].(string)
 
-	// 使用 Agent 认领第一个节点
+	// Claim the first node with agent
 	claimedNode := claimNode(t, client, srv.URL, taskID, nodeID, agentID, agentAPIToken)
 	if claimedNode["status"] != "in_progress" {
 		t.Fatalf("expected in_progress after claim, got %v", claimedNode["status"])
 	}
 
-	// 现在删除 Agent——尽管存在外键引用，仍应成功
+	// Now delete the agent — should succeed despite foreign key references
 	_, status, respBody := doRequestWithToken(t, client, http.MethodDelete,
 		srv.URL+"/api/workspaces/"+wsID+"/agents/"+agentID, token, nil)
 
@@ -246,7 +246,7 @@ func TestDeleteAgentWithAssignedNodes(t *testing.T) {
 		t.Fatalf("expected 204 when deleting agent with assigned nodes, got %d, body: %s", status, respBody)
 	}
 
-	// 验证任务节点的 assignee_id 已被清空
+	// Verify task node assignee_id was cleared
 	updatedNodes := listTaskNodes(t, client, srv.URL, taskID, token)
 	for _, n := range updatedNodes {
 		if n["id"] == nodeID {
@@ -306,7 +306,7 @@ func TestAgentAPITokenNotInGet(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	agentID, _ := createAgent(t, client, ts.URL, wsID, token)
 
-	// 获取 Agent——api_token 不应存在
+	// Get agent — api_token should not be present
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
 		ts.URL+"/api/workspaces/"+wsID+"/agents/"+agentID, token, nil)
 
@@ -328,10 +328,10 @@ func TestAgentAPITokenNotInList(t *testing.T) {
 	ts, client := setupAgentTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	// 创建代理
+	// Create agent
 	_, _ = createAgent(t, client, ts.URL, wsID, token)
 
-	// 列出 Agent——api_token 不应存在
+	// List agents — api_token should not be present
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
 		ts.URL+"/api/workspaces/"+wsID+"/agents", token, nil)
 

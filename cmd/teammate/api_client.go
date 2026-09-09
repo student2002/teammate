@@ -1,4 +1,4 @@
-// api_client.go 封装 HTTP API 客户端，供 CLI 子命令调用后端接口。
+// api_client.go wraps the HTTP API client used by CLI subcommands to call backend endpoints.
 package main
 
 import (

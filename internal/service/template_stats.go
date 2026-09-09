@@ -1,5 +1,5 @@
-// template_stats.go 提供工作流模板统计的业务逻辑。
-// 统计数据包括使用次数、平均完成时间和拒绝率。
+// template_stats.go provides the business logic for workflow template statistics.
+// Statistics include usage count, average completion time, and reject rate.
 package service
 
 import (
@@ -10,39 +10,39 @@ import (
 	"github.com/google/uuid"
 )
 
-// TemplateStatsService 提供工作流模板统计相关的业务逻辑。
-// 统计数据包括使用次数、平均完成时间和拒绝率。
+// TemplateStatsService provides the business logic for workflow template statistics.
+// Statistics include usage count, average completion time, and reject rate.
 type TemplateStatsService struct {
 	svc *Service
 }
 
-// NewTemplateStatsService 创建一个新的 TemplateStatsService 实例。
+// NewTemplateStatsService creates a new TemplateStatsService instance.
 func NewTemplateStatsService(svc *Service) *TemplateStatsService {
 	return &TemplateStatsService{svc: svc}
 }
 
-// TemplateStatsResult 保存工作流模板的统计数据。
+// TemplateStatsResult holds the statistics of a workflow template.
 type TemplateStatsResult struct {
-	UsageCount           int64   `json:"usage_count"`            // 使用次数
-	AvgCompletionSeconds float64 `json:"avg_completion_seconds"` // 平均完成时间（秒）
-	RejectRate           float64 `json:"reject_rate"`            // 拒绝率（0-1）
+	UsageCount           int64   `json:"usage_count"`            // usage count
+	AvgCompletionSeconds float64 `json:"avg_completion_seconds"` // average completion time (seconds)
+	RejectRate           float64 `json:"reject_rate"`            // reject rate (0-1)
 }
 
-// GetStats 获取指定工作流模板的统计数据，包括使用次数、平均完成时间和拒绝率。
+// GetStats retrieves the statistics for the specified workflow template, including usage count, average completion time, and reject rate.
 //
-// 步骤：
-//  1. 根据模板 ID 获取模板信息（获取模板名称）
-//  2. 使用模板名称查询统计数据（GetTemplateStats 按 workflow_name 查询）
-//  3. 处理类型断言（avgCompletionSeconds 和 rejectRate 可能是 float64 或 int64）
-//  4. 返回结构化的统计数据
+// Steps:
+//  1. Get template info by template ID (to obtain the template name)
+//  2. Query statistics using the template name (GetTemplateStats queries by workflow_name)
+//  3. Handle type assertions (avgCompletionSeconds and rejectRate may be float64 or int64)
+//  4. Return the structured statistics
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 工作流模板 ID
+// Parameters:
+//   - ctx: request context
+//   - id: workflow template ID
 //
-// 返回：
-//   - *TemplateStatsResult: 模板统计数据
-//   - error: 可能的错误（模板不存在、数据库查询失败）
+// Returns:
+//   - *TemplateStatsResult: template statistics
+//   - error: possible errors (template not found, database query failure)
 func (s *TemplateStatsService) GetStats(ctx context.Context, id uuid.UUID) (*TemplateStatsResult, error) {
 	template, err := s.svc.Store.GetWorkflowTemplate(ctx, id)
 	if err != nil {

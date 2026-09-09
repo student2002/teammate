@@ -1,4 +1,4 @@
-// task_log.go 实现任务日志的业务逻辑。
+// task_log.go implements the business logic for task logs.
 package service
 
 import (

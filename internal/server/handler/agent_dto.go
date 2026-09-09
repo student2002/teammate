@@ -1,4 +1,4 @@
-// agent_dto.go 定义 Agent 相关的请求/响应结构体和数据转换函数。
+// agent_dto.go defines request/response structs and data conversion functions related to Agents.
 package handler
 
 import (
@@ -9,20 +9,20 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// createAgentRequest 创建代理请求体。
+// createAgentRequest create agent request body.
 type createAgentRequest struct {
-	Name         string          `json:"name"`         // 代理名称
-	Provider     string          `json:"provider"`     // 代理提供者（claude/openai 等）
-	Instructions string          `json:"instructions"` // 代理执行指令
-	Model        string          `json:"model"`        // 使用的模型
-	Status       string          `json:"status"`       // 初始状态
-	CustomEnv    json.RawMessage `json:"custom_env"`   // 自定义环境变量（JSON）
-	ExtraArgs    []string        `json:"extra_args"`   // 额外命令行参数
-	GitName      string          `json:"git_name"`     // Git 提交用户名
-	GitEmail     string          `json:"git_email"`    // Git 提交邮箱
+	Name         string          `json:"name"`         // agent name
+	Provider     string          `json:"provider"`     // agent provider (claude/openai, etc.)
+	Instructions string          `json:"instructions"` // agent execution instructions
+	Model        string          `json:"model"`        // model to use
+	Status       string          `json:"status"`       // initial status
+	CustomEnv    json.RawMessage `json:"custom_env"`   // custom environment variables (JSON)
+	ExtraArgs    []string        `json:"extra_args"`   // extra command-line arguments
+	GitName      string          `json:"git_name"`     // Git commit username
+	GitEmail     string          `json:"git_email"`    // Git commit email
 }
 
-// agentResponse 代理响应 DTO，将 sql.NullXxx 字段转换为普通类型用于 JSON 序列化。
+// agentResponse agent response DTO, converts sql.NullXxx fields to plain types for JSON serialization.
 type agentResponse struct {
 	ID           uuid.UUID       `json:"id"`
 	WorkspaceID  uuid.UUID       `json:"workspace_id"`
@@ -41,8 +41,8 @@ type agentResponse struct {
 	UpdatedAt    interface{}     `json:"updated_at"`
 }
 
-// agentToResponse 将代理数据库记录转换为 API 响应，不包含 custom_env。
-// 仅用于只读调用者（viewer/agent），防止密钥泄露。
+// agentToResponse converts an agent database record to an API response, without custom_env.
+// Only used by read-only callers (viewer/agent) to prevent secret leakage.
 func agentToResponse(a types.Agent) agentResponse {
 	return agentResponse{
 		ID:           uuid.MustParse(a.ID),
@@ -52,7 +52,7 @@ func agentToResponse(a types.Agent) agentResponse {
 		Instructions: a.Instructions,
 		Model:        a.Model,
 		Status:       a.Status,
-		CustomEnv:    nil, // 默认为 nil；由调用者根据权限设置
+		CustomEnv:    nil, // defaults to nil; set by the caller based on permissions
 		ExtraArgs:    a.ExtraArgs,
 		GitName:      a.GitName,
 		GitEmail:     a.GitEmail,
@@ -61,8 +61,8 @@ func agentToResponse(a types.Agent) agentResponse {
 	}
 }
 
-// agentToResponseWithEnv 将代理数据库记录转换为 API 响应，包含 custom_env。
-// 仅用于写权限调用者（owner/admin/member）。
+// agentToResponseWithEnv converts an agent database record to an API response, including custom_env.
+// Only used by callers with write permission (owner/admin/member).
 func agentToResponseWithEnv(a types.Agent) agentResponse {
 	var customEnv json.RawMessage
 	if len(a.CustomEnv) > 0 && string(a.CustomEnv) != "null" {
@@ -73,41 +73,41 @@ func agentToResponseWithEnv(a types.Agent) agentResponse {
 	return resp
 }
 
-// createAgentResponse 创建代理响应体，包含新生成的 API Token。
+// createAgentResponse create agent response body, including the newly generated API Token.
 type createAgentResponse struct {
 	agentResponse
-	APIToken string `json:"api_token,omitempty"` // 新代理的 API Token（仅创建时返回）
+	APIToken string `json:"api_token,omitempty"` // API Token of the new agent (only returned on creation)
 }
 
-// updateAgentRequest 更新代理请求体。
+// updateAgentRequest update agent request body.
 type updateAgentRequest struct {
-	Instructions string          `json:"instructions"` // 代理执行指令
-	Model        string          `json:"model"`        // 使用模型
-	Status       string          `json:"status"`       // 代理状态
-	CustomEnv    json.RawMessage `json:"custom_env"`   // 自定义环境变量
-	ExtraArgs    []string        `json:"extra_args"`   // 额外命令行参数
-	GitName      string          `json:"git_name"`     // Git 提交用户名
-	GitEmail     string          `json:"git_email"`    // Git 提交邮箱
+	Instructions string          `json:"instructions"` // agent execution instructions
+	Model        string          `json:"model"`        // model to use
+	Status       string          `json:"status"`       // agent status
+	CustomEnv    json.RawMessage `json:"custom_env"`   // custom environment variables
+	ExtraArgs    []string        `json:"extra_args"`   // extra command-line arguments
+	GitName      string          `json:"git_name"`     // Git commit username
+	GitEmail     string          `json:"git_email"`    // Git commit email
 }
 
-// addSkillRequest 添加技能请求体。
+// addSkillRequest add skill request body.
 type addSkillRequest struct {
-	SkillID uuid.UUID `json:"skill_id"` // 技能 ID
-	Enabled bool      `json:"enabled"`  // 是否启用
+	SkillID uuid.UUID `json:"skill_id"` // skill ID
+	Enabled bool      `json:"enabled"`  // whether to enable
 }
 
-// addMcpServerRequest 添加 MCP 服务器请求体。
+// addMcpServerRequest add MCP server request body.
 type addMcpServerRequest struct {
-	McpServerID uuid.UUID `json:"mcp_server_id"` // MCP 服务器 ID
-	Enabled     bool      `json:"enabled"`       // 是否启用
+	McpServerID uuid.UUID `json:"mcp_server_id"` // MCP server ID
+	Enabled     bool      `json:"enabled"`       // whether to enable
 }
 
-// maskAgentMcpEnvVarsForDisplay 将 MCP 服务器的 env_vars 脱敏显示。
+// maskAgentMcpEnvVarsForDisplay masks the MCP server's env_vars for display.
 func maskAgentMcpEnvVarsForDisplay(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
-	// 处理加密格式 {format:"teammate-mcp-env-v1", values:{KEY:"cipher"}}
+	// handle encrypted format {format:"teammate-mcp-env-v1", values:{KEY:"cipher"}}
 	var encrypted struct {
 		Format string            `json:"format"`
 		Values map[string]string `json:"values"`
@@ -120,7 +120,7 @@ func maskAgentMcpEnvVarsForDisplay(raw json.RawMessage) json.RawMessage {
 		data, _ := json.Marshal(masked)
 		return data
 	}
-	// 处理明文格式 {KEY:"value"}
+	// handle plaintext format {KEY:"value"}
 	var values map[string]any
 	if err := json.Unmarshal(raw, &values); err != nil {
 		return json.RawMessage(`{}`)
@@ -136,7 +136,7 @@ func maskAgentMcpEnvVarsForDisplay(raw json.RawMessage) json.RawMessage {
 	return data
 }
 
-// nullToString 辅助函数，将 *string 转换为 string，nil 转换为空字符串。
+// nullToString helper function, converts *string to string, nil to empty string.
 func nullToString(s *string) string {
 	if s == nil {
 		return ""
@@ -144,16 +144,16 @@ func nullToString(s *string) string {
 	return *s
 }
 
-// --- 参数构建函数 ---
-// 这些函数让 handler 文件能够构造领域参数结构体，
-// 而无需直接导入 db/generated 包。
+// --- parameter builder functions ---
+// These functions let handler files construct domain parameter structs
+// without directly importing the db/generated package.
 
 const (
 	AgentProviderClaude = types.AgentProviderClaude
 	AgentStatusOffline  = types.AgentStatusOffline
 )
 
-// buildCreateAgentParams 根据 handler 层输入构造 types.CreateAgentParams。
+// buildCreateAgentParams constructs types.CreateAgentParams from handler-layer input.
 func buildCreateAgentParams(workspaceID uuid.UUID, name string, provider string, instructions string, model string, status string, customEnv []byte, extraArgs []string, gitName string, gitEmail string) types.CreateAgentParams {
 	modelPtr := nullStringPtr(model)
 	gitNamePtr := nullStringPtr(gitName)
@@ -172,7 +172,7 @@ func buildCreateAgentParams(workspaceID uuid.UUID, name string, provider string,
 	}
 }
 
-// nullStringPtr 辅助函数，将字符串转换为 *string，空字符串返回 nil。
+// nullStringPtr helper function, converts a string to *string, empty string returns nil.
 func nullStringPtr(s string) *string {
 	if s == "" {
 		return nil
@@ -180,7 +180,7 @@ func nullStringPtr(s string) *string {
 	return &s
 }
 
-// buildUpdateAgentParams 根据 handler 层输入构造 types.UpdateAgentParams。
+// buildUpdateAgentParams constructs types.UpdateAgentParams from handler-layer input.
 func buildUpdateAgentParams(id uuid.UUID, instructions string, model string, status string, customEnv []byte, extraArgs []string, gitName string, gitEmail string) types.UpdateAgentParams {
 	modelPtr := nullStringPtr(model)
 	gitNamePtr := nullStringPtr(gitName)
@@ -199,7 +199,7 @@ func buildUpdateAgentParams(id uuid.UUID, instructions string, model string, sta
 	}
 }
 
-// buildAddAgentSkillParams 构造 types.AddAgentSkillParams。
+// buildAddAgentSkillParams constructs types.AddAgentSkillParams.
 func buildAddAgentSkillParams(agentID uuid.UUID, skillID uuid.UUID, enabled bool) types.AddAgentSkillParams {
 	return types.AddAgentSkillParams{
 		AgentID: agentID.String(),
@@ -208,7 +208,7 @@ func buildAddAgentSkillParams(agentID uuid.UUID, skillID uuid.UUID, enabled bool
 	}
 }
 
-// buildRemoveAgentSkillParams 构造 types.RemoveAgentSkillParams。
+// buildRemoveAgentSkillParams constructs types.RemoveAgentSkillParams.
 func buildRemoveAgentSkillParams(agentID uuid.UUID, skillID uuid.UUID) types.RemoveAgentSkillParams {
 	return types.RemoveAgentSkillParams{
 		AgentID: agentID.String(),
@@ -216,7 +216,7 @@ func buildRemoveAgentSkillParams(agentID uuid.UUID, skillID uuid.UUID) types.Rem
 	}
 }
 
-// buildAddAgentMcpServerParams 构造 types.AddAgentMcpServerParams。
+// buildAddAgentMcpServerParams constructs types.AddAgentMcpServerParams.
 func buildAddAgentMcpServerParams(agentID uuid.UUID, mcpServerID uuid.UUID, enabled bool) types.AddAgentMcpServerParams {
 	return types.AddAgentMcpServerParams{
 		AgentID:     agentID.String(),
@@ -225,7 +225,7 @@ func buildAddAgentMcpServerParams(agentID uuid.UUID, mcpServerID uuid.UUID, enab
 	}
 }
 
-// buildRemoveAgentMcpServerParams 构造 types.RemoveAgentMcpServerParams。
+// buildRemoveAgentMcpServerParams constructs types.RemoveAgentMcpServerParams.
 func buildRemoveAgentMcpServerParams(agentID uuid.UUID, mcpServerID uuid.UUID) types.RemoveAgentMcpServerParams {
 	return types.RemoveAgentMcpServerParams{
 		AgentID:     agentID.String(),

@@ -1,15 +1,15 @@
 -- 001_init.sql
--- Teammate 数据库初始化迁移
--- 本文件为已应用的基线迁移：新增/变更表结构请新建 002_*.up.sql，勿修改本文件
+-- Teammate database initialization migration
+-- This file is an applied baseline migration: create new 002_*.up.sql for schema changes, do not modify this file
 
 -- ============================================================
--- 0. 扩展
+-- 0. Extensions
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================================
--- 1. 枚举类型（必须在 CREATE TABLE 之前定义）
+-- 1. Enum types (must be defined before CREATE TABLE)
 -- ============================================================
 
 CREATE TYPE agent_provider AS ENUM ('claude', 'openclaw', 'opencode', 'atomcode', 'mimocode', 'copilot', 'hermes', 'gemini', 'pi', 'cursor', 'kimi', 'kiro');
@@ -29,16 +29,16 @@ CREATE TYPE token_type AS ENUM ('api', 'session', 'task', 'password_reset');
 CREATE TYPE mcp_auth_type AS ENUM ('none', 'api_key', 'oauth');
 
 -- ============================================================
--- 2. 序列
+-- 2. Sequences
 -- ============================================================
 
 CREATE SEQUENCE IF NOT EXISTS tasks_id_seq;
 
 -- ============================================================
--- 3. 表结构
+-- 3. Tables
 -- ============================================================
 
--- 3.1 workspaces — 工作区
+-- 3.1 workspaces
 CREATE TABLE workspaces (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name         VARCHAR(200) NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE workspaces (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3.2 members — 成员（人类）
+-- 3.2 members (human)
 CREATE TABLE members (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name          VARCHAR(200) NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE members (
 );
 CREATE INDEX idx_members_email ON members(email);
 
--- 3.2b workspace_members — 工作区成员关联（多对多）
+-- 3.2b workspace_members — workspace-member association (many-to-many)
 CREATE TABLE workspace_members (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -73,7 +73,7 @@ CREATE TABLE workspace_members (
 CREATE INDEX idx_workspace_members_workspace ON workspace_members(workspace_id);
 CREATE INDEX idx_workspace_members_member ON workspace_members(member_id);
 
--- 3.3 agents — AI 代理
+-- 3.3 agents
 CREATE TABLE agents (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -92,7 +92,7 @@ CREATE TABLE agents (
 CREATE INDEX idx_agents_workspace ON agents(workspace_id);
 CREATE INDEX idx_agents_status ON agents(status);
 
--- 3.4 workflow_templates — 工作流模板
+-- 3.4 workflow_templates — workflow templates
 CREATE TABLE workflow_templates (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -111,7 +111,7 @@ CREATE INDEX idx_wf_templates_workspace ON workflow_templates(workspace_id);
 CREATE INDEX idx_wf_templates_due_triggers ON workflow_templates(next_run_at)
     WHERE trigger_enabled = true AND trigger_type = 'schedule' AND next_run_at IS NOT NULL;
 
--- 3.5 workflow_template_nodes — 模板节点定义
+-- 3.5 workflow_template_nodes — template node definitions
 CREATE TABLE workflow_template_nodes (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id      UUID NOT NULL REFERENCES workflow_templates(id) ON DELETE CASCADE,
@@ -131,7 +131,7 @@ CREATE TABLE workflow_template_nodes (
 );
 CREATE INDEX idx_wf_template_nodes_template ON workflow_template_nodes(template_id);
 
--- 3.6 projects — 工程
+-- 3.6 projects
 CREATE TABLE projects (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id          UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -149,7 +149,7 @@ CREATE TABLE projects (
 );
 CREATE INDEX idx_projects_workspace ON projects(workspace_id);
 
--- 3.7 project_members — 工程成员
+-- 3.7 project_members — project members
 CREATE TABLE project_members (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -164,7 +164,7 @@ CREATE TABLE project_members (
 CREATE INDEX idx_project_members_project ON project_members(project_id);
 CREATE INDEX idx_project_members_agent ON project_members(agent_id);
 
--- 3.8 tasks — 任务（id 为工作空间内自增整数）
+-- 3.8 tasks (id is an auto-increment integer within the workspace)
 CREATE TABLE tasks (
     id             INTEGER PRIMARY KEY DEFAULT nextval('tasks_id_seq'),
     project_id     UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -189,7 +189,7 @@ CREATE INDEX idx_tasks_project ON tasks(project_id);
 CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_project_status ON tasks(project_id, status);
 
--- 3.9 task_nodes — 任务节点实例
+-- 3.9 task_nodes — task node instances
 CREATE TABLE task_nodes (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id               INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -224,7 +224,7 @@ CREATE INDEX idx_task_nodes_task_status ON task_nodes(task_id, status);
 CREATE INDEX idx_task_nodes_timeout ON task_nodes(status, updated_at)
     WHERE status = 'in_progress' AND node_type != 'manual' AND assignee_type != 'human';
 
--- 3.10 node_transitions — 节点流转历史
+-- 3.10 node_transitions — node transition history
 CREATE TABLE node_transitions (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_node_id   UUID NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
@@ -240,7 +240,7 @@ CREATE TABLE node_transitions (
 CREATE INDEX idx_node_transitions_node ON node_transitions(task_node_id);
 CREATE INDEX idx_node_transitions_time ON node_transitions(created_at);
 
--- 3.11 comments — 评论
+-- 3.11 comments — comments
 CREATE TABLE comments (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -262,7 +262,7 @@ CREATE INDEX idx_comments_node ON comments(node_id);
 CREATE INDEX idx_comments_source_node ON comments(source_node_id);
 CREATE INDEX idx_comments_parent ON comments(parent_id);
 
--- 3.12 runtimes — 运行时
+-- 3.12 runtimes
 CREATE TABLE runtimes (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id           UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -281,7 +281,7 @@ CREATE INDEX idx_runtimes_agent ON runtimes(agent_id);
 CREATE INDEX idx_runtimes_daemon ON runtimes(daemon_id);
 CREATE INDEX idx_runtimes_heartbeat ON runtimes(last_heartbeat);
 
--- 3.13 task_logs — 持久化执行日志
+-- 3.13 task_logs — persisted execution logs
 CREATE TABLE task_logs (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -294,7 +294,7 @@ CREATE TABLE task_logs (
 CREATE INDEX idx_task_logs_task_timestamp ON task_logs(task_id, timestamp, id);
 CREATE INDEX idx_task_logs_task_node_timestamp ON task_logs(task_id, node_id, timestamp, id);
 
--- 3.13 task_log_chunks — 日志分块上传
+-- 3.13 task_log_chunks — log chunk uploads
 CREATE TABLE task_log_chunks (
     id           BIGSERIAL PRIMARY KEY,
     task_node_id UUID NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
@@ -306,7 +306,7 @@ CREATE TABLE task_log_chunks (
 );
 CREATE INDEX idx_log_chunks_node ON task_log_chunks(task_node_id);
 
--- 3.14 memories — 共享记忆
+-- 3.14 memories — shared memory
 CREATE TABLE memories (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id   UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -326,9 +326,9 @@ CREATE TABLE memories (
 CREATE INDEX idx_memories_workspace ON memories(workspace_id);
 CREATE INDEX idx_memories_stale ON memories(stale) WHERE stale = true;
 
--- 3.15 auth_tokens — 认证令牌
--- lookup_hash: SHA-256 用于 O(1) 数据库查找
--- token_hash:  bcrypt 用于安全验证
+-- 3.15 auth_tokens — authentication tokens
+-- lookup_hash: SHA-256 for O(1) database lookup
+-- token_hash: bcrypt for secure verification
 CREATE TABLE auth_tokens (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token_hash   VARCHAR(60) NOT NULL,
@@ -344,7 +344,7 @@ CREATE UNIQUE INDEX idx_tokens_lookup ON auth_tokens(lookup_hash);
 CREATE INDEX idx_tokens_owner ON auth_tokens(owner_type, owner_id);
 CREATE INDEX idx_auth_tokens_session ON auth_tokens(lookup_hash) WHERE token_type = 'session';
 
--- 3.16 git_credentials — Git 凭据
+-- 3.16 git_credentials — Git credentials
 CREATE TABLE git_credentials (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -358,7 +358,7 @@ CREATE TABLE git_credentials (
 );
 CREATE INDEX idx_git_credentials_project ON git_credentials(project_id);
 
--- 3.16b workflow_trigger_runs — 工作流触发历史与外部事件去重
+-- 3.16b workflow_trigger_runs — workflow trigger history and external event deduplication
 CREATE TABLE workflow_trigger_runs (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id         UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -376,7 +376,7 @@ CREATE TABLE workflow_trigger_runs (
 CREATE INDEX idx_workflow_trigger_runs_workspace ON workflow_trigger_runs(workspace_id, created_at DESC);
 CREATE INDEX idx_workflow_trigger_runs_template ON workflow_trigger_runs(workflow_template_id, created_at DESC);
 
--- 3.17 sse_event_buffer — SSE 事件缓冲区
+-- 3.17 sse_event_buffer — SSE event buffer
 CREATE TABLE sse_event_buffer (
     id         BIGSERIAL PRIMARY KEY,
     runtime_id UUID NOT NULL REFERENCES runtimes(id) ON DELETE CASCADE,
@@ -387,7 +387,7 @@ CREATE TABLE sse_event_buffer (
 CREATE INDEX idx_sse_buffer_runtime ON sse_event_buffer(runtime_id);
 CREATE INDEX idx_sse_buffer_time ON sse_event_buffer(created_at);
 
--- 3.18 skills — 技能
+-- 3.18 skills — skills
 CREATE TABLE skills (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -399,7 +399,7 @@ CREATE TABLE skills (
 );
 CREATE INDEX idx_skills_workspace ON skills(workspace_id);
 
--- 3.19 mcp_servers — MCP 服务器
+-- 3.19 mcp_servers — MCP servers
 CREATE TABLE mcp_servers (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -413,7 +413,7 @@ CREATE TABLE mcp_servers (
 );
 CREATE INDEX idx_mcp_servers_workspace ON mcp_servers(workspace_id);
 
--- 3.20 agent_skills — 代理-技能关联
+-- 3.20 agent_skills — agent-skill association
 CREATE TABLE agent_skills (
     agent_id   UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     skill_id   UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
@@ -423,7 +423,7 @@ CREATE TABLE agent_skills (
 );
 CREATE INDEX idx_agent_skills_agent ON agent_skills(agent_id);
 
--- 3.21 agent_mcp_servers — 代理-MCP 服务器关联
+-- 3.21 agent_mcp_servers — agent-MCP server association
 CREATE TABLE agent_mcp_servers (
     agent_id      UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     mcp_server_id UUID NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
@@ -433,7 +433,7 @@ CREATE TABLE agent_mcp_servers (
 );
 CREATE INDEX idx_agent_mcp_agent ON agent_mcp_servers(agent_id);
 
--- 3.22 token_usage — Token 用量
+-- 3.22 token_usage — token usage
 CREATE TABLE token_usage (
     id            BIGSERIAL PRIMARY KEY,
     task_node_id  UUID NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
@@ -448,7 +448,7 @@ CREATE INDEX idx_token_usage_node ON token_usage(task_node_id);
 CREATE INDEX idx_token_usage_agent ON token_usage(agent_id);
 CREATE INDEX idx_token_usage_time ON token_usage(created_at);
 
--- 3.23 community_workflows — 社区工作流
+-- 3.23 community_workflows — community workflows
 CREATE TABLE community_workflows (
     id                             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                           VARCHAR(200) NOT NULL,
@@ -467,7 +467,7 @@ CREATE TABLE community_workflows (
 CREATE INDEX idx_community_workflows_name ON community_workflows(name);
 CREATE INDEX idx_community_workflows_downloads ON community_workflows(downloads DESC);
 
--- 3.24 project_reviewers — 工程审查员配置
+-- 3.24 project_reviewers — project reviewer configuration
 CREATE TABLE project_reviewers (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -480,7 +480,7 @@ CREATE TABLE project_reviewers (
 );
 CREATE INDEX idx_project_reviewers_project ON project_reviewers(project_id);
 
--- 3.25 agent_permissions — Agent 权限控制
+-- 3.25 agent_permissions — agent permission control
 CREATE TABLE agent_permissions (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id      UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -493,7 +493,7 @@ CREATE TABLE agent_permissions (
 );
 CREATE INDEX idx_agent_permissions_agent ON agent_permissions(agent_id);
 
--- 3.26 audit_logs — 审计日志
+-- 3.26 audit_logs — audit logs
 CREATE TABLE audit_logs (
     id            BIGSERIAL PRIMARY KEY,
     workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -513,7 +513,7 @@ CREATE INDEX idx_audit_actor ON audit_logs(actor_type, actor_id);
 CREATE INDEX idx_audit_time ON audit_logs(created_at);
 CREATE INDEX idx_audit_request_id ON audit_logs(request_id);
 
--- 3.27 invitations — 邀请链接
+-- 3.27 invitations — invitation links
 CREATE TABLE invitations (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -528,7 +528,7 @@ CREATE TABLE invitations (
 CREATE INDEX idx_invitations_token ON invitations(token_hash);
 CREATE INDEX idx_invitations_email ON invitations(email);
 
--- 3.28 execution_sessions — 执行会话
+-- 3.28 execution_sessions — execution sessions
 CREATE TABLE execution_sessions (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     runtime_id       UUID REFERENCES runtimes(id) ON DELETE SET NULL,

@@ -1,7 +1,7 @@
-// helpers.go 提供 handler 层的通用辅助函数，用于工作区归属校验、权限检查等跨资源操作。
+// helpers.go provides common helper functions for the handler layer, used for workspace ownership validation, permission checks, and other cross-resource operations.
 //
-// 所有 check*Workspace 函数在验证失败时会直接写入 HTTP 错误响应并返回 nil，
-// 调用方可通过返回值判断是否继续处理。
+// All check*Workspace functions write an HTTP error response directly and return nil on validation failure;
+// callers can use the return value to decide whether to continue processing.
 
 package handler
 
@@ -20,17 +20,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// checkProjectWorkspace 验证项目是否属于当前认证用户的工作区。
-// 成功时返回项目记录，失败时写入错误响应并返回 nil。
+// checkProjectWorkspace verifies that the project belongs to the current authenticated user's workspace.
+// On success returns the project record; on failure writes an error response and returns nil.
 func checkProjectWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, projectID uuid.UUID) *types.Project {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询项目
+	// query the project
 	project, err := service.NewProjectService(svc).Get(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -41,7 +41,7 @@ func checkProjectWorkspace(svc *service.Service, w http.ResponseWriter, r *http.
 		return nil
 	}
 
-	// 验证项目属于当前工作区
+	// verify the project belongs to the current workspace
 	if project.WorkspaceID != ws.WorkspaceID.String() {
 		response.NotFound(w, "project not found")
 		return nil
@@ -50,17 +50,17 @@ func checkProjectWorkspace(svc *service.Service, w http.ResponseWriter, r *http.
 	return &project
 }
 
-// checkTaskWorkspace 验证任务是否属于当前认证用户工作区内的某个项目。
-// 成功时返回任务记录，失败时写入错误响应并返回 nil。
+// checkTaskWorkspace verifies that the task belongs to a project within the current authenticated user's workspace.
+// On success returns the task record; on failure writes an error response and returns nil.
 func checkTaskWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, taskID int32) *Task {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询任务
+	// query the task
 	taskSvc := service.NewTaskService(svc)
 	task, err := taskSvc.Get(r.Context(), taskID)
 	if err != nil {
@@ -72,7 +72,7 @@ func checkTaskWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 		return nil
 	}
 
-	// 验证任务所属项目属于当前工作区
+	// verify the task's project belongs to the current workspace
 	taskProjectID, _ := uuid.Parse(task.ProjectID)
 	project, err := service.NewProjectService(svc).Get(r.Context(), taskProjectID)
 	if err != nil || project.WorkspaceID != ws.WorkspaceID.String() {
@@ -83,17 +83,17 @@ func checkTaskWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 	return &task
 }
 
-// checkNodeWorkspace 验证节点是否属于当前认证用户工作区内的任务，同时校验节点的 TaskID 与 URL 参数一致。
-// 成功时返回节点记录，失败时写入错误响应并返回 nil。
+// checkNodeWorkspace verifies that the node belongs to a task within the current authenticated user's workspace, and also validates that the node's TaskID matches the URL parameter.
+// On success returns the node record; on failure writes an error response and returns nil.
 func checkNodeWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, nodeID uuid.UUID) *types.TaskNode {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询节点
+	// query the node
 	node, err := service.NewNodeService(svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -104,7 +104,7 @@ func checkNodeWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 		return nil
 	}
 
-	// 验证节点的 TaskID 与 URL 中的 taskId 匹配
+	// verify the node's TaskID matches the taskId in the URL
 	taskIDStr := chi.URLParam(r, "taskId")
 	if taskIDStr != "" {
 		var urlTaskID int32
@@ -114,7 +114,7 @@ func checkNodeWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// 验证节点 → 任务 → 项目 → 工作区 归属链
+	// verify the node -> task -> project -> workspace ownership chain
 	taskSvc := service.NewTaskService(svc)
 	task, err := taskSvc.Get(r.Context(), node.TaskID)
 	if err != nil {
@@ -132,17 +132,17 @@ func checkNodeWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 	return &node
 }
 
-// checkWorkflowTemplateWorkspace 验证工作流模板是否属于当前认证用户的工作区。
-// 成功时返回模板记录，失败时写入错误响应并返回 nil。
+// checkWorkflowTemplateWorkspace verifies that the workflow template belongs to the current authenticated user's workspace.
+// On success returns the template record; on failure writes an error response and returns nil.
 func checkWorkflowTemplateWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, templateID uuid.UUID) *WorkflowTemplate {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询工作流模板
+	// query the workflow template
 	template, err := service.NewWorkflowService(svc).GetTemplate(r.Context(), templateID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -153,7 +153,7 @@ func checkWorkflowTemplateWorkspace(svc *service.Service, w http.ResponseWriter,
 		return nil
 	}
 
-	// 验证模板属于当前工作区
+	// verify the template belongs to the current workspace
 	if template.WorkspaceID != ws.WorkspaceID.String() {
 		response.NotFound(w, "workflow template not found")
 		return nil
@@ -162,31 +162,31 @@ func checkWorkflowTemplateWorkspace(svc *service.Service, w http.ResponseWriter,
 	return &template
 }
 
-// requireWriteAccess 检查当前认证用户是否具有写入权限。
-// 仅允许角色为 member 及以上的人类用户，Agent 必须使用专门的权限路由。
+// requireWriteAccess checks whether the current authenticated user has write permission.
+// Only allows human users with role member or higher; Agents must use dedicated permission routes.
 func requireWriteAccess(claims svcmw.AuthClaims) error {
-	// Agent 不允许直接使用写入路由，需通过专门的权限路由
+	// Agents are not allowed to use write routes directly; they must go through dedicated permission routes
 	if claims.UserType == "agent" {
 		return fmt.Errorf("agents must use agent-specific permission routes")
 	}
-	// 人类用户需要当前工作区 member 及以上角色
+	// human users need a role of member or higher in the current workspace
 	if types.MemberRoleLevel(claims.Role) < 2 {
 		return fmt.Errorf("insufficient permissions: member role or higher required")
 	}
 	return nil
 }
 
-// checkAgentWorkspace 验证 Agent 是否属于当前认证用户的工作区。
-// 成功时返回 Agent 记录，失败时写入错误响应并返回 nil。
+// checkAgentWorkspace verifies that the Agent belongs to the current authenticated user's workspace.
+// On success returns the Agent record; on failure writes an error response and returns nil.
 func checkAgentWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, agentID uuid.UUID) *types.Agent {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询 Agent
+	// query the Agent
 	agentSvc := service.NewAgentService(svc)
 	agent, err := agentSvc.Get(r.Context(), agentID)
 	if err != nil {
@@ -198,7 +198,7 @@ func checkAgentWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Re
 		return nil
 	}
 
-	// 验证 Agent 属于当前工作区
+	// verify the Agent belongs to the current workspace
 	if agent.WorkspaceID != ws.WorkspaceID.String() {
 		response.NotFound(w, "agent not found")
 		return nil
@@ -207,17 +207,17 @@ func checkAgentWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Re
 	return &agent
 }
 
-// checkSkillWorkspace 验证技能是否属于当前认证用户的工作区。
-// 成功时返回技能记录，失败时写入错误响应并返回 nil。
+// checkSkillWorkspace verifies that the skill belongs to the current authenticated user's workspace.
+// On success returns the skill record; on failure writes an error response and returns nil.
 func checkSkillWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, skillID uuid.UUID) *Skill {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询技能
+	// query the skill
 	skillSvc := service.NewSkillService(svc)
 	skill, err := skillSvc.Get(r.Context(), skillID)
 	if err != nil {
@@ -229,7 +229,7 @@ func checkSkillWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Re
 		return nil
 	}
 
-	// 验证技能属于当前工作区
+	// verify the skill belongs to the current workspace
 	if skill.WorkspaceID != ws.WorkspaceID.String() {
 		response.NotFound(w, "skill not found")
 		return nil
@@ -238,17 +238,17 @@ func checkSkillWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Re
 	return &skill
 }
 
-// checkMcpServerWorkspace 验证 MCP 服务器是否属于当前认证用户的工作区。
-// 成功时返回 MCP 服务器记录，失败时写入错误响应并返回 nil。
+// checkMcpServerWorkspace verifies that the MCP server belongs to the current authenticated user's workspace.
+// On success returns the MCP server record; on failure writes an error response and returns nil.
 func checkMcpServerWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, serverID uuid.UUID) *types.McpServer {
-	// 获取当前资源的工作区授权上下文。
+	// get the workspace authorization context for the current resource.
 	ws, ok := svcmw.GetWorkspaceFromContext(r.Context())
 	if !ok {
 		response.Forbidden(w, "workspace context required")
 		return nil
 	}
 
-	// 查询 MCP 服务器
+	// query the MCP server
 	mcpSvc := service.NewMcpService(svc)
 	server, err := mcpSvc.Get(r.Context(), serverID)
 	if err != nil {
@@ -260,7 +260,7 @@ func checkMcpServerWorkspace(svc *service.Service, w http.ResponseWriter, r *htt
 		return nil
 	}
 
-	// 验证 MCP 服务器属于当前工作区
+	// verify the MCP server belongs to the current workspace
 	if server.WorkspaceID != ws.WorkspaceID.String() {
 		response.NotFound(w, "mcp server not found")
 		return nil
@@ -269,23 +269,23 @@ func checkMcpServerWorkspace(svc *service.Service, w http.ResponseWriter, r *htt
 	return &server
 }
 
-// checkTaskBelongsToProject 验证任务的 ProjectID 是否与 URL 中的 projectId 参数匹配。
-// 成功时返回 nil，失败时写入错误响应并返回错误。
+// checkTaskBelongsToProject verifies that the task's ProjectID matches the projectId parameter in the URL.
+// On success returns nil; on failure writes an error response and returns an error.
 func checkTaskBelongsToProject(svc *service.Service, w http.ResponseWriter, r *http.Request, task *Task) error {
-	// 如果不在项目路由下，跳过验证
+	// if not under a project route, skip validation
 	projectIDStr := chi.URLParam(r, "projectId")
 	if projectIDStr == "" {
 		return nil
 	}
 
-	// 解析并验证项目 ID
+	// parse and validate the project ID
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
 		response.BadRequest(w, "invalid project id")
 		return fmt.Errorf("invalid project id")
 	}
 
-	// 验证任务属于该项目
+	// verify the task belongs to that project
 	if task.ProjectID != projectID.String() {
 		response.NotFound(w, "task not found")
 		return fmt.Errorf("task does not belong to this project")

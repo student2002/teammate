@@ -1,7 +1,8 @@
-// project.go 提供项目管理的数据访问操作。
+// project.go provides data access operations for project management.
 //
-// 包含项目的 CRUD 操作、项目成员管理、项目审查者管理。
-// 项目是工作区内的软件项目，关联代码仓库、任务和 Agent。
+// It includes CRUD operations for projects, project member management, and
+// project reviewer management. A project is a software project within a
+// workspace, associated with code repositories, tasks, and agents.
 package store
 
 import (
@@ -14,15 +15,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateProject 创建一条新的项目记录。
+// CreateProject creates a new project record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 项目创建参数，包含工作区 ID、名称、描述、仓库 URL 等
+// Parameters:
+//   - ctx: request context
+//   - params: project creation parameters, including workspace ID, name, description, repository URL, etc.
 //
-// 返回：
-//   - types.Project: 创建的项目记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.Project: the created project record
+//   - error: error returned when creation fails
 func (s *Store) CreateProject(ctx context.Context, params types.CreateProjectParams) (types.Project, error) {
 	dbParams, err := FromDomainCreateProjectParams(params)
 	if err != nil {
@@ -35,15 +36,15 @@ func (s *Store) CreateProject(ctx context.Context, params types.CreateProjectPar
 	return ToDomainProject(p)
 }
 
-// GetProject 根据 ID 查询单个项目记录。
+// GetProject queries a single project record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 项目的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: project UUID
 //
-// 返回：
-//   - types.Project: 项目记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.Project: the project record
+//   - error: error returned when the query fails
 func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (types.Project, error) {
 	p, err := s.q.GetProject(ctx, id)
 	if err != nil {
@@ -52,15 +53,15 @@ func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (types.Project, er
 	return ToDomainProject(p)
 }
 
-// ListProjects 查询指定工作区内的所有项目。
+// ListProjects queries all projects within the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []types.Project: 项目列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Project: project list
+//   - error: error returned when the query fails
 func (s *Store) ListProjects(ctx context.Context, workspaceID uuid.UUID) ([]types.Project, error) {
 	projects, err := s.q.ListProjects(ctx, workspaceID)
 	if err != nil {
@@ -69,15 +70,15 @@ func (s *Store) ListProjects(ctx context.Context, workspaceID uuid.UUID) ([]type
 	return ToDomainProjectSlice(projects)
 }
 
-// ListProjectsByAgentMembership 查询指定 Agent 作为成员参与的所有项目。
+// ListProjectsByAgentMembership queries all projects in which the specified agent participates as a member.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - arg: 查询参数，包含 Agent ID
+// Parameters:
+//   - ctx: request context
+//   - arg: query parameters, including agent ID
 //
-// 返回：
-//   - []types.Project: 项目列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Project: project list
+//   - error: error returned when the query fails
 func (s *Store) ListProjectsByAgentMembership(ctx context.Context, arg types.ListProjectsByAgentMembershipParams) ([]types.Project, error) {
 	dbParams, err := FromDomainListProjectsByAgentMembershipParams(arg)
 	if err != nil {
@@ -90,15 +91,15 @@ func (s *Store) ListProjectsByAgentMembership(ctx context.Context, arg types.Lis
 	return ToDomainProjectSlice(projects)
 }
 
-// UpdateProject 更新项目的基本信息。
+// UpdateProject updates basic project information.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含项目 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including project ID and fields to update
 //
-// 返回：
-//   - types.Project: 更新后的项目记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.Project: the updated project record
+//   - error: error returned when the update fails
 func (s *Store) UpdateProject(ctx context.Context, params types.UpdateProjectParams) (types.Project, error) {
 	dbParams, err := FromDomainUpdateProjectParams(params)
 	if err != nil {
@@ -111,14 +112,14 @@ func (s *Store) UpdateProject(ctx context.Context, params types.UpdateProjectPar
 	return ToDomainProject(p)
 }
 
-// DeleteProject 根据 ID 删除项目记录。
+// DeleteProject deletes a project record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 项目的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: project UUID
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -126,8 +127,8 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	}
 	defer tx.Rollback()
 
-	// 002_remove_fks 后以下列不再有外键，须显式置空（FK 策略：应用层保证完整性）：
-	//   memories.source_task_id、workflow_trigger_runs.task_id
+	// After 002_remove_fks, the following columns no longer have foreign keys and must be explicitly nulled (FK strategy: integrity enforced at the application layer):
+	//   memories.source_task_id, workflow_trigger_runs.task_id
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE memories SET source_task_id = NULL
 		 WHERE source_task_id IN (SELECT id FROM tasks WHERE project_id = $1)`, id); err != nil {
@@ -146,17 +147,17 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	return tx.Commit()
 }
 
-// CreateProjectMember 将成员添加到项目中（插入 project_members 记录）。
+// CreateProjectMember adds a member to a project (inserts a project_members record).
 //
-// 成员可以是 Agent 或人类用户，通过 member_type 区分。
+// A member can be an agent or a human user, distinguished by member_type.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 成员创建参数，包含项目 ID、成员类型、角色等
+// Parameters:
+//   - ctx: request context
+//   - params: member creation parameters, including project ID, member type, role, etc.
 //
-// 返回：
-//   - types.ProjectMember: 创建的成员记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.ProjectMember: the created member record
+//   - error: error returned when creation fails
 func (s *Store) CreateProjectMember(ctx context.Context, params types.CreateProjectMemberParams) (types.ProjectMember, error) {
 	dbParams, err := FromDomainCreateProjectMemberParams(params)
 	if err != nil {
@@ -169,15 +170,15 @@ func (s *Store) CreateProjectMember(ctx context.Context, params types.CreateProj
 	return ToDomainProjectMember(m)
 }
 
-// ListProjectMembers 查询指定项目的所有成员列表。
+// ListProjectMembers queries the list of all members of the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []types.ProjectMember: 成员列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.ProjectMember: member list
+//   - error: error returned when the query fails
 func (s *Store) ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]types.ProjectMember, error) {
 	members, err := s.q.ListProjectMembers(ctx, projectID)
 	if err != nil {
@@ -186,14 +187,14 @@ func (s *Store) ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]
 	return ToDomainProjectMemberSlice(members)
 }
 
-// DeleteProjectMember 从项目中移除成员（删除 project_members 记录）。
+// DeleteProjectMember removes a member from a project (deletes a project_members record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - memberID: UUID of the member record
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) DeleteProjectMember(ctx context.Context, memberID uuid.UUID) error {
 	if err := s.q.DeleteProjectMember(ctx, memberID); err != nil {
 		return fmt.Errorf("delete project member: %w", err)
@@ -201,17 +202,17 @@ func (s *Store) DeleteProjectMember(ctx context.Context, memberID uuid.UUID) err
 	return nil
 }
 
-// CreateProjectReviewer 为项目添加审查者（插入 project_reviewers 记录）。
+// CreateProjectReviewer adds a reviewer to a project (inserts a project_reviewers record).
 //
-// 审查者可以是 Agent 或人类用户，负责代码审查节点。
+// A reviewer can be an agent or a human user, responsible for code review nodes.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 审查者创建参数
+// Parameters:
+//   - ctx: request context
+//   - params: reviewer creation parameters
 //
-// 返回：
-//   - types.ProjectReviewer: 创建的审查者记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.ProjectReviewer: the created reviewer record
+//   - error: error returned when creation fails
 func (s *Store) CreateProjectReviewer(ctx context.Context, params types.CreateProjectReviewerParams) (types.ProjectReviewer, error) {
 	dbParams, err := FromDomainCreateProjectReviewerParams(params)
 	if err != nil {
@@ -224,15 +225,15 @@ func (s *Store) CreateProjectReviewer(ctx context.Context, params types.CreatePr
 	return ToDomainProjectReviewer(r)
 }
 
-// ListProjectReviewers 查询指定项目的所有审查者列表。
+// ListProjectReviewers queries the list of all reviewers of the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []types.ProjectReviewer: 审查者列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.ProjectReviewer: reviewer list
+//   - error: error returned when the query fails
 func (s *Store) ListProjectReviewers(ctx context.Context, projectID uuid.UUID) ([]types.ProjectReviewer, error) {
 	reviewers, err := s.q.ListProjectReviewers(ctx, projectID)
 	if err != nil {
@@ -241,14 +242,14 @@ func (s *Store) ListProjectReviewers(ctx context.Context, projectID uuid.UUID) (
 	return ToDomainProjectReviewerSlice(reviewers)
 }
 
-// DeleteProjectReviewer 从项目中移除审查者（删除 project_reviewers 记录）。
+// DeleteProjectReviewer removes a reviewer from a project (deletes a project_reviewers record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - reviewerID: 审查者记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - reviewerID: UUID of the reviewer record
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) DeleteProjectReviewer(ctx context.Context, reviewerID uuid.UUID) error {
 	if err := s.q.DeleteProjectReviewer(ctx, reviewerID); err != nil {
 		return fmt.Errorf("delete project reviewer: %w", err)
@@ -256,15 +257,15 @@ func (s *Store) DeleteProjectReviewer(ctx context.Context, reviewerID uuid.UUID)
 	return nil
 }
 
-// IsAgentProjectMember 检查指定 Agent 是否是项目的成员。
+// IsAgentProjectMember checks whether the specified agent is a member of the project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 检查参数，包含项目 ID 和 Agent ID
+// Parameters:
+//   - ctx: request context
+//   - params: check parameters, including project ID and agent ID
 //
-// 返回：
-//   - bool: 是否是项目成员
-//   - error: 查询失败时返回错误
+// Returns:
+//   - bool: whether it is a project member
+//   - error: error returned when the query fails
 func (s *Store) IsAgentProjectMember(ctx context.Context, params types.IsAgentProjectMemberParams) (bool, error) {
 	dbParams, err := FromDomainIsAgentProjectMemberParams(params)
 	if err != nil {
@@ -277,16 +278,16 @@ func (s *Store) IsAgentProjectMember(ctx context.Context, params types.IsAgentPr
 	return isMember, nil
 }
 
-// IsMemberProjectMember 检查指定人类成员是否是项目的成员。
+// IsMemberProjectMember checks whether the specified human member is a member of the project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
-//   - memberID: 成员 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
+//   - memberID: member UUID
 //
-// 返回：
-//   - bool: 是否是项目成员
-//   - error: 查询失败时返回错误
+// Returns:
+//   - bool: whether it is a project member
+//   - error: error returned when the query fails
 func (s *Store) IsMemberProjectMember(ctx context.Context, projectID uuid.UUID, memberID uuid.UUID) (bool, error) {
 	isMember, err := s.q.IsMemberProjectMember(ctx, db.IsMemberProjectMemberParams{
 		ProjectID: projectID,
@@ -298,15 +299,15 @@ func (s *Store) IsMemberProjectMember(ctx context.Context, projectID uuid.UUID, 
 	return isMember, nil
 }
 
-// GetProjectReviewerByID 根据审查者记录 ID 查询项目审查者信息。
+// GetProjectReviewerByID queries project reviewer information by the reviewer record ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - reviewerID: 审查者记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - reviewerID: UUID of the reviewer record
 //
-// 返回：
-//   - types.ProjectReviewer: 审查者记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.ProjectReviewer: the reviewer record
+//   - error: error returned when the query fails
 func (s *Store) GetProjectReviewerByID(ctx context.Context, reviewerID uuid.UUID) (types.ProjectReviewer, error) {
 	r, err := s.q.GetProjectReviewerByID(ctx, reviewerID)
 	if err != nil {
@@ -315,16 +316,16 @@ func (s *Store) GetProjectReviewerByID(ctx context.Context, reviewerID uuid.UUID
 	return ToDomainProjectReviewer(r)
 }
 
-// GetProjectMemberRole 查询人类成员在项目中的角色。
+// GetProjectMemberRole queries the role of a human member within the project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
-//   - memberID: 成员 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
+//   - memberID: member UUID
 //
-// 返回：
-//   - string: 角色名称（如 "lead"、"developer"、"reviewer"）
-//   - error: 查询失败时返回错误
+// Returns:
+//   - string: role name (e.g. "lead", "developer", "reviewer")
+//   - error: error returned when the query fails
 func (s *Store) GetProjectMemberRole(ctx context.Context, projectID uuid.UUID, memberID uuid.UUID) (string, error) {
 	role, err := s.q.GetProjectMemberRole(ctx, db.GetProjectMemberRoleParams{
 		ProjectID: projectID,
@@ -336,15 +337,15 @@ func (s *Store) GetProjectMemberRole(ctx context.Context, projectID uuid.UUID, m
 	return role, nil
 }
 
-// GetProjectMember 根据项目成员记录 ID 查询单个项目成员。
+// GetProjectMember queries a single project member by the project member record ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 项目成员记录 ID
+// Parameters:
+//   - ctx: request context
+//   - memberID: project member record ID
 //
-// 返回：
-//   - types.ProjectMember: 项目成员记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.ProjectMember: the project member record
+//   - error: error returned when the query fails
 func (s *Store) GetProjectMember(ctx context.Context, memberID uuid.UUID) (types.ProjectMember, error) {
 	m, err := s.q.GetProjectMember(ctx, memberID)
 	if err != nil {

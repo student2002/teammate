@@ -1,15 +1,15 @@
-// workflow.go 提供工作流模板的创建、列表查询、更新和删除等 HTTP API 端点。
+// workflow.go provides HTTP API endpoints for creating, listing, updating, and deleting workflow templates.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - POST /workspaces/{workspaceId}/templates: 创建新的工作流模板及其有序节点定义
-//   - GET /workspaces/{workspaceId}/templates: 列出工作区下的所有工作流模板
-//   - GET /workspaces/{workspaceId}/templates/{id}: 查询指定工作流模板的详细信息
-//   - PUT /workspaces/{workspaceId}/templates/{id}: 更新工作流模板及其节点定义
-//   - DELETE /workspaces/{workspaceId}/templates/{id}: 删除指定工作流模板
+// This file provides the following HTTP API endpoints:
+//   - POST /workspaces/{workspaceId}/templates: create a new workflow template and its ordered node definitions
+//   - GET /workspaces/{workspaceId}/templates: list all workflow templates under the workspace
+//   - GET /workspaces/{workspaceId}/templates/{id}: query the details of the specified workflow template
+//   - PUT /workspaces/{workspaceId}/templates/{id}: update the workflow template and its node definitions
+//   - DELETE /workspaces/{workspaceId}/templates/{id}: delete the specified workflow template
 //
-// 工作流模板定义了任务执行的有序节点流程（如 实现→自测→审查→部署），节点类型包括
-// standard（AI 执行）、review（审查）和 manual（人工执行）。
-// 所有写入操作需要 write 权限，模板归属通过工作区隔离校验。
+// Workflow templates define the ordered node flow of task execution (e.g. implement -> self-test -> review -> deploy).
+// Node types include standard (AI execution), review (review), and manual (human execution).
+// All write operations require write permission, and template ownership is verified through workspace isolation.
 
 package handler
 
@@ -27,26 +27,26 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// WorkflowHandler 处理工作流模板管理的 HTTP 请求，包括创建、查询、更新和删除模板。
+// WorkflowHandler handles HTTP requests for workflow template management, including creating, querying, updating, and deleting templates.
 type WorkflowHandler struct {
 	Svc *service.Service
 }
 
-// NewWorkflowHandler 创建 WorkflowHandler 实例。
+// NewWorkflowHandler creates a WorkflowHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供工作流模板管理能力
+// Parameters:
+//   - svc: business logic service instance, provides workflow template management capabilities
 //
-// 返回:
-//   - *WorkflowHandler: 工作流处理器实例
+// Returns:
+//   - *WorkflowHandler: workflow handler instance
 func NewWorkflowHandler(svc *service.Service) *WorkflowHandler {
 	return &WorkflowHandler{Svc: svc}
 }
 
-// Routes 返回工作流模板的完整路由表（包含读写操作）。
+// Routes returns the complete route table for workflow templates (including read and write operations).
 //
-// 返回:
-//   - chi.Router: 包含工作流模板 CRUD 端点的路由
+// Returns:
+//   - chi.Router: routes containing workflow template CRUD endpoints
 func (h *WorkflowHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -60,10 +60,10 @@ func (h *WorkflowHandler) Routes() chi.Router {
 	return r
 }
 
-// ReadRoutes 返回工作流模板的只读路由表。
+// ReadRoutes returns the read-only route table for workflow templates.
 //
-// 返回:
-//   - chi.Router: 仅包含查询类端点的路由
+// Returns:
+//   - chi.Router: routes containing only query endpoints
 func (h *WorkflowHandler) ReadRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -72,10 +72,10 @@ func (h *WorkflowHandler) ReadRoutes() chi.Router {
 	return r
 }
 
-// WriteRoutes 返回工作流模板的写入路由表。
+// WriteRoutes returns the write route table for workflow templates.
 //
-// 返回:
-//   - chi.Router: 仅包含创建、更新、删除端点的路由
+// Returns:
+//   - chi.Router: routes containing only create, update, and delete endpoints
 func (h *WorkflowHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -88,14 +88,14 @@ func (h *WorkflowHandler) WriteRoutes() chi.Router {
 	return r
 }
 
-// CreateWorkflowTemplate 处理 POST /workspaces/{workspaceId}/templates 端点，创建新的工作流模板及其有序节点定义。
+// CreateWorkflowTemplate handles the POST /workspaces/{workspaceId}/templates endpoint, creating a new workflow template and its ordered node definitions.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID，请求体包含模板和节点定义
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID, request body contains the template and node definitions
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应（201 Created），包含创建的模板和节点数据或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w (201 Created), containing the created template and node data or an error message
 func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -119,21 +119,21 @@ func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 构建节点参数
-	// 兜底修正缺失/重复的 sort_order，避免命中 UNIQUE(template_id, sort_order)（偏差 #8）
+	// build node parameters
+	// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
 	normalizeTemplateSortOrder(req.Nodes)
 	nodeParams := make([]CreateTemplateNodeParams, 0, len(req.Nodes))
 	for _, n := range req.Nodes {
 		var assigneeID uuid.NullUUID
 		if n.AssigneeID != nil {
-			// 验证 assignee 是否属于当前工作区
+			// verify the assignee belongs to the current workspace
 			if n.AssigneeType == AssigneeTypeSpecificAgent {
 				agent := checkAgentWorkspace(h.Svc, w, r, *n.AssigneeID)
 				if agent == nil {
 					return
 				}
 			} else if n.AssigneeType == AssigneeTypeHuman {
-				// 验证成员是否属于当前工作区
+				// verify the member belongs to the current workspace
 				wsSvc := service.NewWorkspaceService(h.Svc)
 				member, err := wsSvc.GetMember(r.Context(), *n.AssigneeID)
 				if err != nil {
@@ -207,14 +207,14 @@ func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.
 	})
 }
 
-// ListWorkflowTemplates 处理 GET /workspaces/{workspaceId}/templates 端点，列出工作区下的所有工作流模板及其节点。
+// ListWorkflowTemplates handles the GET /workspaces/{workspaceId}/templates endpoint, listing all workflow templates and their nodes under the workspace.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 workspaceId 为工作区 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含模板列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the template list or an error message
 func (h *WorkflowHandler) ListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -229,7 +229,7 @@ func (h *WorkflowHandler) ListWorkflowTemplates(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 转换为响应格式
+	// convert to the response format
 	resp := make([]templateWithNodes, 0, len(results))
 	for _, r := range results {
 		resp = append(resp, templateWithNodes{
@@ -241,17 +241,17 @@ func (h *WorkflowHandler) ListWorkflowTemplates(w http.ResponseWriter, r *http.R
 	response.JSON(w, r, resp)
 }
 
-// GetWorkflowTemplate 处理 GET /workspaces/{workspaceId}/templates/{id} 端点，查询指定工作流模板的详细信息及其节点。
+// GetWorkflowTemplate handles the GET /workspaces/{workspaceId}/templates/{id} endpoint, querying the details of the specified workflow template and its nodes.
 //
-// 参数:
-// UpdateWorkflowTemplate 处理 PUT /workspaces/{workspaceId}/templates/{id} 端点，更新工作流模板及其节点定义。
+// Parameters:
+// UpdateWorkflowTemplate handles the PUT /workspaces/{workspaceId}/templates/{id} endpoint, updating the workflow template and its node definitions.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 id 为模板 UUID，请求体包含更新后的模板和节点定义
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the template UUID, request body contains the updated template and node definitions
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含更新后的模板和节点数据或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w, containing the updated template and node data or an error message
 func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -269,7 +269,7 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 验证工作流模板是否属于已认证用户的工作区
+	// verify the workflow template belongs to the authenticated user's workspace
 	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
@@ -280,16 +280,16 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 如果提供了节点，则构建节点参数
+	// if nodes are provided, build the node parameters
 	var nodeParams []CreateTemplateNodeParams
 	if req.Nodes != nil {
-		// 兜底修正缺失/重复的 sort_order，避免命中 UNIQUE(template_id, sort_order)（偏差 #8）
+		// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
 		normalizeTemplateSortOrder(req.Nodes)
 		nodeParams = make([]CreateTemplateNodeParams, 0, len(req.Nodes))
 		for _, n := range req.Nodes {
 			var assigneeID uuid.NullUUID
 			if n.AssigneeID != nil {
-				// 验证 assignee 是否属于当前工作区
+				// verify the assignee belongs to the current workspace
 				claims, _ := svcmw.GetAuthFromContext(r.Context())
 				if claims.WorkspaceID != uuid.Nil {
 					if n.AssigneeType == AssigneeTypeSpecificAgent {
@@ -375,14 +375,14 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 	})
 }
 
-// DeleteWorkflowTemplate 处理 DELETE /workspaces/{workspaceId}/templates/{id} 端点，删除指定的工作流模板。
+// DeleteWorkflowTemplate handles the DELETE /workspaces/{workspaceId}/templates/{id} endpoint, deleting the specified workflow template.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 id 为模板 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the template UUID
 //
-// 返回:
-//   - 无返回值，成功时返回 204 No Content，失败时返回错误信息
+// Returns:
+//   - no return value, returns 204 No Content on success, or an error message on failure
 func (h *WorkflowHandler) DeleteWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -400,7 +400,7 @@ func (h *WorkflowHandler) DeleteWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 验证工作流模板是否属于已认证用户的工作区
+	// verify the workflow template belongs to the authenticated user's workspace
 	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}

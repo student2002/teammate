@@ -1,4 +1,4 @@
-// auth_test.go 覆盖认证接口（登录/注册/登出等）的测试。
+// auth_test.go covers tests for authentication endpoints (login/register/logout etc.).
 package handler_test
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// setupAuthTestRouter 创建包含认证处理器和角色保护路由的测试路由器。
+// setupAuthTestRouter creates a test router with authentication handlers and role-protected routes.
 func setupAuthTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 	t.Helper()
 
@@ -26,15 +26,15 @@ func setupAuthTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 	svc := service.New(db, nil, nil)
 	r := chi.NewRouter()
 
-	// 认证路由（公开）
+	// Auth routes (public)
 	authHandler := handler.NewAuthHandler(svc, testJWTSecret)
 	r.Mount("/api/auth", authHandler.Routes())
 
-	// 已认证路由
+	// Authenticated routes
 	r.Route("/api", func(r chi.Router) {
 		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
 
-		// 工作区管理 - 仅管理员
+		// Workspace management - admin only
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireRole("admin"))
 			r.Delete("/workspaces/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +42,7 @@ func setupAuthTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 			})
 		})
 
-		// 任务操作 - 成员及以上
+		// Task operations - member and above
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireRole("member"))
 			r.Post("/tasks", func(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +50,7 @@ func setupAuthTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 			})
 		})
 
-		// 只读 - 观察者及以上
+		// Read-only - viewer and above
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.RequireRole("viewer"))
 			r.Get("/data", func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func TestRegisterWithPassword(t *testing.T) {
 
 	email := "auth-test-" + uuid.New().String()[:8] + "@test.com"
 
-	// 使用密码注册
+	// Register with password
 	body := map[string]string{
 		"name":     "Auth Test User",
 		"email":    email,
@@ -120,7 +120,7 @@ func TestLoginWithPassword(t *testing.T) {
 	email := "login-test-" + uuid.New().String()[:8] + "@test.com"
 	password := "Test123456"
 
-	// 先注册
+	// Register first
 	regBody := map[string]string{
 		"name":     "Login Test User",
 		"email":    email,
@@ -131,7 +131,7 @@ func TestLoginWithPassword(t *testing.T) {
 		t.Fatalf("register: expected 201, got %d", status)
 	}
 
-	// 使用正确密码登录
+	// Login with correct password
 	loginBody := map[string]string{
 		"email":    email,
 		"password": password,
@@ -157,7 +157,7 @@ func TestLoginWithWrongPassword(t *testing.T) {
 
 	email := "wrong-pass-" + uuid.New().String()[:8] + "@test.com"
 
-	// 注册
+	// Register
 	regBody := map[string]string{
 		"name":     "Wrong Pass User",
 		"email":    email,
@@ -168,7 +168,7 @@ func TestLoginWithWrongPassword(t *testing.T) {
 		t.Fatalf("register: expected 201, got %d", status)
 	}
 
-	// 使用错误密码登录
+	// Login with wrong password
 	loginBody := map[string]string{
 		"email":    email,
 		"password": "wrong123",

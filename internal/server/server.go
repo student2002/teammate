@@ -1,8 +1,8 @@
-// server.go 提供 Teammate HTTP 服务器的初始化和生命周期管理。
-// 服务器整合了所有组件：数据库连接、Redis 缓存、SSE Hub、WebSocket Gateway 和定时任务调度器。
-// 支持优雅关闭：监听 SIGINT/SIGTERM 信号，依次关闭各组件后退出。
+// server.go provides initialization and lifecycle management for the Teammate HTTP server.
+// The server integrates all components: database connection, Redis cache, SSE Hub, WebSocket Gateway, and the scheduled task scheduler.
+// It supports graceful shutdown: listening for SIGINT/SIGTERM signals and shutting down each component in turn before exiting.
 //
-// 路由配置在 routes.go 和 routes_*.go 中，通过 routeRegistrar 注册。
+// Route configuration is in routes.go and routes_*.go, registered via routeRegistrar.
 package server
 
 import (
@@ -26,41 +26,41 @@ import (
 	"github.com/teammate/server/internal/store"
 )
 
-// Server 是 Teammate HTTP 服务器的核心结构体，管理所有服务器组件的生命周期。
+// Server is the core struct of the Teammate HTTP server, managing the lifecycle of all server components.
 type Server struct {
-	// Config 是服务器配置。
+	// Config is the server configuration.
 	Config *Config
-	// DB 是 PostgreSQL 数据库连接。
+	// DB is the PostgreSQL database connection.
 	DB *sql.DB
-	// Redis 是 Redis 客户端，用于缓存、Pub/Sub、分布式锁和速率限制。
+	// Redis is the Redis client, used for caching, Pub/Sub, distributed locks, and rate limiting.
 	Redis *redis.Client
-	// Router 是 Chi 路由器，管理所有 HTTP 路由和中间件。
+	// Router is the Chi router, managing all HTTP routes and middleware.
 	Router chi.Router
-	// Hub 是 SSE 事件中心，管理 Agent 与 Server 之间的实时事件推送。
+	// Hub is the SSE event hub, managing real-time event push between Agents and the Server.
 	Hub *ws.Hub
-	// Gateway 是 WebSocket 日志网关，管理任务执行日志的实时推送。
+	// Gateway is the WebSocket log gateway, managing real-time push of task execution logs.
 	Gateway *ws.Gateway
-	// Scheduler 是定时任务调度器，负责节点超时检测等周期性任务。
+	// Scheduler is the scheduled task scheduler, responsible for periodic tasks such as node timeout detection.
 	Scheduler *scheduler.Scheduler
-	// http 是底层的 HTTP 服务器实例。
+	// http is the underlying HTTP server instance.
 	http *http.Server
 }
 
-// New 创建一个新的 Server 实例，初始化数据库、Redis、SSE Hub、WebSocket Gateway 和调度器。
+// New creates a new Server instance, initializing the database, Redis, SSE Hub, WebSocket Gateway, and scheduler.
 //
-// 安全检查：
-//   - 生产环境禁止使用默认 JWT 密钥（dev-secret-change-me）
-//   - 生产环境禁止使用通配符 CORS 源（*）
-//   - 加密密钥必须已初始化（通过 TEAMMATE_ENCRYPTION_KEY_BASE64 环境变量）
+// Security checks:
+//   - The default JWT secret (dev-secret-change-me) is forbidden in production
+//   - Wildcard CORS origins (*) are forbidden in production
+//   - The encryption key must be initialized (via the TEAMMATE_ENCRYPTION_KEY_BASE64 environment variable)
 //
-// 参数：
-//   - cfg: 服务器配置
+// Parameters:
+//   - cfg: server configuration
 //
-// 返回：
-//   - *Server: 初始化后的服务器实例
-//   - error: 初始化失败时返回错误
+// Returns:
+//   - *Server: the initialized server instance
+//   - error: an error returned when initialization fails
 func New(cfg Config) (*Server, error) {
-	// 安全检查：生产环境禁止使用默认 JWT 密钥
+	// Security check: the default JWT secret is forbidden in production
 	if cfg.JWTSecret == "dev-secret-change-me" && os.Getenv("TEAMMATE_DEV") != "true" {
 		return nil, fmt.Errorf("TEAMS_JWT_SECRET must be changed from the default value for security")
 	}
@@ -69,12 +69,12 @@ func New(cfg Config) (*Server, error) {
 		slog.Warn("running in development mode, security features relaxed")
 	}
 
-	// 安全检查：生产环境必须显式配置 CORS 源
+	// Security check: CORS origins must be explicitly configured in production
 	if cfg.AllowedOrigins == "*" && os.Getenv("TEAMMATE_DEV") != "true" {
 		return nil, fmt.Errorf("TEAMS_ALLOWED_ORIGINS must be configured in production (no wildcard *)")
 	}
 
-	// 从环境变量初始化加密密钥
+	// Initialize the encryption key from the environment variable
 	if err := crypto.InitEncryptionKey(); err != nil {
 		return nil, fmt.Errorf("encryption key initialization failed: %w", err)
 	}
@@ -118,27 +118,27 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// Start 启动 HTTP 服务器，同时启动 SSE Hub、WebSocket Gateway 和调度器。
-// 监听 SIGINT/SIGTERM 信号实现优雅关闭。
+// Start starts the HTTP server, along with the SSE Hub, WebSocket Gateway, and scheduler.
+// It listens for SIGINT/SIGTERM signals to perform graceful shutdown.
 //
-// 启动的后台组件：
-//   - SSE Hub：监听 Redis Pub/Sub，分发事件给本地订阅者
-//   - WebSocket Gateway：监听 Redis Pub/Sub，分发日志给本地订阅者
-//   - Scheduler：执行节点超时检测等定时任务
+// Background components started:
+//   - SSE Hub: listens to Redis Pub/Sub and dispatches events to local subscribers
+//   - WebSocket Gateway: listens to Redis Pub/Sub and dispatches logs to local subscribers
+//   - Scheduler: executes scheduled tasks such as node timeout detection
 //
-// 返回：
-//   - error: 服务器启动失败或接收到终止信号时返回错误
+// Returns:
+//   - error: an error returned when the server fails to start or receives a termination signal
 func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 启动 SSE Hub（Redis Pub/Sub 监听器）
+	// Start the SSE Hub (Redis Pub/Sub listener)
 	go s.Hub.Start(ctx)
 
-	// 启动 WebSocket Gateway（Redis Pub/Sub 日志监听器）
+	// Start the WebSocket Gateway (Redis Pub/Sub log listener)
 	go s.Gateway.Start(ctx)
 
-	// 启动调度器
+	// Start the scheduler
 	go s.Scheduler.Start(ctx)
 
 	quit := make(chan os.Signal, 1)
@@ -165,18 +165,18 @@ func (s *Server) Start() error {
 	return s.Stop()
 }
 
-// Stop 优雅关闭 HTTP 服务器，依次关闭 SSE Hub、WebSocket Gateway、Redis 和数据库连接。
-// 使用 10 秒超时确保关闭过程不会无限阻塞。
+// Stop gracefully shuts down the HTTP server, closing the SSE Hub, WebSocket Gateway, Redis, and database connections in turn.
+// It uses a 10-second timeout to ensure the shutdown process does not block indefinitely.
 //
-// 关闭顺序：
-//  1. HTTP 服务器（等待活跃连接完成）
-//  2. SSE Hub（关闭所有客户端通道）
-//  3. WebSocket Gateway（关闭所有客户端通道）
-//  4. Redis 连接
-//  5. PostgreSQL 数据库连接
+// Shutdown order:
+//  1. HTTP server (wait for active connections to finish)
+//  2. SSE Hub (close all client channels)
+//  3. WebSocket Gateway (close all client channels)
+//  4. Redis connection
+//  5. PostgreSQL database connection
 //
-// 返回：
-//   - error: 关闭过程中发生错误时返回
+// Returns:
+//   - error: an error returned if one occurs during shutdown
 func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -1,13 +1,13 @@
-// board.go 提供看板数据的查询操作。
+// board.go provides query operations for board data.
 //
-// 看板将任务按当前节点状态分组到 4 个列中：
-//   - pending（待处理）
-//   - in_progress（进行中）
-//   - completed（已完成）
-//   - manual_intervention（需人工介入）
+// The board groups tasks into 4 columns by their current node status:
+//   - pending (pending)
+//   - in_progress (in progress)
+//   - completed (completed)
+//   - manual_intervention (requires manual intervention)
 //
-// 任务的列位置由其当前活跃节点的状态决定。
-// rejected 状态统一映射到 manual_intervention 列。
+// A task's column position is determined by the status of its currently active node.
+// The rejected status is uniformly mapped to the manual_intervention column.
 package store
 
 import (
@@ -19,58 +19,58 @@ import (
 	db "github.com/teammate/server/internal/db/generated"
 )
 
-// BoardColumnTask 表示看板列中的单个任务卡片。
+// BoardColumnTask represents a single task card within a board column.
 //
-// 包含任务基本信息和当前活跃节点的状态，用于看板 UI 渲染。
+// It includes the task's basic info and the status of its currently active node, used for board UI rendering.
 type BoardColumnTask struct {
-	ID                int32           `json:"id"`                  // 任务 ID
-	Title             string          `json:"title"`               // 任务标题
-	Priority          db.TaskPriority `json:"priority"`            // 任务优先级
-	Type              db.TaskType     `json:"type"`                // 任务类型
-	CurrentNodeName   string          `json:"current_node_name"`   // 当前节点名称
-	CurrentNodeStatus string          `json:"current_node_status"` // 当前节点状态
-	CurrentNodeType   string          `json:"current_node_type"`   // 当前节点类型
-	AssigneeID        interface{}     `json:"assignee_id"`         // 当前节点分配者 ID
+	ID                int32           `json:"id"`                  // task ID
+	Title             string          `json:"title"`               // task title
+	Priority          db.TaskPriority `json:"priority"`            // task priority
+	Type              db.TaskType     `json:"type"`                // task type
+	CurrentNodeName   string          `json:"current_node_name"`   // current node name
+	CurrentNodeStatus string          `json:"current_node_status"` // current node status
+	CurrentNodeType   string          `json:"current_node_type"`   // current node type
+	AssigneeID        interface{}     `json:"assignee_id"`         // current node assignee ID
 }
 
-// BoardColumn 表示看板中的一列，包含列标识和任务列表。
+// BoardColumn represents a column in the board, including the column key and the task list.
 type BoardColumn struct {
-	Key   string            `json:"key"`   // 列标识（如 "pending"、"in_progress"）
-	Label string            `json:"label"` // 列显示名称（如 "待处理"）
-	Tasks []BoardColumnTask `json:"tasks"` // 该列中的任务列表
+	Key   string            `json:"key"`   // column key (e.g. "pending", "in_progress")
+	Label string            `json:"label"` // column display name (e.g. "Pending")
+	Tasks []BoardColumnTask `json:"tasks"` // the task list in this column
 }
 
-// ColumnDefs 定义看板的 4 个列及其显示顺序。
+// ColumnDefs defines the 4 columns of the board and their display order.
 //
-// 看板列固定为 4 列，rejected 状态统一归入 manual_intervention 列。
+// The board has a fixed set of 4 columns; the rejected status is uniformly placed in the manual_intervention column.
 var ColumnDefs = []struct {
 	Key   string
 	Label string
 }{
-	{"pending", "待处理"},
-	{"in_progress", "进行中"},
-	{"completed", "已完成"},
-	{"manual_intervention", "需人工介入"},
+	{"pending", "Pending"},
+	{"in_progress", "In Progress"},
+	{"completed", "Completed"},
+	{"manual_intervention", "Manual Intervention Required"},
 }
 
-// GetBoardData 查询指定项目的看板数据，将任务按当前节点状态分组到各列中。
+// GetBoardData queries the board data for the specified project, grouping tasks into columns by their current node status.
 //
-// 执行步骤：
-//  1. 查询项目下的所有任务
-//  2. 查询这些任务的所有工作流节点
-//  3. 对每个任务，找到其当前活跃节点（第一个非 completed 的节点）
-//  4. 根据节点状态映射到对应看板列
-//  5. 构建 4 列结构返回
+// Steps:
+//  1. Query all tasks under the project
+//  2. Query all workflow nodes for these tasks
+//  3. For each task, find its currently active node (the first node that is not completed)
+//  4. Map the node status to the corresponding board column
+//  5. Build and return the 4-column structure
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []BoardColumn: 4 个看板列，每列包含对应状态的任务
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []BoardColumn: 4 board columns, each containing the tasks for the corresponding status
+//   - error: error returned when the query fails
 func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardColumn, error) {
-	// 获取项目的任务——仅查询看板展示所需的列
+	// Get the project's tasks -- query only the columns needed for board display
 	taskRows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, type, priority, status
 		FROM tasks
@@ -103,7 +103,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 		return nil, fmt.Errorf("task rows error: %w", err)
 	}
 
-	// 获取这些任务的所有节点
+	// Get all nodes for these tasks
 	nodeRows, err := s.db.QueryContext(ctx, `
 		SELECT tn.task_id, tn.name, tn.node_type, tn.status, tn.assignee_id, tn.sort_order
 		FROM task_nodes tn
@@ -140,18 +140,18 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 		return nil, fmt.Errorf("node rows error: %w", err)
 	}
 
-	// 初始化 5 列
+	// Initialize 5 columns
 	columnMap := make(map[string][]BoardColumnTask, len(ColumnDefs))
 	for _, cd := range ColumnDefs {
 		columnMap[cd.Key] = make([]BoardColumnTask, 0)
 	}
 
-	// 按任务当前节点状态将任务分组为列
+	// Group tasks into columns by their current node status
 	for _, t := range tasks {
 		if t.Status == db.TaskStatusCompleted {
 			columnMap["completed"] = append(columnMap["completed"], BoardColumnTask{
 				ID: t.ID, Title: t.Title, Priority: t.Priority, Type: t.Type,
-				CurrentNodeName: "已完成", CurrentNodeStatus: "completed", CurrentNodeType: "", AssigneeID: nil,
+				CurrentNodeName: "Completed", CurrentNodeStatus: "completed", CurrentNodeType: "", AssigneeID: nil,
 			})
 			continue
 		}
@@ -195,7 +195,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 		})
 	}
 
-	// 按定义的列顺序构建结果
+	// Build the result in the defined column order
 	result := make([]BoardColumn, 0, len(ColumnDefs))
 	for _, cd := range ColumnDefs {
 		result = append(result, BoardColumn{
@@ -208,13 +208,13 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 	return result, nil
 }
 
-// MapNodeStatusToColumn 将节点状态映射到看板列标识，review 节点与 standard 节点合并到相同列。
+// MapNodeStatusToColumn maps a node status to a board column key; review nodes and standard nodes are merged into the same column.
 //
-// 参数：
-//   - status: 节点状态
+// Parameters:
+//   - status: node status
 //
-// 返回：
-//   - string: 看板列标识
+// Returns:
+//   - string: board column key
 func MapNodeStatusToColumn(status db.TaskNodeStatus) string {
 	switch status {
 	case db.TaskNodeStatusPending:

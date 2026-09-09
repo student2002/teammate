@@ -1,8 +1,8 @@
-// rows.go 定义 sqlc 生成的复合查询 Row（涉及多表 JOIN 或聚合）的 domain 对应物。
+// rows.go defines the domain counterparts of sqlc-generated composite query Rows (involving multi-table JOINs or aggregations).
 //
-// sqlc 在查询涉及 JOIN/聚合时会生成 XxxRow 结构体，与单表的 Xxx 实体不同。
-// 本文件将这些 Row 类型映射为 domain 风格（uuid→string、sql.NullXX→*T 等），
-// 供 Store 层方法签名返回、Service 层透传、Handler 层直接序列化。
+// When a query involves JOIN/aggregation, sqlc generates XxxRow structs, which differ from single-table Xxx entities.
+// This file maps these Row types into domain style (uuid→string, sql.NullXX→*T, etc.),
+// for use as return types of Store-layer methods, pass-through in the Service layer, and direct serialization in the Handler layer.
 package types
 
 import (
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// ListAgentMcpServersRow 是列出 Agent 关联的 MCP 服务器（含服务器明细）的 domain Row。
+// ListAgentMcpServersRow is the domain Row for listing the MCP servers associated with an Agent (including server details).
 type ListAgentMcpServersRow struct {
 	ID          string          `json:"id"`
 	WorkspaceID string          `json:"workspace_id"`
@@ -25,7 +25,7 @@ type ListAgentMcpServersRow struct {
 	AssignedAt  time.Time       `json:"assigned_at"`
 }
 
-// ListAgentSkillsRow 是列出 Agent 关联的技能（含技能明细）的 domain Row。
+// ListAgentSkillsRow is the domain Row for listing the skills associated with an Agent (including skill details).
 type ListAgentSkillsRow struct {
 	ID             string    `json:"id"`
 	WorkspaceID    string    `json:"workspace_id"`
@@ -38,14 +38,14 @@ type ListAgentSkillsRow struct {
 	AssignedAt     time.Time `json:"assigned_at"`
 }
 
-// GetAuthTokenByLookupHashAndTypeRow 是按 hash 和类型查询 token 的 domain Row。
+// GetAuthTokenByLookupHashAndTypeRow is the domain Row for querying a token by hash and type.
 type GetAuthTokenByLookupHashAndTypeRow struct {
 	OwnerType string `json:"owner_type"`
 	OwnerID   string `json:"owner_id"`
 	TokenHash string `json:"token_hash"`
 }
 
-// SearchMemoriesRow 是搜索记忆的 domain Row（含 embedding 字段，但 domain 不读 embedding）。
+// SearchMemoriesRow is the domain Row for searching memories (includes the embedding field, but the domain does not read embedding).
 type SearchMemoriesRow struct {
 	ID           string          `json:"id"`
 	WorkspaceID  string          `json:"workspace_id"`
@@ -54,7 +54,7 @@ type SearchMemoriesRow struct {
 	Title        string          `json:"title"`
 	Content      string          `json:"content"`
 	Tags         []string        `json:"tags"`
-	Embedding    json.RawMessage `json:"embedding,omitempty"` // 实际不读，保留以备扩展
+	Embedding    json.RawMessage `json:"embedding,omitempty"` // Not actually read, retained for future extension
 	Confidence   float32         `json:"confidence"`
 	Verified     bool            `json:"verified"`
 	Metadata     json.RawMessage `json:"metadata"`
@@ -62,7 +62,7 @@ type SearchMemoriesRow struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-// ListManualInterventionNodesRow 是列出待人工干预节点的 domain Row（含任务标题）。
+// ListManualInterventionNodesRow is the domain Row for listing nodes awaiting manual intervention (includes task title).
 type ListManualInterventionNodesRow struct {
 	ID        string    `json:"id"`
 	TaskID    int32     `json:"task_id"`
@@ -72,7 +72,7 @@ type ListManualInterventionNodesRow struct {
 	TaskTitle string    `json:"task_title"`
 }
 
-// ListMentionCommentsRow 是列出提及某成员的评论的 domain Row（含任务标题）。
+// ListMentionCommentsRow is the domain Row for listing comments that mention a member (includes task title).
 type ListMentionCommentsRow struct {
 	ID         string    `json:"id"`
 	TaskID     int32     `json:"task_id"`
@@ -84,7 +84,7 @@ type ListMentionCommentsRow struct {
 	TaskTitle  string    `json:"task_title"`
 }
 
-// GetReviewQueueRow 是获取审查队列的 domain Row（JOIN tasks+task_nodes+agents）。
+// GetReviewQueueRow is the domain Row for fetching the review queue (JOIN tasks+task_nodes+agents).
 type GetReviewQueueRow struct {
 	TaskID       int32     `json:"task_id"`
 	TaskTitle    string    `json:"task_title"`
@@ -98,14 +98,14 @@ type GetReviewQueueRow struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// GetCompletedTasksOlderThanRow 是查询早于某时间点的已完成任务的 domain Row。
+// GetCompletedTasksOlderThanRow is the domain Row for querying completed tasks older than a given point in time.
 type GetCompletedTasksOlderThanRow struct {
 	ID          int32  `json:"id"`
 	ProjectID   string `json:"project_id"`
 	WorkspaceID string `json:"workspace_id"`
 }
 
-// GetInProgressNodesByAgentRow 是查询某 Agent 进行中节点的 domain Row（JOIN tasks 获取 project_id）。
+// GetInProgressNodesByAgentRow is the domain Row for querying in-progress nodes for an Agent (JOIN tasks to get project_id).
 type GetInProgressNodesByAgentRow struct {
 	ID                   string     `json:"id"`
 	TaskID               int32      `json:"task_id"`
@@ -134,14 +134,14 @@ type GetInProgressNodesByAgentRow struct {
 	ProjectID            string     `json:"project_id"`
 }
 
-// GetTokenUsageByAgentRow 是单个 Agent 的 Token 用量聚合 domain Row。
+// GetTokenUsageByAgentRow is the domain Row for a single Agent's token usage aggregation.
 type GetTokenUsageByAgentRow struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	TotalTokens  int64 `json:"total_tokens"`
 }
 
-// GetTokenUsageByAgentsRow 是按 Agent 分组的 Token 用量聚合 domain Row。
+// GetTokenUsageByAgentsRow is the domain Row for token usage aggregation grouped by Agent.
 type GetTokenUsageByAgentsRow struct {
 	AgentID      string `json:"agent_id"`
 	InputTokens  int64  `json:"input_tokens"`
@@ -149,7 +149,7 @@ type GetTokenUsageByAgentsRow struct {
 	TotalTokens  int64  `json:"total_tokens"`
 }
 
-// GetTokenUsageByTaskRow 是单个任务的 Token 用量聚合 domain Row。
+// GetTokenUsageByTaskRow is the domain Row for a single task's token usage aggregation.
 type GetTokenUsageByTaskRow struct {
 	InputTokens  int64   `json:"input_tokens"`
 	OutputTokens int64   `json:"output_tokens"`
@@ -157,7 +157,7 @@ type GetTokenUsageByTaskRow struct {
 	CostEstimate *string `json:"cost_estimate"`
 }
 
-// GetTokenUsageByTaskNodesRow 是按节点分组的 Token 用量聚合 domain Row。
+// GetTokenUsageByTaskNodesRow is the domain Row for token usage aggregation grouped by node.
 type GetTokenUsageByTaskNodesRow struct {
 	TaskNodeID   string `json:"task_node_id"`
 	InputTokens  int64  `json:"input_tokens"`
@@ -165,19 +165,19 @@ type GetTokenUsageByTaskNodesRow struct {
 	TotalTokens  int64  `json:"total_tokens"`
 }
 
-// GetTemplateStatsRow 是工作流模板统计的 domain Row。
+// GetTemplateStatsRow is the domain Row for workflow template statistics.
 type GetTemplateStatsRow struct {
 	UsageCount           int64   `json:"usage_count"`
 	AvgCompletionSeconds float64 `json:"avg_completion_seconds"`
 	RejectRate           float64 `json:"reject_rate"`
 }
 
-// ListMembersByWorkspaceRow 是按工作区列出成员的 domain Row（JOIN workspace_members）。
+// ListMembersByWorkspaceRow is the domain Row for listing members by workspace (JOIN workspace_members).
 type ListMembersByWorkspaceRow struct {
 	ID                string    `json:"id"`
 	Name              string    `json:"name"`
 	Email             string    `json:"email"`
-	PasswordHash      string    `json:"-"` // 不序列化
+	PasswordHash      string    `json:"-"` // Not serialized
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	WorkspaceRole     string    `json:"workspace_role"`

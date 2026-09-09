@@ -1,4 +1,4 @@
--- Git 凭据查询
+-- Git credential queries
 
 -- name: CreateGitCredential :one
 INSERT INTO git_credentials (project_id, repo_url, username, encrypted_pat, created_by)

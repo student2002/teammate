@@ -28,7 +28,7 @@ type GetTemplateStatsRow struct {
 	RejectRate           interface{} `db:"reject_rate" json:"reject_rate"`
 }
 
-// 模板统计查询
+// Template statistics queries
 func (q *Queries) GetTemplateStats(ctx context.Context, workflowName string) (GetTemplateStatsRow, error) {
 	row := q.db.QueryRowContext(ctx, getTemplateStats, workflowName)
 	var i GetTemplateStatsRow

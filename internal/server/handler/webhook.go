@@ -1,4 +1,4 @@
-// webhook.go 提供 GitHub Webhook 事件处理端点（HMAC 签名校验）。
+// webhook.go provides the GitHub Webhook event handling endpoint (HMAC signature verification).
 package handler
 
 import (

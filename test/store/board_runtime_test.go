@@ -1,4 +1,4 @@
-// board_runtime_test.go 覆盖看板与运行时数据访问的测试。
+// board_runtime_test.go tests for board and runtime data access.
 package store_test
 
 import (
@@ -20,7 +20,7 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 创建任务
+	// Create a task
 	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Board task",
@@ -43,7 +43,7 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 		t.Fatalf("expected 4 columns, got %d", len(columns))
 	}
 
-	// 查找 pending 列
+	// Find the pending column
 	var pendingCol store.BoardColumn
 	for _, col := range columns {
 		if col.Key == "pending" {
@@ -52,7 +52,7 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 		}
 	}
 
-	// 任务应处于 pending 列
+	// Task should be in the pending column
 	found := false
 	for _, taskItem := range pendingCol.Tasks {
 		if taskItem.ID == task.ID {
@@ -121,7 +121,7 @@ func TestSyncRuntime_PendingNodes(t *testing.T) {
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 创建包含待处理节点的任务
+	// Create a task with pending nodes
 	_, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Pending task",
@@ -135,7 +135,7 @@ func TestSyncRuntime_PendingNodes(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// 为 Agent 创建 runtime
+	// Create a runtime for the Agent
 	ver := "1.0.0"
 	runtime, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
 		AgentID:  agent.ID,
@@ -167,7 +167,7 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 创建任务
+	// Create a task
 	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Comment task",
@@ -181,7 +181,7 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// 创建一条提及该 Agent 的评论
+	// Create a comment mentioning the Agent
 	_, err = s.CreateComment(ctx, types.CreateCommentParams{
 		TaskID:      task.ID,
 		AuthorType:  "member",
@@ -194,7 +194,7 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 		t.Fatalf("CreateComment: %v", err)
 	}
 
-	// 创建 runtime
+	// Create a runtime
 	ver := "1.0.0"
 	runtime, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
 		AgentID:  agent.ID,

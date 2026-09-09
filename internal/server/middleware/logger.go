@@ -1,16 +1,17 @@
-// logger.go 提供 HTTP 请求日志中间件，使用 log/slog 结构化日志记录每个请求的详细信息。
+// logger.go provides an HTTP request logging middleware that uses log/slog structured logging
+// to record detailed information for each request.
 //
-// 本文件包含：
-//   - Logger：chi 兼容的请求日志中间件，记录 method、path、status、duration、remote_addr
-//   - responseWriter：包装 http.ResponseWriter 以捕获响应状态码
-//   - Flush/Hijack/Unwrap：确保 SSE 流式传输和 WebSocket 协议升级正常工作
+// This file contains:
+//   - Logger: a chi-compatible request logging middleware that records method, path, status, duration, remote_addr
+//   - responseWriter: wraps http.ResponseWriter to capture the response status code
+//   - Flush/Hijack/Unwrap: ensure SSE streaming and WebSocket protocol upgrades work correctly
 //
-// 特性：
-//   - 自动跳过 /health 健康检查端点以减少日志噪音
-//   - 使用 log/slog 结构化日志，便于日志聚合和查询
-//   - 实现 http.Flusher 接口，支持 SSE 实时推送场景
-//   - 实现 http.Hijacker 接口，支持 WebSocket 协议升级
-//   - 实现 Unwrap 方法，兼容 Go 1.20+ 的 http.ResponseController
+// Features:
+//   - Automatically skips the /health health-check endpoint to reduce log noise
+//   - Uses log/slog structured logging for easy log aggregation and querying
+//   - Implements the http.Flusher interface to support SSE real-time push scenarios
+//   - Implements the http.Hijacker interface to support WebSocket protocol upgrades
+//   - Implements the Unwrap method for compatibility with Go 1.20+ http.ResponseController
 package middleware
 
 import (
@@ -21,44 +22,44 @@ import (
 	"time"
 )
 
-// responseWriter 封装 http.ResponseWriter 以捕获响应状态码。
-// 同时实现 http.Flusher（用于 SSE）和 http.Hijacker（用于 WebSocket 升级）接口，
-// 确保中间件包装不会影响流式传输和协议升级。
+// responseWriter wraps http.ResponseWriter to capture the response status code.
+// It also implements the http.Flusher (for SSE) and http.Hijacker (for WebSocket upgrade) interfaces,
+// ensuring that middleware wrapping does not affect streaming and protocol upgrades.
 type responseWriter struct {
 	http.ResponseWriter
 	status int
 }
 
-// newResponseWriter 创建一个新的 responseWriter，默认状态码为 200 OK。
+// newResponseWriter creates a new responseWriter with a default status code of 200 OK.
 //
-// 参数：
-//   - w: 原始的 http.ResponseWriter
+// Parameters:
+//   - w: the original http.ResponseWriter
 //
-// 返回：
-//   - *responseWriter: 包装后的响应写入器
+// Returns:
+//   - *responseWriter: the wrapped response writer
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{ResponseWriter: w, status: http.StatusOK}
 }
 
-// WriteHeader 拦截状态码设置，同时记录状态码和调用底层 ResponseWriter。
+// WriteHeader intercepts status code setting, recording the status code and calling the underlying ResponseWriter.
 //
-// 参数：
-//   - code: HTTP 状态码
+// Parameters:
+//   - code: HTTP status code
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Flush 实现 http.Flusher 接口，确保 SSE（Server-Sent Events）和流式端点
-// 在中间件包装后仍能将数据实时推送到客户端。
+// Flush implements the http.Flusher interface, ensuring that SSE (Server-Sent Events) and streaming endpoints
+// can still push data to the client in real time after middleware wrapping.
 func (rw *responseWriter) Flush() {
 	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
 
-// Hijack 实现 http.Hijacker 接口，允许中间件包装后仍能进行 WebSocket 协议升级。
-// 如果底层 ResponseWriter 不支持 Hijack，返回 http.ErrNotSupported。
+// Hijack implements the http.Hijacker interface, allowing WebSocket protocol upgrades after middleware wrapping.
+// If the underlying ResponseWriter does not support Hijack, it returns http.ErrNotSupported.
 func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
 		return hijacker.Hijack()
@@ -66,28 +67,29 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, http.ErrNotSupported
 }
 
-// Unwrap 返回底层 ResponseWriter，供 Go 1.20+ 的 http.ResponseController 进行接口检测。
+// Unwrap returns the underlying ResponseWriter for interface detection by Go 1.20+ http.ResponseController.
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
 
-// Logger 返回一个 chi 兼容的请求日志中间件，使用 log/slog 结构化日志记录每个请求的详细信息。
+// Logger returns a chi-compatible request logging middleware that uses log/slog structured logging
+// to record detailed information for each request.
 //
-// 记录字段：
-//   - method: HTTP 方法（GET/POST/PUT/DELETE 等）
-//   - path: 请求路径
-//   - status: 响应状态码
-//   - duration: 请求处理耗时
-//   - remote_addr: 客户端 IP 地址
+// Recorded fields:
+//   - method: HTTP method (GET/POST/PUT/DELETE, etc.)
+//   - path: request path
+//   - status: response status code
+//   - duration: request processing duration
+//   - remote_addr: client IP address
 //
-// 优化：对 /health 健康检查端点跳过日志记录以减少噪音。
+// Optimization: logging is skipped for the /health health-check endpoint to reduce noise.
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func Logger() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 跳过健康检查端点
+			// Skip the health-check endpoint
 			if r.URL.Path == "/health" {
 				next.ServeHTTP(w, r)
 				return

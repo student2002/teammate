@@ -1,4 +1,4 @@
-// comment_test.go 覆盖评论接口的测试。
+// comment_test.go tests the comment API.
 package handler_test
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/teammate/server/internal/clock"
 )
 
-// setupCommentTestRouter 使用主 setupTestRouter 创建测试服务器。
+// setupCommentTestRouter creates a test server using the main setupTestRouter.
 func setupCommentTestRouter(t *testing.T) (*httptest.Server, *sql.DB) {
 	t.Helper()
 
@@ -26,7 +26,7 @@ func setupCommentTestRouter(t *testing.T) (*httptest.Server, *sql.DB) {
 	return ts, db
 }
 
-// setupCommentTestRouterWithClock 创建使用自定义时钟的测试服务器。
+// setupCommentTestRouterWithClock creates a test server with a custom clock.
 func setupCommentTestRouterWithClock(t *testing.T, c clock.Clock) *httptest.Server {
 	t.Helper()
 
@@ -37,7 +37,7 @@ func setupCommentTestRouterWithClock(t *testing.T, c clock.Clock) *httptest.Serv
 	return ts
 }
 
-// TestCommentCreateAndList 验证评论的创建和列表查询功能。
+// TestCommentCreateAndList verifies comment creation and listing functionality.
 func TestCommentCreateAndList(t *testing.T) {
 	ts, _ := setupCommentTestRouter(t)
 	client := ts.Client()
@@ -50,7 +50,7 @@ func TestCommentCreateAndList(t *testing.T) {
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
-	// 创建评论
+	// Create comment
 	authorID := uuid.New()
 	body := map[string]interface{}{
 		"author_type": "human",
@@ -71,7 +71,7 @@ func TestCommentCreateAndList(t *testing.T) {
 		t.Fatalf("missing comment id in response: %v", createResult)
 	}
 
-	// 列出评论
+	// List comments
 	_, status, respBody = doRequestWithToken(t, client, "GET", fmt.Sprintf("%s/api/tasks/%d/comments", baseURL, taskID), token, nil)
 	if status != http.StatusOK {
 		t.Fatalf("list comments: expected 200, got %d", status)
@@ -87,7 +87,7 @@ func TestCommentCreateAndList(t *testing.T) {
 	t.Logf("Comment created and listed: id=%s", commentID)
 }
 
-// TestCommentContentLengthValidation 验证评论内容长度限制（超过 10000 字符被拒绝）。
+// TestCommentContentLengthValidation verifies comment content length limit (exceeding 10000 characters is rejected).
 func TestCommentContentLengthValidation(t *testing.T) {
 	ts, _ := setupCommentTestRouter(t)
 	client := ts.Client()
@@ -100,7 +100,7 @@ func TestCommentContentLengthValidation(t *testing.T) {
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
-	// 创建内容超过 10000 个字符的评论
+	// Create a comment with content exceeding 10000 characters
 	longContent := strings.Repeat("a", 10001)
 	authorID := uuid.New()
 	body := map[string]interface{}{
@@ -114,7 +114,7 @@ func TestCommentContentLengthValidation(t *testing.T) {
 		t.Fatalf("create comment with long content: expected 400, got %d", status)
 	}
 
-	// 创建一条有效评论
+	// Create a valid comment
 	body = map[string]interface{}{
 		"author_type": "human",
 		"author_id":   authorID,
@@ -132,7 +132,7 @@ func TestCommentContentLengthValidation(t *testing.T) {
 	t.Logf("Content length validation works correctly")
 }
 
-// TestCommentReplyThread 验证评论的回复功能（父子评论关系）。
+// TestCommentReplyThread verifies comment reply functionality (parent-child comment relationship).
 func TestCommentReplyThread(t *testing.T) {
 	ts, _ := setupCommentTestRouter(t)
 	client := ts.Client()
@@ -145,7 +145,7 @@ func TestCommentReplyThread(t *testing.T) {
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
-	// 创建父评论
+	// Create parent comment
 	humanAuthor := uuid.New()
 	body := map[string]interface{}{
 		"author_type": "human",
@@ -162,7 +162,7 @@ func TestCommentReplyThread(t *testing.T) {
 	json.Unmarshal(respBody, &parentResult)
 	parentID := parentResult["id"].(string)
 
-	// 创建回复
+	// Create reply
 	agentAuthor := uuid.New()
 	parentUUID, _ := uuid.Parse(parentID)
 	replyBody := map[string]interface{}{
@@ -184,7 +184,7 @@ func TestCommentReplyThread(t *testing.T) {
 		t.Fatalf("expected parent_id=%s, got %v", parentID, replyResult["parent_id"])
 	}
 
-	// 列出评论——应有 2 条
+	// List comments — should have 2
 	_, status, respBody = doRequestWithToken(t, client, "GET", fmt.Sprintf("%s/api/tasks/%d/comments", baseURL, taskID), token, nil)
 	if status != http.StatusOK {
 		t.Fatalf("list comments: expected 200, got %d", status)

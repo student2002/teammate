@@ -1,14 +1,15 @@
-// task.go 提供任务和工作流节点的数据访问操作。
+// task.go provides data access operations for tasks and workflow nodes.
 //
-// 任务（Task）是项目中的工作单元，由工作流模板实例化为有序的工作流节点。
-// 本文件包含任务的 CRUD、节点查询、子任务管理、截止日期解析等功能。
+// A Task is a unit of work in a project, instantiated from a workflow template
+// into an ordered set of workflow nodes.
+// This file contains task CRUD, node queries, subtask management, due date parsing, etc.
 //
-// 任务创建流程：
-//  1. 在事务中创建任务记录
-//  2. 设置 sequence（默认为任务 ID）
-//  3. 获取项目的 max_review_cycles 配置
-//  4. 遍历模板节点创建 task_nodes
-//  5. 更新 depends_on 依赖关系
+// Task creation flow:
+//  1. Create the task record within a transaction
+//  2. Set sequence (defaults to the task ID)
+//  3. Fetch the project's max_review_cycles configuration
+//  4. Iterate over template nodes to create task_nodes
+//  5. Update depends_on dependencies
 package store
 
 import (
@@ -24,30 +25,30 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateTask 在事务中创建任务并根据模板节点实例化工作流节点。
+// CreateTask creates a task within a transaction and instantiates workflow nodes from the template nodes.
 //
-// 执行步骤：
-//  1. 创建任务记录
-//  2. 设置 sequence（默认为任务 ID）
-//  3. 获取项目的 max_review_cycles 配置
-//  4. 遍历模板节点创建 task_nodes（首节点根据分配类型自动启动）
-//  5. 更新 depends_on 依赖关系
+// Execution steps:
+//  1. Create the task record
+//  2. Set sequence (defaults to the task ID)
+//  3. Fetch the project's max_review_cycles configuration
+//  4. Iterate over template nodes to create task_nodes (the first node auto-starts based on assignee type)
+//  5. Update depends_on dependencies
 //
-// 首节点自动启动规则：
-//   - specific_agent: 标记为 in_progress，保留给该 Agent
-//   - human: 直接标记为 completed
-//   - auto: 标记为 in_progress
-//   - any_agent: 保持 pending，等待 Agent 认领
+// First-node auto-start rules:
+//   - specific_agent: mark as in_progress, reserved for that Agent
+//   - human: mark directly as completed
+//   - auto: mark as in_progress
+//   - any_agent: stay pending, waiting for an Agent to claim
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 任务创建参数
-//   - templateNodes: 工作流模板节点列表
+// Parameters:
+//   - ctx: request context
+//   - params: task creation parameters
+//   - templateNodes: list of workflow template nodes
 //
-// 返回：
-//   - types.Task: 创建的任务记录
-//   - []types.TaskNode: 创建的工作流节点列表
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.Task: the created task record
+//   - []types.TaskNode: list of created workflow nodes
+//   - error: error if creation fails
 func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, templateNodes []types.WorkflowTemplateNode) (types.Task, []types.TaskNode, error) {
 	dbParams, err := FromDomainCreateTaskParams(params)
 	if err != nil {
@@ -67,7 +68,7 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 		return types.Task{}, nil, fmt.Errorf("create task: %w", err)
 	}
 
-	// 如果未显式提供 sequence，则设置 sequence = id（默认为 0）
+	// If sequence is not explicitly provided, set sequence = id (defaults to 0)
 	if dbParams.Sequence == 0 {
 		_, err = tx.ExecContext(ctx, `UPDATE tasks SET sequence = $1 WHERE id = $1`, task.ID)
 		if err != nil {
@@ -76,7 +77,7 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 		task.Sequence = task.ID
 	}
 
-	// 获取项目的 max_review_cycles 以传播到任务节点
+	// Fetch the project's max_review_cycles to propagate to task nodes
 	project, err := qtx.GetProject(ctx, dbParams.ProjectID)
 	if err != nil {
 		tx.Rollback()
@@ -85,8 +86,8 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 
 	dbTaskNodes := make([]db.TaskNode, 0, len(templateNodes))
 
-	// 构建模板节点 ID 到任务节点 ID 的映射，用于解析 depends_on。
-	// 我们按 sort_order 创建节点，因此先收集 ID，再更新 depends_on。
+	// Build a mapping from template node ID to task node ID, used to resolve depends_on.
+	// We create nodes by sort_order, so collect IDs first, then update depends_on.
 	templateToTaskNodeID := make(map[uuid.UUID]uuid.UUID, len(templateNodes))
 
 	for i, tn := range templateNodes {
@@ -99,22 +100,22 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 			}
 		}
 
-		// 自动启动第一个节点（索引 0，无论 sort_order 值如何）
+		// Auto-start the first node (index 0, regardless of sort_order value)
 		if i == 0 {
 			if assigneeType == db.AssigneeTypeSpecificAgent && assigneeID.Valid {
-				// 指定 Agent：标记为 in_progress 并为该 Agent 保留
+				// Specific Agent: mark as in_progress and reserve for that Agent
 				status = db.TaskNodeStatusInProgress
 			} else if assigneeType == db.AssigneeTypeHuman {
-				// 人工步骤：作为第一个节点自动完成
+				// Human step: auto-complete as the first node
 				status = db.TaskNodeStatusCompleted
 			} else if assigneeType == db.AssigneeTypeAuto {
-				// 自动分配人：标记为 in_progress 以便系统自动启动
+				// Auto-assignee: mark as in_progress so the system auto-starts it
 				status = db.TaskNodeStatusInProgress
 			}
-			// 对于 "any_agent" 分配类型，保持为 pending 以便 Agent 可以认领
+			// For the "any_agent" assignee type, keep pending so an Agent can claim it
 		}
 
-		// 若模板节点设置了 MaxRejectCycles 则使用它，否则回退到项目的 MaxReviewCycles
+		// If the template node sets MaxRejectCycles use it, otherwise fall back to the project's MaxReviewCycles
 		maxRejectCycles := int32(tn.MaxRejectCycles)
 		if maxRejectCycles == 0 {
 			maxRejectCycles = project.MaxReviewCycles
@@ -134,7 +135,7 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 			TimeoutMinutes:     int32(tn.TimeoutMinutes),
 			ReadonlyDirs:       tn.ReadonlyDirs,
 			FullControlDirs:    tn.FullControlDirs,
-			DependsOn:          []string{}, // 占位符，稍后更新
+			DependsOn:          []string{}, // placeholder, updated later
 		})
 		if err != nil {
 			return types.Task{}, nil, fmt.Errorf("convert create task node params: %w", err)
@@ -148,12 +149,12 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 		templateToTaskNodeID[tplID] = taskNode.ID
 	}
 
-	// 现在更新每个任务节点的 depends_on，将模板节点 ID 映射到任务节点 ID
+	// Now update each task node's depends_on, mapping template node IDs to task node IDs
 	for i, tn := range templateNodes {
 		if len(tn.DependsOn) == 0 {
 			continue
 		}
-		// domain DependsOn 是 []string，需解析为 []uuid.UUID
+		// domain DependsOn is []string, needs parsing into []uuid.UUID
 		resolvedDeps := make([]uuid.UUID, 0, len(tn.DependsOn))
 		for _, depTemplateIDStr := range tn.DependsOn {
 			depTemplateID, err := uuid.Parse(depTemplateIDStr)
@@ -190,15 +191,15 @@ func (s *Store) CreateTask(ctx context.Context, params types.CreateTaskParams, t
 	return domainTask, domainNodes, nil
 }
 
-// GetTask 根据 ID 查询单个任务记录。
+// GetTask queries a single task record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 任务的整数 ID
+// Parameters:
+//   - ctx: request context
+//   - id: integer ID of the task
 //
-// 返回：
-//   - types.Task: 任务记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.Task: the task record
+//   - error: error if the query fails
 func (s *Store) GetTask(ctx context.Context, id int32) (types.Task, error) {
 	task, err := s.q.GetTask(ctx, id)
 	if err != nil {
@@ -207,15 +208,15 @@ func (s *Store) GetTask(ctx context.Context, id int32) (types.Task, error) {
 	return ToDomainTask(task)
 }
 
-// ListTasks 分页查询指定项目内的任务列表。
+// ListTasks paginated query of tasks within the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 分页查询参数
+// Parameters:
+//   - ctx: request context
+//   - params: pagination query parameters
 //
-// 返回：
-//   - []types.Task: 任务列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Task: list of tasks
+//   - error: error if the query fails
 func (s *Store) ListTasks(ctx context.Context, params types.ListTasksParams) ([]types.Task, error) {
 	dbParams, err := FromDomainListTasksParams(params)
 	if err != nil {
@@ -228,15 +229,15 @@ func (s *Store) ListTasks(ctx context.Context, params types.ListTasksParams) ([]
 	return ToDomainTaskSlice(tasks)
 }
 
-// ListAllTasks 查询指定项目内的所有任务（不分页）。
+// ListAllTasks queries all tasks within the specified project (no pagination).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []types.Task: 任务列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Task: list of tasks
+//   - error: error if the query fails
 func (s *Store) ListAllTasks(ctx context.Context, projectID uuid.UUID) ([]types.Task, error) {
 	tasks, err := s.q.ListAllTasks(ctx, projectID)
 	if err != nil {
@@ -245,15 +246,15 @@ func (s *Store) ListAllTasks(ctx context.Context, projectID uuid.UUID) ([]types.
 	return ToDomainTaskSlice(tasks)
 }
 
-// UpdateTask 更新任务的基本信息。
+// UpdateTask updates the basic information of a task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含任务 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including the task ID and fields to update
 //
-// 返回：
-//   - types.Task: 更新后的任务记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.Task: the updated task record
+//   - error: error if the update fails
 func (s *Store) UpdateTask(ctx context.Context, params types.UpdateTaskParams) (types.Task, error) {
 	dbParams, err := FromDomainUpdateTaskParams(params)
 	if err != nil {
@@ -266,18 +267,18 @@ func (s *Store) UpdateTask(ctx context.Context, params types.UpdateTaskParams) (
 	return ToDomainTask(task)
 }
 
-// DeleteTask 软删除任务（将状态设为 cancelled），在事务中同时重置 in_progress 节点为 pending。
+// DeleteTask soft-deletes a task (sets status to cancelled) and, within a transaction, also resets in_progress nodes to pending.
 //
-// 执行步骤：
-//  1. 将任务状态设为 cancelled
-//  2. 将 in_progress 状态的节点重置为 pending，并清除 assignee_id
+// Execution steps:
+//  1. Set the task status to cancelled
+//  2. Reset in_progress nodes to pending and clear their assignee_id
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务的整数 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: integer ID of the task
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error if deletion fails
 func (s *Store) DeleteTask(ctx context.Context, taskID int32) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -285,13 +286,13 @@ func (s *Store) DeleteTask(ctx context.Context, taskID int32) error {
 	}
 	defer tx.Rollback()
 
-	// 将任务状态设置为已取消
+	// Set the task status to cancelled
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE tasks SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, taskID); err != nil {
 		return fmt.Errorf("delete task: %w", err)
 	}
 
-	// 将进行中的节点重置为待处理（它们将被已取消的任务状态隐藏）
+	// Reset in-progress nodes to pending (they will be hidden by the cancelled task status)
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE task_nodes SET status = 'pending', assignee_id = NULL, updated_at = NOW()
 		 WHERE task_id = $1 AND status = 'in_progress'`, taskID); err != nil {
@@ -301,14 +302,14 @@ func (s *Store) DeleteTask(ctx context.Context, taskID int32) error {
 	return tx.Commit()
 }
 
-// CancelTaskNodes 将指定任务中所有 in_progress 状态的节点重置为 pending。
+// CancelTaskNodes resets all in_progress nodes of the specified task to pending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务的整数 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: integer ID of the task
 //
-// 返回：
-//   - error: 更新失败时返回错误
+// Returns:
+//   - error: error if the update fails
 func (s *Store) CancelTaskNodes(ctx context.Context, taskID int32) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE task_nodes SET status = 'pending', assignee_id = NULL, updated_at = NOW()
@@ -319,15 +320,15 @@ func (s *Store) CancelTaskNodes(ctx context.Context, taskID int32) error {
 	return nil
 }
 
-// ListTaskNodes 查询指定任务的所有工作流节点。
+// ListTaskNodes queries all workflow nodes of the specified task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务的整数 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: integer ID of the task
 //
-// 返回：
-//   - []types.TaskNode: 工作流节点列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.TaskNode: list of workflow nodes
+//   - error: error if the query fails
 func (s *Store) ListTaskNodes(ctx context.Context, taskID int32) ([]types.TaskNode, error) {
 	nodes, err := s.q.ListTaskNodes(ctx, taskID)
 	if err != nil {
@@ -336,15 +337,15 @@ func (s *Store) ListTaskNodes(ctx context.Context, taskID int32) ([]types.TaskNo
 	return ToDomainTaskNodeSlice(nodes)
 }
 
-// ListTaskNodesByProject 查询指定项目内所有任务的全部工作流节点。
+// ListTaskNodesByProject queries all workflow nodes of all tasks within the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - []types.TaskNode: 工作流节点列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.TaskNode: list of workflow nodes
+//   - error: error if the query fails
 func (s *Store) ListTaskNodesByProject(ctx context.Context, projectID uuid.UUID) ([]types.TaskNode, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT tn.id, tn.task_id, tn.name, tn.description, tn.sort_order,
@@ -381,15 +382,15 @@ func (s *Store) ListTaskNodesByProject(ctx context.Context, projectID uuid.UUID)
 	return ToDomainTaskNodeSlice(dbNodes)
 }
 
-// ListNodeTransitions 查询指定节点的所有状态流转记录。
+// ListNodeTransitions queries all state transition records of the specified node.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - nodeID: 节点的 UUID
+// Parameters:
+//   - ctx: request context
+//   - nodeID: UUID of the node
 //
-// 返回：
-//   - []types.NodeTransition: 流转记录列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.NodeTransition: list of transition records
+//   - error: error if the query fails
 func (s *Store) ListNodeTransitions(ctx context.Context, nodeID uuid.UUID) ([]types.NodeTransition, error) {
 	transitions, err := s.q.ListNodeTransitions(ctx, nodeID)
 	if err != nil {
@@ -398,15 +399,15 @@ func (s *Store) ListNodeTransitions(ctx context.Context, nodeID uuid.UUID) ([]ty
 	return ToDomainNodeTransitionSlice(transitions)
 }
 
-// CreateSubtask 创建子任务记录。
+// CreateSubtask creates a subtask record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 子任务创建参数
+// Parameters:
+//   - ctx: request context
+//   - params: subtask creation parameters
 //
-// 返回：
-//   - types.Task: 创建的子任务记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.Task: the created subtask record
+//   - error: error if creation fails
 func (s *Store) CreateSubtask(ctx context.Context, params types.CreateSubtaskParams) (types.Task, error) {
 	dbParams, err := FromDomainCreateSubtaskParams(params)
 	if err != nil {
@@ -417,7 +418,7 @@ func (s *Store) CreateSubtask(ctx context.Context, params types.CreateSubtaskPar
 		return types.Task{}, fmt.Errorf("create subtask: %w", err)
 	}
 
-	// 如果未显式提供 sequence，则设置 sequence = id（默认为 0）
+	// If sequence is not explicitly provided, set sequence = id (defaults to 0)
 	if dbParams.Sequence == 0 {
 		_, err = s.db.ExecContext(ctx, `UPDATE tasks SET sequence = $1 WHERE id = $1`, task.ID)
 		if err != nil {
@@ -429,15 +430,15 @@ func (s *Store) CreateSubtask(ctx context.Context, params types.CreateSubtaskPar
 	return ToDomainTask(task)
 }
 
-// ListSubtasks 查询指定父任务的所有子任务。
+// ListSubtasks queries all subtasks of the specified parent task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - parentTaskID: 父任务 ID（可为空）
+// Parameters:
+//   - ctx: request context
+//   - parentTaskID: parent task ID (may be null)
 //
-// 返回：
-//   - []types.Task: 子任务列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Task: list of subtasks
+//   - error: error if the query fails
 func (s *Store) ListSubtasks(ctx context.Context, parentTaskID sql.NullInt32) ([]types.Task, error) {
 	tasks, err := s.q.ListSubtasks(ctx, parentTaskID)
 	if err != nil {
@@ -446,13 +447,13 @@ func (s *Store) ListSubtasks(ctx context.Context, parentTaskID sql.NullInt32) ([
 	return ToDomainTaskSlice(tasks)
 }
 
-// ParseDueDate 将日期字符串解析为 sql.NullTime，支持 RFC3339 和 YYYY-MM-DD 格式。
+// ParseDueDate parses a date string into sql.NullTime, supporting RFC3339 and YYYY-MM-DD formats.
 //
-// 参数：
-//   - dateStr: 日期字符串指针（可为 nil）
+// Parameters:
+//   - dateStr: pointer to the date string (may be nil)
 //
-// 返回：
-//   - sql.NullTime: 解析后的时间，解析失败时返回 Valid=false
+// Returns:
+//   - sql.NullTime: parsed time; returns Valid=false if parsing fails
 func ParseDueDate(dateStr *string) sql.NullTime {
 	if dateStr == nil || *dateStr == "" {
 		return sql.NullTime{}
@@ -467,15 +468,15 @@ func ParseDueDate(dateStr *string) sql.NullTime {
 	return sql.NullTime{Time: parsed, Valid: true}
 }
 
-// UpdateTaskGitBranch 更新任务关联的 Git 分支名。
+// UpdateTaskGitBranch updates the Git branch name associated with a task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务的整数 ID
-//   - gitBranch: Git 分支名
+// Parameters:
+//   - ctx: request context
+//   - taskID: integer ID of the task
+//   - gitBranch: Git branch name
 //
-// 返回：
-//   - error: 更新失败时返回错误
+// Returns:
+//   - error: error if the update fails
 func (s *Store) UpdateTaskGitBranch(ctx context.Context, taskID int32, gitBranch string) error {
 	if err := s.q.UpdateTaskGitBranch(ctx, db.UpdateTaskGitBranchParams{
 		ID:        taskID,
@@ -486,15 +487,15 @@ func (s *Store) UpdateTaskGitBranch(ctx context.Context, taskID int32, gitBranch
 	return nil
 }
 
-// ListTasksPaginated 查询指定项目内的任务（分页 + 搜索），不过滤历史任务。
+// ListTasksPaginated queries tasks within the specified project (pagination + search), without filtering out historical tasks.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 分页查询参数，包含项目 ID、状态过滤、搜索关键词、limit 和 offset
+// Parameters:
+//   - ctx: request context
+//   - params: pagination query parameters, including project ID, status filter, search keyword, limit and offset
 //
-// 返回：
-//   - []types.Task: 当前页的任务列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Task: list of tasks on the current page
+//   - error: error if the query fails
 func (s *Store) ListTasksPaginated(ctx context.Context, params types.ListTasksPaginatedParams) ([]types.Task, error) {
 	dbParams, err := FromDomainListTasksPaginatedParams(params)
 	if err != nil {
@@ -507,15 +508,15 @@ func (s *Store) ListTasksPaginated(ctx context.Context, params types.ListTasksPa
 	return ToDomainTaskSlice(tasks)
 }
 
-// CountTasksByStatus 统计指定项目和状态下的任务数量（支持搜索）。
+// CountTasksByStatus counts tasks under the specified project and status (supports search).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 计数参数，包含项目 ID、状态过滤和搜索关键词
+// Parameters:
+//   - ctx: request context
+//   - params: count parameters, including project ID, status filter and search keyword
 //
-// 返回：
-//   - int64: 符合条件的任务总数
-//   - error: 查询失败时返回错误
+// Returns:
+//   - int64: total number of matching tasks
+//   - error: error if the query fails
 func (s *Store) CountTasksByStatus(ctx context.Context, params types.CountTasksByStatusParams) (int64, error) {
 	dbParams, err := FromDomainCountTasksByStatusParams(params)
 	if err != nil {

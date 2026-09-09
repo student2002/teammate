@@ -1,9 +1,9 @@
-// invitation.go 提供工作区邀请的数据访问操作。
+// invitation.go provides data access operations for workspace invitations.
 //
-// 邀请流程：管理员创建邀请 → 生成 Token → 发送邀请链接 →
-// 被邀请者接受 → 邀请状态更新为已接受。
+// Invitation flow: an admin creates an invitation -> generates a Token -> sends an invitation link ->
+// the invitee accepts -> the invitation status is updated to accepted.
 //
-// 邀请 Token 采用 SHA-256 哈希存储，有效期 7 天。
+// The invitation Token is stored as a SHA-256 hash and is valid for 7 days.
 package store
 
 import (
@@ -19,34 +19,34 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateInvitation 为新成员创建工作区邀请。
+// CreateInvitation creates a workspace invitation for a new member.
 //
-// 执行步骤：
-//  1. 生成 32 字节随机 Token
-//  2. 计算 Token 的 SHA-256 哈希
-//  3. 将哈希存储到 invitations 表，有效期 7 天
-//  4. 返回邀请记录和 Token 明文（用于发送邀请链接）
+// Steps:
+//  1. Generate a 32-byte random Token
+//  2. Compute the SHA-256 hash of the Token
+//  3. Store the hash in the invitations table, valid for 7 days
+//  4. Return the invitation record and the Token plaintext (used to send the invitation link)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
-//   - email: 被邀请者邮箱
-//   - role: 授予的角色（如 "member"、"admin"）
-//   - invitedBy: 邀请者 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
+//   - email: the invitee's email
+//   - role: the granted role (e.g. "member", "admin")
+//   - invitedBy: the inviter ID
 //
-// 返回：
-//   - types.Invitation: 创建的邀请记录
-//   - string: 邀请 Token 明文（用于生成邀请链接）
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.Invitation: the created invitation record
+//   - string: the invitation Token plaintext (used to generate the invitation link)
+//   - error: returns an error if creation fails
 func (s *Store) CreateInvitation(ctx context.Context, workspaceID uuid.UUID, email, role string, invitedBy uuid.UUID) (types.Invitation, string, error) {
-	// 生成邀请 Token
+	// Generate the invitation Token
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return types.Invitation{}, "", fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 
-	// 对 Token 进行哈希以便存储
+	// Hash the Token for storage
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
 
@@ -62,15 +62,15 @@ func (s *Store) CreateInvitation(ctx context.Context, workspaceID uuid.UUID, ema
 	return domainInv, token, nil
 }
 
-// GetInvitationByToken 通过邀请 Token 的 SHA-256 哈希查找邀请记录。
+// GetInvitationByToken looks up an invitation record by the SHA-256 hash of the invitation Token.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - token: 邀请 Token 明文
+// Parameters:
+//   - ctx: request context
+//   - token: the invitation Token plaintext
 //
-// 返回：
-//   - types.Invitation: 邀请记录
-//   - error: 查询失败时返回错误（如 Token 无效或过期）
+// Returns:
+//   - types.Invitation: the invitation record
+//   - error: returns an error if the query fails (e.g. Token invalid or expired)
 func (s *Store) GetInvitationByToken(ctx context.Context, token string) (types.Invitation, error) {
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
@@ -81,15 +81,15 @@ func (s *Store) GetInvitationByToken(ctx context.Context, token string) (types.I
 	return ToDomainInvitation(inv)
 }
 
-// AcceptInvitation 将邀请状态标记为已接受。
+// AcceptInvitation marks the invitation status as accepted.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 邀请记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the UUID of the invitation record
 //
-// 返回：
-//   - types.Invitation: 更新后的邀请记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.Invitation: the updated invitation record
+//   - error: returns an error if the update fails
 func (s *Store) AcceptInvitation(ctx context.Context, id uuid.UUID) (types.Invitation, error) {
 	inv, err := s.q.AcceptInvitation(ctx, id)
 	if err != nil {
@@ -98,15 +98,15 @@ func (s *Store) AcceptInvitation(ctx context.Context, id uuid.UUID) (types.Invit
 	return ToDomainInvitation(inv)
 }
 
-// ListInvitations 查询指定工作区的所有邀请记录。
+// ListInvitations queries all invitation records for the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []types.Invitation: 邀请记录列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.Invitation: the list of invitation records
+//   - error: returns an error if the query fails
 func (s *Store) ListInvitations(ctx context.Context, workspaceID uuid.UUID) ([]types.Invitation, error) {
 	invs, err := s.q.ListInvitations(ctx, workspaceID)
 	if err != nil {
@@ -115,14 +115,14 @@ func (s *Store) ListInvitations(ctx context.Context, workspaceID uuid.UUID) ([]t
 	return ToDomainInvitationSlice(invs)
 }
 
-// DeleteInvitation 根据 ID 删除邀请记录。
+// DeleteInvitation deletes an invitation record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 邀请记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the UUID of the invitation record
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: returns an error if deletion fails
 func (s *Store) DeleteInvitation(ctx context.Context, id uuid.UUID) error {
 	if err := s.q.DeleteInvitation(ctx, id); err != nil {
 		return fmt.Errorf("delete invitation: %w", err)

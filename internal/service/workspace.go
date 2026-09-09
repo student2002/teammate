@@ -1,18 +1,21 @@
-// workspace.go 实现工作区管理的业务逻辑，包括工作区 CRUD、成员管理、
-// 内置模板初始化，以及 OAuth 登录时的自动工作区创建。
-// 工作区是系统的顶层组织单元，包含项目、成员、代理、技能等资源。
+// workspace.go implements the business logic for workspace management, including workspace CRUD,
+// member management, built-in template initialization, and automatic workspace creation on OAuth login.
+// A workspace is the top-level organizational unit of the system, containing projects, members,
+// agents, skills, and other resources.
 //
-// 本文件包含：
-//   - WorkspaceService 结构体：提供工作区管理相关的业务逻辑封装
-//   - Create / Get / List / Update / Delete：工作区基本 CRUD 操作
-//   - CreateMember / ListMembers / GetMember / UpdateMemberRole / DeleteMember：成员管理
-//   - SeedBuiltinTemplates：为工作区初始化内置工作流模板
-//   - FindOrCreateForOAuth：OAuth 登录时自动创建工作区和成员
+// This file contains:
+//   - WorkspaceService struct: provides business-logic encapsulation for workspace management
+//   - Create / Get / List / Update / Delete: basic workspace CRUD operations
+//   - CreateMember / ListMembers / GetMember / UpdateMemberRole / DeleteMember: member management
+//   - SeedBuiltinTemplates: initializes built-in workflow templates for a workspace
+//   - FindOrCreateForOAuth: automatically creates a workspace and member on OAuth login
 //
-// 核心流程：
-//  1. 工作区创建时自动初始化内置工作流模板（如标准的实现→自测→审查→部署）
-//  2. OAuth 首次登录时自动创建个人工作区、成员记录并分配 owner 角色
-//  3. 成员角色采用层级模型：owner > admin > member > viewer
+// Core flows:
+//  1. When a workspace is created, built-in workflow templates are auto-initialized
+//     (e.g. the standard implement → self-test → review → deploy)
+//  2. On first OAuth login, a personal workspace and member record are auto-created
+//     and assigned the owner role
+//  3. Member roles use a hierarchical model: owner > admin > member > viewer
 package service
 
 import (
@@ -25,25 +28,25 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// WorkspaceService 提供工作区管理相关的业务逻辑。
+// WorkspaceService provides the business logic for workspace management.
 type WorkspaceService struct {
 	svc *Service
 }
 
-// NewWorkspaceService 创建一个新的 WorkspaceService 实例。
+// NewWorkspaceService creates a new WorkspaceService instance.
 func NewWorkspaceService(svc *Service) *WorkspaceService {
 	return &WorkspaceService{svc: svc}
 }
 
-// Create 创建一个新的工作区并初始化内置模板。
+// Create creates a new workspace and initializes built-in templates.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 创建工作区的参数，包含名称、描述、Issue 前缀等
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for creating the workspace, including name, description, issue prefix, etc.
 //
-// 返回：
-//   - types.Workspace: 创建的工作区信息
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.Workspace: the created workspace info
+//   - error: possible error (database write failure)
 func (s *WorkspaceService) Create(ctx context.Context, params types.CreateWorkspaceParams) (types.Workspace, error) {
 	ws, err := s.svc.Store.CreateWorkspace(ctx, params)
 	if err != nil {
@@ -52,7 +55,7 @@ func (s *WorkspaceService) Create(ctx context.Context, params types.CreateWorksp
 	return ws, nil
 }
 
-// CreateForMember 创建工作区并把创建者设为 owner。
+// CreateForMember creates a workspace and sets the creator as owner.
 func (s *WorkspaceService) CreateForMember(ctx context.Context, memberID uuid.UUID, params types.CreateWorkspaceParams) (types.Workspace, error) {
 	ws, err := s.svc.Store.CreateWorkspaceForMember(ctx, memberID, params)
 	if err != nil {
@@ -61,15 +64,15 @@ func (s *WorkspaceService) CreateForMember(ctx context.Context, memberID uuid.UU
 	return ws, nil
 }
 
-// Get 根据 ID 获取工作区信息。
+// Get fetches workspace info by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - id: workspace ID
 //
-// 返回：
-//   - types.Workspace: 工作区信息
-//   - error: 可能的错误（工作区不存在）
+// Returns:
+//   - types.Workspace: workspace info
+//   - error: possible error (workspace does not exist)
 func (s *WorkspaceService) Get(ctx context.Context, id uuid.UUID) (types.Workspace, error) {
 	ws, err := s.svc.Store.GetWorkspace(ctx, id)
 	if err != nil {
@@ -78,14 +81,14 @@ func (s *WorkspaceService) Get(ctx context.Context, id uuid.UUID) (types.Workspa
 	return ws, nil
 }
 
-// List 列出所有工作区。
+// List lists all workspaces.
 //
-// 参数：
-//   - ctx: 请求上下文
+// Parameters:
+//   - ctx: request context
 //
-// 返回：
-//   - []types.Workspace: 工作区列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Workspace: workspace list
+//   - error: possible error (database query failure)
 func (s *WorkspaceService) List(ctx context.Context) ([]types.Workspace, error) {
 	wss, err := s.svc.Store.ListWorkspaces(ctx)
 	if err != nil {
@@ -94,7 +97,7 @@ func (s *WorkspaceService) List(ctx context.Context) ([]types.Workspace, error) 
 	return wss, nil
 }
 
-// ListForMember 列出成员所属的工作区。
+// ListForMember lists the workspaces a member belongs to.
 func (s *WorkspaceService) ListForMember(ctx context.Context, memberID uuid.UUID) ([]types.Workspace, error) {
 	wss, err := s.svc.Store.ListWorkspacesByMemberID(ctx, memberID)
 	if err != nil {
@@ -103,15 +106,15 @@ func (s *WorkspaceService) ListForMember(ctx context.Context, memberID uuid.UUID
 	return wss, nil
 }
 
-// Update 更新工作区信息。
+// Update updates workspace info.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新工作区的参数，包含 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for updating the workspace, including ID and fields to update
 //
-// 返回：
-//   - types.Workspace: 更新后的工作区信息
-//   - error: 可能的错误（工作区不存在、数据库更新失败）
+// Returns:
+//   - types.Workspace: updated workspace info
+//   - error: possible error (workspace does not exist, database update failure)
 func (s *WorkspaceService) Update(ctx context.Context, params types.UpdateWorkspaceParams) (types.Workspace, error) {
 	ws, err := s.svc.Store.UpdateWorkspace(ctx, params)
 	if err != nil {
@@ -120,40 +123,40 @@ func (s *WorkspaceService) Update(ctx context.Context, params types.UpdateWorksp
 	return ws, nil
 }
 
-// Delete 删除一个工作区。
+// Delete deletes a workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - id: workspace ID
 //
-// 返回：
-//   - error: 可能的错误（工作区不存在、数据库删除失败）
+// Returns:
+//   - error: possible error (workspace does not exist, database delete failure)
 func (s *WorkspaceService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.svc.Store.DeleteWorkspace(ctx, id)
 }
 
-// CreateMember 在工作区中创建一个成员。
+// CreateMember creates a member within a workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 创建成员的参数，包含名称和邮箱
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for creating the member, including name and email
 //
-// 返回：
-//   - types.Member: 创建的成员信息
-//   - error: 可能的错误（邮箱已存在、数据库写入失败）
+// Returns:
+//   - types.Member: the created member info
+//   - error: possible error (email already exists, database write failure)
 func (s *WorkspaceService) CreateMember(ctx context.Context, params types.CreateMemberParams) (types.Member, error) {
 	return s.svc.Store.CreateMember(ctx, params)
 }
 
-// ListMembers 列出工作区中的所有成员，包含角色信息。
+// ListMembers lists all members in a workspace, including role info.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - []types.ListMembersByWorkspaceRow: 成员列表（包含角色）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.ListMembersByWorkspaceRow: member list (including roles)
+//   - error: possible error (database query failure)
 func (s *WorkspaceService) ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]types.ListMembersByWorkspaceRow, error) {
 	members, err := s.svc.Store.ListMembersByWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -162,54 +165,54 @@ func (s *WorkspaceService) ListMembers(ctx context.Context, workspaceID uuid.UUI
 	return members, nil
 }
 
-// GetMember 根据 ID 获取成员信息。
+// GetMember fetches member info by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 成员 ID
+// Parameters:
+//   - ctx: request context
+//   - id: member ID
 //
-// 返回：
-//   - types.Member: 成员信息
-//   - error: 可能的错误（成员不存在）
+// Returns:
+//   - types.Member: member info
+//   - error: possible error (member does not exist)
 func (s *WorkspaceService) GetMember(ctx context.Context, id uuid.UUID) (types.Member, error) {
 	return s.svc.Store.GetMember(ctx, id)
 }
 
-// UpdateMemberRole 更新成员在工作区中的角色。
+// UpdateMemberRole updates a member's role within a workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新角色的参数，包含工作区 ID、成员 ID 和新角色
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for updating the role, including workspace ID, member ID, and the new role
 //
-// 返回：
-//   - types.WorkspaceMember: 更新后的成员-工作区关联记录
-//   - error: 可能的错误（数据库更新失败）
+// Returns:
+//   - types.WorkspaceMember: the updated member-workspace association record
+//   - error: possible error (database update failure)
 func (s *WorkspaceService) UpdateMemberRole(ctx context.Context, params types.UpdateMemberRoleParams) (types.WorkspaceMember, error) {
 	return s.svc.Store.UpdateMemberRole(ctx, params)
 }
 
-// DeleteMember 根据 ID 删除一个成员。
+// DeleteMember deletes a member by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 成员 ID
+// Parameters:
+//   - ctx: request context
+//   - id: member ID
 //
-// 返回：
-//   - error: 可能的错误（成员不存在、数据库删除失败）
+// Returns:
+//   - error: possible error (member does not exist, database delete failure)
 func (s *WorkspaceService) DeleteMember(ctx context.Context, id uuid.UUID) error {
 	return s.svc.Store.DeleteMember(ctx, id)
 }
 
-// GetMembership 根据工作区 ID 和成员 ID 获取工作区成员关系。
+// GetMembership fetches the workspace membership by workspace ID and member ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - memberID: 成员 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - memberID: member ID
 //
-// 返回：
-//   - types.WorkspaceMember: 工作区成员关系记录
-//   - error: 可能的错误（记录不存在）
+// Returns:
+//   - types.WorkspaceMember: the workspace membership record
+//   - error: possible error (record does not exist)
 func (s *WorkspaceService) GetMembership(ctx context.Context, workspaceID, memberID uuid.UUID) (types.WorkspaceMember, error) {
 	return s.svc.Store.GetWorkspaceMember(ctx, types.GetWorkspaceMemberParams{
 		WorkspaceID: workspaceID.String(),
@@ -217,16 +220,16 @@ func (s *WorkspaceService) GetMembership(ctx context.Context, workspaceID, membe
 	})
 }
 
-// GetWorkspaceMemberRole 获取成员在指定工作区中的角色。
+// GetWorkspaceMemberRole gets a member's role in the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - userID: 成员 ID
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - userID: member ID
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - string: 成员角色（owner/admin/member/viewer）
-//   - error: 可能的错误（成员不属于该工作区）
+// Returns:
+//   - string: member role (owner/admin/member/viewer)
+//   - error: possible error (member does not belong to this workspace)
 func (s *WorkspaceService) GetWorkspaceMemberRole(ctx context.Context, userID uuid.UUID, workspaceID uuid.UUID) (string, error) {
 	role, err := s.svc.Store.GetWorkspaceMemberRole(ctx, types.GetWorkspaceMemberRoleParams{
 		WorkspaceID: workspaceID.String(),
@@ -238,66 +241,68 @@ func (s *WorkspaceService) GetWorkspaceMemberRole(ctx context.Context, userID uu
 	return role, nil
 }
 
-// GetMemberByEmail 根据邮箱获取成员信息。
+// GetMemberByEmail fetches member info by email.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 成员邮箱
+// Parameters:
+//   - ctx: request context
+//   - email: member email
 //
-// 返回：
-//   - types.Member: 成员信息
-//   - error: 可能的错误（成员不存在）
+// Returns:
+//   - types.Member: member info
+//   - error: possible error (member does not exist)
 func (s *WorkspaceService) GetMemberByEmail(ctx context.Context, email string) (types.Member, error) {
 	return s.svc.Store.GetMemberByEmail(ctx, email)
 }
 
-// GetFirstWorkspaceForMember 获取成员所属的第一个工作区（用于 OAuth 登录时查找已有工作区）。
+// GetFirstWorkspaceForMember gets the first workspace a member belongs to
+// (used to find an existing workspace on OAuth login).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 ID
+// Parameters:
+//   - ctx: request context
+//   - memberID: member ID
 //
-// 返回：
-//   - types.WorkspaceMember: 工作区成员关系记录
-//   - error: 可能的错误（成员无工作区）
+// Returns:
+//   - types.WorkspaceMember: the workspace membership record
+//   - error: possible error (member has no workspace)
 func (s *WorkspaceService) GetFirstWorkspaceForMember(ctx context.Context, memberID uuid.UUID) (types.WorkspaceMember, error) {
 	return s.svc.Store.GetFirstWorkspaceForMember(ctx, memberID)
 }
 
-// SeedBuiltinTemplates 为工作区初始化内置工作流模板。
-// 内置模板包括标准的实现→自测→审查→部署等工作流。
+// SeedBuiltinTemplates initializes built-in workflow templates for a workspace.
+// Built-in templates include the standard implement → self-test → review → deploy workflows.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - svc: Service 实例
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - svc: Service instance
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - error: 可能的错误（数据库操作失败）
+// Returns:
+//   - error: possible error (database operation failure)
 func SeedBuiltinTemplates(ctx context.Context, svc *Service, workspaceID uuid.UUID) error {
 	return svc.Store.SeedBuiltinTemplates(ctx, workspaceID)
 }
 
-// FindOrCreateForOAuth 为 OAuth 登录查找或创建工作区和成员。
-// 如果成员已存在则直接返回，否则创建新工作区、成员并分配 owner 角色。
+// FindOrCreateForOAuth finds or creates a workspace and member for OAuth login.
+// If the member already exists, it is returned directly; otherwise a new workspace,
+// member, and owner role assignment are created.
 //
-// 步骤：
-//  1. 根据邮箱查找已有成员
-//  2. 成员已存在：直接返回
-//  3. 成员不存在：
-//     a. 创建新工作区（以用户名称命名）
-//     b. 初始化内置工作流模板
-//     c. 创建新成员
-//     d. 将成员添加到工作区并分配 owner 角色
+// Steps:
+//  1. Look up an existing member by email
+//  2. If the member exists: return directly
+//  3. If the member does not exist:
+//     a. Create a new workspace (named after the user)
+//     b. Initialize built-in workflow templates
+//     c. Create a new member
+//     d. Add the member to the workspace and assign the owner role
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 用户邮箱
-//   - name: 用户名称
+// Parameters:
+//   - ctx: request context
+//   - email: user email
+//   - name: user name
 //
-// 返回：
-//   - types.Member: 成员信息
-//   - error: 可能的错误（数据库操作失败）
+// Returns:
+//   - types.Member: member info
+//   - error: possible error (database operation failure)
 func (s *WorkspaceService) FindOrCreateForOAuth(ctx context.Context, email, name string) (types.Member, error) {
 	member, err := s.svc.Store.GetMemberByEmail(ctx, email)
 	if err == nil {

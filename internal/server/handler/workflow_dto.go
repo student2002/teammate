@@ -1,4 +1,4 @@
-// workflow_dto.go 定义 Workflow 相关的请求/响应结构体和数据转换函数。
+// workflow_dto.go defines Workflow-related request/response structs and data conversion functions.
 package handler
 
 import (
@@ -11,22 +11,22 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// NodeType 节点类型的别名（领域类型 string）。
+// NodeType is an alias for the node type (domain type string).
 type NodeType = string
 
-// AssigneeType 分配人类型的别名（领域类型 string）。
+// AssigneeType is an alias for the assignee type (domain type string).
 type AssigneeType = string
 
-// CreateTemplateNodeParams 创建模板节点参数的别名（领域类型）。
+// CreateTemplateNodeParams is an alias for the create template node parameters (domain type).
 type CreateTemplateNodeParams = types.CreateTemplateNodeParams
 
-// 节点类型常量。
+// node type constants.
 const (
 	AssigneeTypeSpecificAgent = types.AssigneeTypeSpecificAgent
 	AssigneeTypeHuman         = types.AssigneeTypeHuman
 )
 
-// templateNodeRequest 模板节点请求体。
+// templateNodeRequest is the template node request body.
 type templateNodeRequest struct {
 	Name            string          `json:"name"`
 	Description     string          `json:"description"`
@@ -42,7 +42,7 @@ type templateNodeRequest struct {
 	DependsOn       []uuid.UUID     `json:"depends_on"`
 }
 
-// createWorkflowTemplateRequest 创建工作流模板请求体。
+// createWorkflowTemplateRequest is the create workflow template request body.
 type createWorkflowTemplateRequest struct {
 	Name           string                `json:"name"`
 	Description    string                `json:"description"`
@@ -54,7 +54,7 @@ type createWorkflowTemplateRequest struct {
 	Nodes          []templateNodeRequest `json:"nodes"`
 }
 
-// updateWorkflowTemplateRequest 更新工作流模板请求体。
+// updateWorkflowTemplateRequest is the update workflow template request body.
 type updateWorkflowTemplateRequest struct {
 	Name           string                `json:"name"`
 	Description    string                `json:"description"`
@@ -65,7 +65,7 @@ type updateWorkflowTemplateRequest struct {
 	Nodes          []templateNodeRequest `json:"nodes"`
 }
 
-// buildCreateTemplateNodeParams 根据 handler 层输入构造 types.CreateTemplateNodeParams。
+// buildCreateTemplateNodeParams builds types.CreateTemplateNodeParams from the handler-layer input.
 func buildCreateTemplateNodeParams(
 	name string,
 	description string,
@@ -110,7 +110,7 @@ func buildCreateTemplateNodeParams(
 	}
 }
 
-// buildCreateWorkflowTemplateParams 根据 handler 层输入构造 types.CreateWorkflowTemplateParams。
+// buildCreateWorkflowTemplateParams builds types.CreateWorkflowTemplateParams from the handler-layer input.
 func buildCreateWorkflowTemplateParams(
 	workspaceID uuid.UUID,
 	name string,
@@ -138,7 +138,7 @@ func buildCreateWorkflowTemplateParams(
 	}
 }
 
-// buildUpdateWorkflowTemplateParams 根据 handler 层输入构造 types.UpdateWorkflowTemplateParams。
+// buildUpdateWorkflowTemplateParams builds types.UpdateWorkflowTemplateParams from the handler-layer input.
 func buildUpdateWorkflowTemplateParams(
 	id uuid.UUID,
 	name string,
@@ -171,7 +171,7 @@ func triggerEnabledValue(value *bool) bool {
 	return *value
 }
 
-// templateResponse 工作流模板响应 DTO。
+// templateResponse is the workflow template response DTO.
 type templateResponse struct {
 	ID              string          `json:"id"`
 	WorkspaceID     string          `json:"workspace_id"`
@@ -187,13 +187,13 @@ type templateResponse struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
-// templateWithNodes 工作流模板及其节点的响应结构体。
+// templateWithNodes is the response struct for a workflow template and its nodes.
 type templateWithNodes struct {
 	templateResponse
 	Nodes []types.WorkflowTemplateNode `json:"nodes"`
 }
 
-// toTemplateResponse 将 domain 工作流模板记录转换为 API 响应。
+// toTemplateResponse converts a domain workflow template record to an API response.
 func toTemplateResponse(t types.WorkflowTemplate) templateResponse {
 	return templateResponse{
 		ID:              t.ID,
@@ -211,8 +211,8 @@ func toTemplateResponse(t types.WorkflowTemplate) templateResponse {
 	}
 }
 
-// normalizeTemplateSortOrder 在写入前兜底修正节点 sort_order：缺失(<=0)或重复时
-// 自动分配严格递增的唯一序号，避免命中 UNIQUE(template_id, sort_order)（偏差 #5/#8）。
+// normalizeTemplateSortOrder fallback-fixes node sort_order before writing: when missing (<=0) or duplicate,
+// it auto-assigns strictly increasing unique sequence numbers to avoid hitting UNIQUE(template_id, sort_order) (deviation #5/#8).
 func normalizeTemplateSortOrder(nodes []templateNodeRequest) {
 	next := int32(1)
 	for i := range nodes {

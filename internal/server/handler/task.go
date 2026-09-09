@@ -1,6 +1,6 @@
-// task.go 提供任务（Task）的 CRUD 管理、节点列表查询及 Git 分支更新等 HTTP API 端点。
+// task.go provides HTTP API endpoints for task CRUD management, node list queries, and Git branch updates.
 //
-// 任务由工作流模板定义，包含有序节点。创建任务时自动生成节点。
+// Tasks are defined by workflow templates and contain ordered nodes. Creating a task automatically generates the nodes.
 
 package handler
 
@@ -21,17 +21,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TaskHandler 处理任务管理的 HTTP 请求，包括任务的 CRUD、节点查询及 Git 分支更新。
+// TaskHandler handles HTTP requests for task management, including task CRUD, node queries, and Git branch updates.
 type TaskHandler struct {
 	Svc *service.Service
 }
 
-// NewTaskHandler 创建 TaskHandler 实例。
+// NewTaskHandler creates a TaskHandler instance.
 func NewTaskHandler(svc *service.Service) *TaskHandler {
 	return &TaskHandler{Svc: svc}
 }
 
-// Routes 返回任务的路由表。
+// Routes returns the route table for tasks.
 func (h *TaskHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -46,36 +46,36 @@ func (h *TaskHandler) Routes() chi.Router {
 	return r
 }
 
-// CreateTask 处理 POST /projects/{projectId}/tasks 端点，创建新任务并根据工作流模板生成有序节点。
+// CreateTask handles the POST /projects/{projectId}/tasks endpoint, creating a new task and generating ordered nodes based on the workflow template.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - title: string，任务标题（必填）
-//   - description: string，任务描述
-//   - constraints: string，约束条件
-//   - type: string，任务类型
-//   - priority: string，优先级
-//   - due_date: string，截止日期（RFC3339 或 YYYY-MM-DD 格式）
-//   - labels: string[]，标签列表
-//   - workflow_template_id: UUID，工作流模板 ID（必填）
+// Request body:
+//   - title: string, task title (required)
+//   - description: string, task description
+//   - constraints: string, constraints
+//   - type: string, task type
+//   - priority: string, priority
+//   - due_date: string, due date (RFC3339 or YYYY-MM-DD format)
+//   - labels: string[], label list
+//   - workflow_template_id: UUID, workflow template ID (required)
 //
-// 响应：
-//   - 201: 成功创建任务，返回任务和节点信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 项目不存在
+// Response:
+//   - 201: task created successfully, returns task and node info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: project does not exist
 //
-// 处理流程：
-//  1. 验证认证状态和写入权限
-//  2. 验证项目和工作流模板属于当前工作区
-//  3. 调用 service 创建任务并生成节点
-//  4. 返回任务和节点信息
+// Processing flow:
+//  1. verify authentication status and write permission
+//  2. verify the project and workflow template belong to the current workspace
+//  3. call service to create the task and generate nodes
+//  4. return task and node info
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -86,21 +86,21 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析项目 ID
+	// parse project ID
 	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
 	if err != nil {
 		response.BadRequest(w, "invalid project id")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req createTaskRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证工作流模板 ID 必填
+	// verify workflow template ID is required
 	if req.WorkflowTemplateID == uuid.Nil {
 		response.BadRequest(w, "workflow_template_id is required")
 		return
@@ -108,47 +108,47 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	taskSvc := service.NewTaskService(h.Svc)
 
-	// 验证项目属于当前工作区
+	// verify the project belongs to the current workspace
 	project := checkProjectWorkspace(h.Svc, w, r, projectID)
 	if project == nil {
 		return
 	}
 
-	// 验证工作流模板属于当前工作区并获取模板名称
+	// verify the workflow template belongs to the current workspace and get the template name
 	template := checkWorkflowTemplateWorkspace(h.Svc, w, r, req.WorkflowTemplateID)
 	if template == nil {
 		return
 	}
 
-	// 设置默认优先级
+	// set default priority
 	priority := req.Priority
 	if priority == "" {
 		priority = TaskPriorityMedium
 	}
 
-	// 设置默认任务类型
+	// set default task type
 	taskType := req.Type
 	if taskType == "" {
 		taskType = TaskTypeTask
 	}
 
-	// 从认证信息派生作者身份（非请求体），防止伪造
+	// derive author identity from auth info (not the request body) to prevent forgery
 	authorType := claims.UserType
 	if authorType == "" {
 		authorType = "human"
 	}
 	authorID := claims.UserID
 
-	// 解析截止日期
+	// parse the due date
 	dueDate := service.ParseDueDate(req.DueDate)
 
-	// 设置默认标签
+	// set default labels
 	labels := req.Labels
 	if labels == nil {
 		labels = []string{}
 	}
 
-	// 调用 service 创建任务
+	// call service to create the task
 	result, err := taskSvc.Create(r.Context(), projectID, buildCreateTaskParams(
 		projectID, req.Title, req.Description, req.Constraints, taskType, priority,
 		TaskStatusActive, authorType, authorID, dueDate, labels, template.Name,
@@ -158,7 +158,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 返回任务和节点信息
+	// return task and node info
 	w.WriteHeader(http.StatusCreated)
 	response.JSON(w, r, map[string]interface{}{
 		"task":  result.Task,
@@ -166,41 +166,41 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListTasks 处理 GET /projects/{projectId}/tasks 端点，列出项目的任务，支持按状态过滤、分页和搜索。
+// ListTasks handles the GET /projects/{projectId}/tasks endpoint, listing the project's tasks, supports filtering by status, pagination, and search.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 查询参数：
-//   - status: string，按状态过滤（active/completed/cancelled/all）
-//   - q: string，搜索关键词（匹配标题或描述）
-//   - limit: int，每页数量（1-100，默认 50）
-//   - offset: int，偏移量（默认 0）
+// Query parameters:
+//   - status: string, filter by status (active/completed/cancelled/all)
+//   - q: string, search keyword (matches title or description)
+//   - limit: int, page size (1-100, default 50)
+//   - offset: int, offset (default 0)
 //
-// 行为：
-//   - 当不传 limit/offset/q 参数时，保持向后兼容（ListTasks/ListAllTasks 已排除历史任务）
-//   - 当传入 limit/offset/q 任一参数时，使用分页查询（不过滤历史任务），返回 PaginatedTaskResult
+// Behavior:
+//   - when no limit/offset/q parameters are passed, maintains backward compatibility (ListTasks/ListAllTasks already excludes historical tasks)
+//   - when any of limit/offset/q is passed, uses a paginated query (does not filter historical tasks), returns PaginatedTaskResult
 //
-// 响应：
-//   - 200: 成功返回任务列表（数组或分页结果）
-//   - 400: 项目 ID 无效
-//   - 401: 未认证
-//   - 404: 项目不存在
+// Response:
+//   - 200: successfully returns the task list (array or paginated result)
+//   - 400: invalid project ID
+//   - 401: not authenticated
+//   - 404: project does not exist
 func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
-	// 解析项目 ID
+	// parse project ID
 	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
 	if err != nil {
 		response.BadRequest(w, "invalid project id")
 		return
 	}
 
-	// 验证项目属于当前工作区
+	// verify the project belongs to the current workspace
 	if checkProjectWorkspace(h.Svc, w, r, projectID) == nil {
 		return
 	}
 
-	// 获取查询参数
+	// get query parameters
 	statusFilter := r.URL.Query().Get("status")
 	searchQuery := r.URL.Query().Get("q")
 	limit := int32(50)
@@ -215,11 +215,11 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 
 	taskSvc := service.NewTaskService(h.Svc)
 
-	// 如果请求包含分页参数或搜索参数，使用分页查询（不过滤历史任务）
+	// if the request includes pagination or search parameters, use the paginated query (does not filter historical tasks)
 	hasPagination := r.URL.Query().Get("limit") != "" || r.URL.Query().Get("offset") != "" || searchQuery != ""
 
 	if hasPagination {
-		// 分页模式：空字符串表示不过滤状态
+		// paginated mode: an empty string means do not filter status
 		var status string
 		if statusFilter != "" && statusFilter != "all" {
 			status = statusFilter
@@ -233,7 +233,7 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 原有逻辑：无分页参数时保持向后兼容（ListTasks/ListAllTasks 已排除历史任务）
+	// original logic: maintains backward compatibility when no pagination parameters are present (ListTasks/ListAllTasks already excludes historical tasks)
 	if statusFilter == "all" {
 		result, err := taskSvc.ListAllWithNodes(r.Context(), projectID)
 		if err != nil {
@@ -244,14 +244,14 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 构建查询参数
+	// build query parameters
 	status := TaskStatusActive
 	if statusFilter != "" {
 		status = TaskStatus(statusFilter)
 	}
 	params := buildListTasksParams(projectID, status)
 
-	// 调用 service 查询任务
+	// call service to query tasks
 	result, err := taskSvc.ListWithNodes(r.Context(), params)
 	if err != nil {
 		response.InternalServerError(w, err)
@@ -261,19 +261,19 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, result)
 }
 
-// GetTask 处理 GET /projects/{projectId}/tasks/{id} 端点，查询指定任务的详细信息。
+// GetTask handles the GET /projects/{projectId}/tasks/{id} endpoint, querying the detailed information of the specified task.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回任务详情
-//   - 400: 任务 ID 无效
-//   - 401: 未认证
-//   - 404: 任务不存在
+// Response:
+//   - 200: successfully returns the task details
+//   - 400: invalid task ID
+//   - 401: not authenticated
+//   - 404: task does not exist
 func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "id")
 	var taskID int32
 	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
@@ -281,44 +281,44 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证任务属于当前工作区
+	// verify the task belongs to the current workspace
 	task := checkTaskWorkspace(h.Svc, w, r, taskID)
 	if task == nil {
 		return
 	}
 
-	// 验证任务属于 URL 中的项目
+	// verify the task belongs to the project in the URL
 	if err := checkTaskBelongsToProject(h.Svc, w, r, task); err != nil {
 		return
 	}
 
-	// 返回任务详情
+	// return task details
 	response.JSON(w, r, taskToResponse(*task))
 }
 
-// UpdateTask 处理 PUT /projects/{projectId}/tasks/{id} 端点，更新任务信息，取消任务需要 admin/owner 权限。
+// UpdateTask handles the PUT /projects/{projectId}/tasks/{id} endpoint, updating task info; canceling a task requires admin/owner permission.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - title: string，任务标题（最多 200 字符）
-//   - description: string，任务描述（最多 50000 字符）
-//   - priority: string，优先级
-//   - labels: string[]，标签列表（最多 10 个）
-//   - due_date: string，截止日期
-//   - constraints: string，约束条件（最多 2000 字符）
-//   - status: string，任务状态
+// Request body:
+//   - title: string, task title (at most 200 characters)
+//   - description: string, task description (at most 50000 characters)
+//   - priority: string, priority
+//   - labels: string[], label list (at most 10)
+//   - due_date: string, due date
+//   - constraints: string, constraints (at most 2000 characters)
+//   - status: string, task status
 //
-// 响应：
-//   - 200: 成功返回更新后的任务信息
-//   - 400: 参数错误或任务状态不允许编辑
-//   - 401: 未认证
-//   - 403: 无权限（取消任务需要 admin/owner）
-//   - 404: 任务不存在
+// Response:
+//   - 200: successfully returns the updated task info
+//   - 400: parameter error or task status does not allow editing
+//   - 401: not authenticated
+//   - 403: no permission (canceling a task requires admin/owner)
+//   - 404: task does not exist
 func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -329,7 +329,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "id")
 	var taskID int32
 	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
@@ -337,14 +337,14 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req updateTaskRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证字段长度
+	// validate field lengths
 	if len(req.Title) > 200 {
 		response.BadRequest(w, "title must be at most 200 characters")
 		return
@@ -364,24 +364,24 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 
 	taskSvc := service.NewTaskService(h.Svc)
 
-	// 验证任务属于当前工作区并检查状态
+	// verify the task belongs to the current workspace and check status
 	existingTask := checkTaskWorkspace(h.Svc, w, r, taskID)
 	if existingTask == nil {
 		return
 	}
 
-	// 验证任务属于 URL 中的项目
+	// verify the task belongs to the project in the URL
 	if err := checkTaskBelongsToProject(h.Svc, w, r, existingTask); err != nil {
 		return
 	}
 
-	// 已完成或已取消的任务不允许编辑
+	// completed or cancelled tasks cannot be edited
 	if existingTask.Status == TaskStatusCompleted || existingTask.Status == TaskStatusCancelled {
 		response.BadRequest(w, fmt.Sprintf("cannot edit task in '%s' status", existingTask.Status))
 		return
 	}
 
-	// 对于未提供的字段，使用现有值
+	// for fields not provided, use the existing values
 	title := req.Title
 	if title == "" {
 		title = existingTask.Title
@@ -407,7 +407,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		status = existingTask.Status
 	}
 
-	// 解析截止日期
+	// parse the due date
 	var dueDate sql.NullTime
 	if req.DueDate != nil && *req.DueDate != "" {
 		dueDate = service.ParseDueDate(req.DueDate)
@@ -415,7 +415,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		dueDate = sql.NullTime{Time: *existingTask.DueDate, Valid: true}
 	}
 
-	// 如果任务被取消，需要验证 admin/owner 权限
+	// if the task is being canceled, admin/owner permission must be verified
 	if status == TaskStatusCancelled {
 		userInfo, ok := svcmw.GetAuthFromContext(r.Context())
 		if !ok || (userInfo.Role != "owner" && userInfo.Role != "admin") {
@@ -424,7 +424,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 调用 service 更新任务
+	// call service to update the task
 	task, err := taskSvc.Update(r.Context(), buildUpdateTaskParams(
 		taskID, title, description, priority, labels, dueDate, constraints, status,
 	))
@@ -437,9 +437,9 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 如果任务被取消，取消所有进行中的节点并通知 Agent
+	// if the task is canceled, cancel all in-progress nodes and notify the Agents
 	if status == TaskStatusCancelled {
-		// 先获取节点列表用于发送中断事件
+		// first fetch the node list to send interrupt events
 		nodes, _ := taskSvc.ListTaskNodes(r.Context(), taskID)
 
 		if err := taskSvc.CancelTaskNodes(r.Context(), taskID); err != nil {
@@ -447,7 +447,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 向正在执行的 Agent 发送 task:interrupt 控制事件
+		// send a task:interrupt control event to the Agents currently executing
 		for _, node := range nodes {
 			if node.Status == types.TaskNodeStatusInProgress && node.AssigneeID != nil {
 				assigneeID, _ := uuid.Parse(*node.AssigneeID)
@@ -459,24 +459,24 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 返回更新后的任务
+	// return the updated task
 	response.JSON(w, r, taskToResponse(task))
 }
 
-// DeleteTask 处理 DELETE /projects/{projectId}/tasks/{id} 端点，删除指定任务及其关联的节点。
+// DeleteTask handles the DELETE /projects/{projectId}/tasks/{id} endpoint, deleting the specified task and its associated nodes.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功删除
-//   - 400: 任务 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 任务不存在
+// Response:
+//   - 204: deleted successfully
+//   - 400: invalid task ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: task does not exist
 func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -487,7 +487,7 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "id")
 	var taskID int32
 	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
@@ -495,18 +495,18 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证任务属于当前工作区
+	// verify the task belongs to the current workspace
 	task := checkTaskWorkspace(h.Svc, w, r, taskID)
 	if task == nil {
 		return
 	}
 
-	// 验证任务属于 URL 中的项目
+	// verify the task belongs to the project in the URL
 	if err := checkTaskBelongsToProject(h.Svc, w, r, task); err != nil {
 		return
 	}
 
-	// 调用 service 删除任务
+	// call service to delete the task
 	taskSvc := service.NewTaskService(h.Svc)
 	if err := taskSvc.Delete(r.Context(), taskID); err != nil {
 		response.InternalServerError(w, err)
@@ -516,22 +516,22 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// NewUpdateGitBranchHandler 处理 PUT /tasks/{taskId}/git-branch 端点，Agent 初始化 Git 工作目录后更新任务的 Git 分支信息。
+// NewUpdateGitBranchHandler handles the PUT /tasks/{taskId}/git-branch endpoint; after an Agent initializes the Git working directory it updates the task's Git branch info.
 func NewUpdateGitBranchHandler(svc *service.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 获取认证信息
+		// get auth info
 		claims, ok := svcmw.GetAuthFromContext(r.Context())
 		if !ok {
 			response.Unauthorized(w, "authentication required")
 			return
 		}
-		// 仅 Agent 可更新 Git 分支
+		// only Agents can update the Git branch
 		if claims.UserType != "agent" {
 			response.Forbidden(w, "only agents can update git branch")
 			return
 		}
 
-		// 解析任务 ID
+		// parse task ID
 		taskIDStr := chi.URLParam(r, "taskId")
 		taskID, err := strconv.Atoi(taskIDStr)
 		if err != nil {
@@ -539,15 +539,15 @@ func NewUpdateGitBranchHandler(svc *service.Service) http.HandlerFunc {
 			return
 		}
 
-		// 解析请求体
+		// parse request body
 		var req struct {
-			GitBranch string `json:"git_branch"` // Git 分支名称
+			GitBranch string `json:"git_branch"` // Git branch name
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			response.BadRequest(w, "invalid request body")
 			return
 		}
-		// 验证分支名称
+		// validate the branch name
 		if req.GitBranch == "" {
 			response.BadRequest(w, "git_branch is required")
 			return
@@ -557,14 +557,14 @@ func NewUpdateGitBranchHandler(svc *service.Service) http.HandlerFunc {
 			return
 		}
 
-		// 调用 service 更新 Git 分支
+		// call service to update the Git branch
 		taskSvc := service.NewTaskService(svc)
 		if err := taskSvc.UpdateTaskGitBranch(r.Context(), int32(taskID), req.GitBranch); err != nil {
 			response.InternalServerError(w, err)
 			return
 		}
 
-		// 返回成功
+		// return success
 		response.JSON(w, r, map[string]string{"status": "ok"})
 	}
 }

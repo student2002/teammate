@@ -77,7 +77,7 @@ type SearchTasksByWorkspaceParams struct {
 	Title       string    `db:"title" json:"title"`
 }
 
-// 搜索查询
+// Search queries
 func (q *Queries) SearchTasksByWorkspace(ctx context.Context, arg SearchTasksByWorkspaceParams) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, searchTasksByWorkspace, arg.WorkspaceID, arg.Title)
 	if err != nil {

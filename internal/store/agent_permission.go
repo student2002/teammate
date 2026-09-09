@@ -1,10 +1,10 @@
-// agent_permission.go 提供 AI 代理权限管理的数据访问操作。
+// agent_permission.go provides data access operations for AI agent permission management.
 //
-// 管理 Agent 的细粒度权限控制，包括权限授予、撤销和查询。
-// 权限系统基于 agent_permissions 表，支持按资源类型和资源 ID 进行细粒度授权。
+// Manages fine-grained permission control for Agents, including permission granting, revocation, and querying.
+// The permission system is based on the agent_permissions table and supports fine-grained authorization by resource type and resource ID.
 //
-// 默认权限（task:claim, task:execute, task:comment, memory:read）在 Agent 创建时自动授予。
-// 需手动授权的权限（task:approve, git:push 等）需管理员显式授予。
+// Default permissions (task:claim, task:execute, task:comment, memory:read) are automatically granted when an Agent is created.
+// Permissions that require manual authorization (task:approve, git:push, etc.) must be explicitly granted by an administrator.
 package store
 
 import (
@@ -17,29 +17,29 @@ import (
 	types "github.com/teammate/server/internal/types"
 )
 
-// DefaultAgentPermissions 是新创建 Agent 默认授予的权限集合，引用自 types 包。
+// DefaultAgentPermissions is the set of permissions granted by default to newly created Agents, referenced from the types package.
 //
-// 包含：task:claim, task:execute, task:comment, memory:read
+// Includes: task:claim, task:execute, task:comment, memory:read
 var DefaultAgentPermissions = types.DefaultAgentPermissions
 
-// DeniedByDefaultAgentPermissions 是默认不授予的权限集合，需手动授权。
+// DeniedByDefaultAgentPermissions is the set of permissions not granted by default; they require manual authorization.
 //
-// 包含：task:approve, task:reject, memory:create, git:push, git:force-push, resource:delete, config:modify
+// Includes: task:approve, task:reject, memory:create, git:push, git:force-push, resource:delete, config:modify
 var DeniedByDefaultAgentPermissions = types.DeniedByDefaultAgentPermissions
 
-// GrantAgentPermission 为 Agent 授予指定权限（插入 agent_permissions 记录）。
+// GrantAgentPermission grants a specified permission to an Agent (inserts an agent_permissions record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
-//   - permission: 权限字符串（如 "task:claim"）
-//   - resourceType: 资源类型（如 "project"、"*" 表示全部）
-//   - resourceID: 资源 ID（可选，为 nil 时表示全局权限）
-//   - grantedBy: 授权者 ID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
+//   - permission: the permission string (e.g. "task:claim")
+//   - resourceType: the resource type (e.g. "project", or "*" for all)
+//   - resourceID: the resource ID (optional; when nil, indicates a global permission)
+//   - grantedBy: the authorizer's ID
 //
-// 返回：
-//   - types.AgentPermission: 创建的权限记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.AgentPermission: the created permission record
+//   - error: error returned when creation fails
 func (s *Store) GrantAgentPermission(ctx context.Context, agentID uuid.UUID, permission string, resourceType string, resourceID *uuid.UUID, grantedBy uuid.UUID) (types.AgentPermission, error) {
 	var nullResourceID uuid.NullUUID
 	if resourceID != nil {
@@ -58,11 +58,11 @@ func (s *Store) GrantAgentPermission(ctx context.Context, agentID uuid.UUID, per
 	return ToDomainAgentPermission(perm)
 }
 
-// GetAgentPermission 根据 ID 获取一条权限记录。
+// GetAgentPermission retrieves a single permission record by ID.
 //
-// 返回：
-//   - types.AgentPermission: 权限记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.AgentPermission: the permission record
+//   - error: error returned when the query fails
 func (s *Store) GetAgentPermission(ctx context.Context, id uuid.UUID) (types.AgentPermission, error) {
 	perm, err := s.q.GetAgentPermission(ctx, id)
 	if err != nil {
@@ -71,30 +71,30 @@ func (s *Store) GetAgentPermission(ctx context.Context, id uuid.UUID) (types.Age
 	return ToDomainAgentPermission(perm)
 }
 
-// RevokeAgentPermission 撤销 Agent 的指定权限（删除 agent_permissions 记录）。
+// RevokeAgentPermission revokes the specified permission from an Agent (deletes an agent_permissions record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 权限记录的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the UUID of the permission record
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) RevokeAgentPermission(ctx context.Context, id uuid.UUID) error {
 	return s.q.DeleteAgentPermission(ctx, id)
 }
 
-// HasAgentPermission 检查 Agent 是否对指定资源拥有特定权限。
+// HasAgentPermission checks whether an Agent has a specific permission on the specified resource.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
-//   - permission: 权限字符串
-//   - resourceType: 资源类型
-//   - resourceID: 资源 ID（可选）
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
+//   - permission: the permission string
+//   - resourceType: the resource type
+//   - resourceID: the resource ID (optional)
 //
-// 返回：
-//   - bool: 是否拥有该权限
-//   - error: 查询失败时返回错误
+// Returns:
+//   - bool: whether the Agent has the permission
+//   - error: error returned when the query fails
 func (s *Store) HasAgentPermission(ctx context.Context, agentID uuid.UUID, permission string, resourceType string, resourceID *uuid.UUID) (bool, error) {
 	var nullResourceID uuid.NullUUID
 	if resourceID != nil {
@@ -108,16 +108,16 @@ func (s *Store) HasAgentPermission(ctx context.Context, agentID uuid.UUID, permi
 	})
 }
 
-// HasAgentPermissionAny 检查 Agent 是否对任意资源拥有特定权限（不限定 resource_id）。
+// HasAgentPermissionAny checks whether an Agent has a specific permission on any resource (without restricting resource_id).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
-//   - permission: 权限字符串
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
+//   - permission: the permission string
 //
-// 返回：
-//   - bool: 是否拥有该权限
-//   - error: 查询失败时返回错误
+// Returns:
+//   - bool: whether the Agent has the permission
+//   - error: error returned when the query fails
 func (s *Store) HasAgentPermissionAny(ctx context.Context, agentID uuid.UUID, permission string) (bool, error) {
 	return s.q.HasAgentPermissionAny(ctx, db.HasAgentPermissionAnyParams{
 		AgentID:    agentID,
@@ -125,15 +125,15 @@ func (s *Store) HasAgentPermissionAny(ctx context.Context, agentID uuid.UUID, pe
 	})
 }
 
-// ListAgentPermissions 查询指定 Agent 的所有权限列表。
+// ListAgentPermissions queries all permissions of the specified Agent.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - []db.AgentPermission: 权限列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.AgentPermission: the permission list
+//   - error: error returned when the query fails
 func (s *Store) ListAgentPermissions(ctx context.Context, agentID uuid.UUID) ([]types.AgentPermission, error) {
 	perms, err := s.q.ListAgentPermissions(ctx, agentID)
 	if err != nil {
@@ -142,18 +142,18 @@ func (s *Store) ListAgentPermissions(ctx context.Context, agentID uuid.UUID) ([]
 	return ToDomainAgentPermissionSlice(perms)
 }
 
-// GrantDefaultPermissions 为新创建的 Agent 批量授予默认权限集合。
+// GrantDefaultPermissions batch-grants the default permission set to a newly created Agent.
 //
-// 遍历 DefaultAgentPermissions 列表，为每个权限创建 agent_permissions 记录。
-// 如果权限已存在（唯一约束冲突），自动跳过继续处理下一个。
+// Iterates through the DefaultAgentPermissions list and creates an agent_permissions record for each permission.
+// If a permission already exists (unique constraint conflict), it is automatically skipped and the next one is processed.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
-//   - grantedBy: 授权者 ID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
+//   - grantedBy: the authorizer's ID
 //
-// 返回：
-//   - error: 批量授权失败时返回错误
+// Returns:
+//   - error: error returned when batch granting fails
 func (s *Store) GrantDefaultPermissions(ctx context.Context, agentID uuid.UUID, grantedBy uuid.UUID) error {
 	for _, perm := range DefaultAgentPermissions {
 		_, err := s.q.CreateAgentPermission(ctx, db.CreateAgentPermissionParams{
@@ -164,7 +164,7 @@ func (s *Store) GrantDefaultPermissions(ctx context.Context, agentID uuid.UUID, 
 			GrantedBy:    uuid.NullUUID{UUID: grantedBy, Valid: true},
 		})
 		if err != nil {
-			// 忽略唯一约束冲突（权限已存在）
+			// Ignore unique constraint conflicts (permission already exists)
 			if fmt.Sprintf("%v", err) != "" {
 				continue
 			}
@@ -173,14 +173,14 @@ func (s *Store) GrantDefaultPermissions(ctx context.Context, agentID uuid.UUID, 
 	return nil
 }
 
-// DeleteAgentPermissions 删除指定 Agent 的所有权限记录。
+// DeleteAgentPermissions deletes all permission records of the specified Agent.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when deletion fails
 func (s *Store) DeleteAgentPermissions(ctx context.Context, agentID uuid.UUID) error {
 	return s.q.DeleteAgentPermissionsByAgent(ctx, agentID)
 }

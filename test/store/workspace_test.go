@@ -1,4 +1,4 @@
-// workspace_test.go 覆盖工作区数据访问的测试。
+// workspace_test.go tests for workspace data access.
 package store_test
 
 import (
@@ -10,14 +10,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestSeedBuiltinTemplates 验证创建的工作区自动包含 5 个内置模板，且每个模板都有节点。
+// TestSeedBuiltinTemplates verifies that a created workspace automatically includes 5 built-in templates, each with nodes.
 func TestSeedBuiltinTemplates(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 
-	// 验证已创建 5 个内置模板
+	// Verify 5 built-in templates have been created
 	templates, err := s.ListWorkflowTemplates(ctx, uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("ListWorkflowTemplates: %v", err)
@@ -26,7 +26,7 @@ func TestSeedBuiltinTemplates(t *testing.T) {
 		t.Fatalf("expected 5 built-in templates, got %d", len(templates))
 	}
 
-	// 验证每个模板都有节点
+	// Verify each template has nodes
 	for _, tpl := range templates {
 		nodes, err := s.ListTemplateNodes(ctx, uuid.MustParse(tpl.ID))
 		if err != nil {
@@ -38,7 +38,7 @@ func TestSeedBuiltinTemplates(t *testing.T) {
 	}
 }
 
-// TestGetWorkspaceOwner 验证获取工作区所有者的功能。
+// TestGetWorkspaceOwner verifies fetching workspace owner functionality.
 func TestGetWorkspaceOwner(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func TestGetWorkspaceOwner(t *testing.T) {
 	ws := createTestWorkspace(t, s)
 	member := createTestMember(t, s, ws.ID)
 
-	// 将该成员设置为所有者
+	// Set this member as owner
 	_, err := s.UpdateMemberRole(ctx, types.UpdateMemberRoleParams{
 		WorkspaceID: ws.ID,
 		MemberID:    member.ID,
@@ -65,7 +65,7 @@ func TestGetWorkspaceOwner(t *testing.T) {
 	}
 }
 
-// TestGetWorkspaceOwner_NoOwner 验证工作区没有所有者时返回错误。
+// TestGetWorkspaceOwner_NoOwner verifies that an error is returned when a workspace has no owner.
 func TestGetWorkspaceOwner_NoOwner(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -78,7 +78,7 @@ func TestGetWorkspaceOwner_NoOwner(t *testing.T) {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
 
-	// 创建一个非所有者的成员
+	// Create a non-owner member
 	nonOwner, err := s.CreateMember(ctx, types.CreateMemberParams{
 		Name:  "member",
 		Email: "member-" + uuid.New().String()[:8] + "@test.com",
@@ -87,7 +87,7 @@ func TestGetWorkspaceOwner_NoOwner(t *testing.T) {
 		t.Fatalf("CreateMember: %v", err)
 	}
 
-	// 将成员添加到工作区，角色为 member（非 owner）
+	// Add member to workspace with role 'member' (not owner)
 	_, err = s.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
 		WorkspaceID: ws.ID,
 		MemberID:    nonOwner.ID,

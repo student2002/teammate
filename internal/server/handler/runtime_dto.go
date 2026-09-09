@@ -1,4 +1,4 @@
-// runtime_dto.go 为 runtime.go 提供 domain 类型别名和参数构建器。
+// runtime_dto.go provides domain type aliases and parameter builders for runtime.go.
 package handler
 
 import (
@@ -7,32 +7,32 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- domain 类型别名 ----
+// ---- domain type aliases ----
 
 type RuntimeProvider = string
 type RuntimeStatus = string
 
-// ---- 常量 ----
+// ---- constants ----
 
 const RuntimeStatusOnline = types.RuntimeStatusOnline
 
-// ---- 请求结构体 ----
+// ---- request structs ----
 
-// registerRuntimeRequest 注册运行时请求体。
+// registerRuntimeRequest register runtime request body.
 type registerRuntimeRequest struct {
 	AgentID          uuid.UUID        `json:"agent_id"`             // Agent UUID
-	DaemonID         string           `json:"daemon_id"`            // 守护进程 ID
-	Provider         RuntimeProvider  `json:"provider"`             // Agent 提供方
-	Version          string           `json:"version"`              // 提供方版本
-	Status           RuntimeStatus    `json:"status"`               // 运行时状态
-	SessionTokenHash string           `json:"session_token_hash"`   // 会话 Token 哈希
-	SessionExpiresAt string           `json:"session_expires_at"`   // 会话过期时间
-	PublicKey        string           `json:"public_key"`           // 公钥
+	DaemonID         string           `json:"daemon_id"`            // daemon ID
+	Provider         RuntimeProvider  `json:"provider"`             // Agent provider
+	Version          string           `json:"version"`              // provider version
+	Status           RuntimeStatus    `json:"status"`               // runtime status
+	SessionTokenHash string           `json:"session_token_hash"`   // session token hash
+	SessionExpiresAt string           `json:"session_expires_at"`   // session expiration time
+	PublicKey        string           `json:"public_key"`           // public key
 }
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateRuntimeParams 从请求字段构建 types.CreateRuntimeParams。
+// buildCreateRuntimeParams builds types.CreateRuntimeParams from request fields.
 func buildCreateRuntimeParams(
 	agentID uuid.UUID,
 	daemonID string,

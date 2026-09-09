@@ -1,10 +1,10 @@
-// rsa.go 提供 RSA-OAEP 非对称加密功能，用于加密 AES 对称密钥以实现安全的密钥分发。
-// 非对称加密流程：数据 → SHA-256 哈希 → RSA-OAEP 加密 → 密文
-// 公钥解析支持 PKIX 和 PKCS1 两种 PEM 格式，优先尝试 PKIX。
+// rsa.go provides RSA-OAEP asymmetric encryption, used to encrypt the AES symmetric key for secure key distribution.
+// Asymmetric encryption flow: data → SHA-256 hash → RSA-OAEP encryption → ciphertext
+// Public-key parsing supports both PKIX and PKCS1 PEM formats, trying PKIX first.
 //
-// 使用场景：
-//   - 使用 RSA 公钥加密 AES 密钥，只有持有私钥的服务器可以解密
-//   - 适用于多实例部署中安全共享加密密钥
+// Use cases:
+//   - Encrypt the AES key with an RSA public key; only the server holding the private key can decrypt it
+//   - Suitable for securely sharing encryption keys across multiple instances in a deployment
 package crypto
 
 import (
@@ -17,25 +17,25 @@ import (
 	"fmt"
 )
 
-// EncryptWithPublicKey 使用 RSA-OAEP 算法和给定的公钥加密数据。
+// EncryptWithPublicKey encrypts data using the RSA-OAEP algorithm with the given public key.
 //
-// 加密流程：
-//  1. 创建 SHA-256 哈希函数（用于 OAEP 填充）
-//  2. 使用 RSA-OAEP 算法加密数据
-//  3. 返回密文
+// Encryption flow:
+//  1. Create a SHA-256 hash function (used for OAEP padding)
+//  2. Encrypt the data with the RSA-OAEP algorithm
+//  3. Return the ciphertext
 //
-// 算法说明：
-//   - RSA-OAEP 比 RSA-PKCS1v15 更安全，具有语义安全性
-//   - SHA-256 用于 OAEP 填充的哈希计算
-//   - 明文长度不能超过 RSA 密钥长度减去 OAEP 填充开销（通常为密钥长度 - 42 字节）
+// Algorithm notes:
+//   - RSA-OAEP is more secure than RSA-PKCS1v15 and is semantically secure
+//   - SHA-256 is used for the OAEP-padding hash computation
+//   - The plaintext length cannot exceed the RSA key length minus the OAEP padding overhead (typically key length - 42 bytes)
 //
-// 参数：
-//   - pubKey: RSA 公钥，用于加密
-//   - data: 待加密的明文数据
+// Parameters:
+//   - pubKey: the RSA public key used for encryption
+//   - data: the plaintext data to encrypt
 //
-// 返回：
-//   - []byte: 加密后的密文
-//   - error: 加密失败时返回错误
+// Returns:
+//   - []byte: the encrypted ciphertext
+//   - error: returned when encryption fails
 func EncryptWithPublicKey(pubKey *rsa.PublicKey, data []byte) ([]byte, error) {
 	hash := sha256.New()
 	ciphertext, err := rsa.EncryptOAEP(hash, rand.Reader, pubKey, data, nil)
@@ -45,26 +45,26 @@ func EncryptWithPublicKey(pubKey *rsa.PublicKey, data []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-// ParsePublicKey 解析 PEM 编码的 RSA 公钥。
-// 支持 PKIX 和 PKCS1 两种格式，优先尝试 PKIX（公钥最常用格式）。
+// ParsePublicKey parses a PEM-encoded RSA public key.
+// It supports both PKIX and PKCS1 formats, trying PKIX first (the most common public-key format).
 //
-// 支持格式：
-//   - PKIX（SubjectPublicKeyInfo）：标准公钥格式，以 "-----BEGIN PUBLIC KEY-----" 开头
-//   - PKCS1：旧式 RSA 公钥格式，以 "-----BEGIN RSA PUBLIC KEY-----" 开头
+// Supported formats:
+//   - PKIX (SubjectPublicKeyInfo): the standard public-key format, starting with "-----BEGIN PUBLIC KEY-----"
+//   - PKCS1: the legacy RSA public-key format, starting with "-----BEGIN RSA PUBLIC KEY-----"
 //
-// 参数：
-//   - pemData: PEM 编码的公钥数据
+// Parameters:
+//   - pemData: the PEM-encoded public-key data
 //
-// 返回：
-//   - *rsa.PublicKey: 解析后的 RSA 公钥
-//   - error: 解析失败时返回错误
+// Returns:
+//   - *rsa.PublicKey: the parsed RSA public key
+//   - error: returned when parsing fails
 func ParsePublicKey(pemData []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(pemData)
 	if block == nil {
 		return nil, errors.New("failed to decode PEM block")
 	}
 
-	// 优先尝试 PKIX 格式（公钥最常用）
+	// Try PKIX format first (the most common public-key format)
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err == nil {
 		rsaPub, ok := pub.(*rsa.PublicKey)
@@ -74,7 +74,7 @@ func ParsePublicKey(pemData []byte) (*rsa.PublicKey, error) {
 		return rsaPub, nil
 	}
 
-	// 降级尝试 PKCS1 格式
+	// Fall back to PKCS1 format
 	rsaPub, err := x509.ParsePKCS1PublicKey(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse public key: not PKIX or PKCS1 format")

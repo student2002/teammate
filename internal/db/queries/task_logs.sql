@@ -1,4 +1,4 @@
--- 任务日志查询
+-- Task log queries
 
 -- name: CreateTaskLog :one
 INSERT INTO task_logs (

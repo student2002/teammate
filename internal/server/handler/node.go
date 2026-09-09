@@ -1,9 +1,9 @@
-// node.go 提供工作流节点的状态流转 HTTP API 端点，包括认领、审批、驳回、人工干预、完成、中断等操作。
+// node.go provides HTTP API endpoints for workflow node state transitions, including claim, approve, reject, manual intervention, complete, interrupt, etc.
 //
-// 节点状态机：pending → in_progress → completed
-//                                    → manual_intervention
-//                                    → rejected → (回退到目标节点)
-// 节点类型：standard（AI 代理执行）、review（AI 或人类审查）、manual（人类执行）
+// Node state machine: pending -> in_progress -> completed
+//                                    -> manual_intervention
+//                                    -> rejected -> (rollback to target node)
+// Node types: standard (AI agent execution), review (AI or human review), manual (human execution)
 
 package handler
 
@@ -24,17 +24,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// NodeHandler 处理工作流节点状态流转的 HTTP 请求，包括认领、审批、驳回、人工干预、完成、中断等操作。
+// NodeHandler handles HTTP requests for workflow node state transitions, including claim, approve, reject, manual intervention, complete, interrupt, etc.
 type NodeHandler struct {
 	Svc *service.Service
 }
 
-// NewNodeHandler 创建 NodeHandler 实例。
+// NewNodeHandler creates a NodeHandler instance.
 func NewNodeHandler(svc *service.Service) *NodeHandler {
 	return &NodeHandler{Svc: svc}
 }
 
-// Routes 返回节点操作的路由表。
+// Routes returns the route table for node operations.
 func (h *NodeHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -53,13 +53,13 @@ func (h *NodeHandler) Routes() chi.Router {
 	return r
 }
 
-// ListNodeTransitions 处理 GET /tasks/{taskId}/nodes/{nodeId}/transitions 端点，查询节点的状态流转历史。
-// 与 TaskHandler.ListNodeTransitions 等价，挂载在节点操作路由组下（前端实际调用路径）。
+// ListNodeTransitions handles the GET /tasks/{taskId}/nodes/{nodeId}/transitions endpoint, querying the node's state transition history.
+// Equivalent to TaskHandler.ListNodeTransitions, mounted under the node operations route group (the path the frontend actually calls).
 //
-// 响应：
-//   - 200: 成功返回流转历史
-//   - 400: 节点 ID 无效
-//   - 404: 节点不存在
+// Response:
+//   - 200: successfully returns the transition history
+//   - 400: invalid node ID
+//   - 404: node does not exist
 func (h *NodeHandler) ListNodeTransitions(w http.ResponseWriter, r *http.Request) {
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -82,42 +82,42 @@ func (h *NodeHandler) ListNodeTransitions(w http.ResponseWriter, r *http.Request
 	response.JSON(w, r, transitions)
 }
 
-// ClaimNode 处理 POST /tasks/{taskId}/nodes/{id}/claim 端点，允许 Agent 认领待处理的节点。
+// ClaimNode handles the POST /tasks/{taskId}/nodes/{id}/claim endpoint, allowing an Agent to claim a pending node.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功认领，返回节点信息
-//   - 400: 节点 ID 无效
-//   - 401: 未认证
-//   - 403: 非 Agent 无法认领或存在自我审查冲突
-//   - 404: 节点不存在
-//   - 409: 节点已被认领或保留给其他 Agent
+// Response:
+//   - 200: claimed successfully, returns node info
+//   - 400: invalid node ID
+//   - 401: not authenticated
+//   - 403: non-Agent cannot claim or there is a self-review conflict
+//   - 404: node does not exist
+//   - 409: node has already been claimed or is reserved for another Agent
 //
-// 处理流程：
-//  1. 验证认证身份（仅 Agent 可认领）
-//  2. 调用 service 执行认领（乐观锁）
-//  3. 处理认领冲突（409 Conflict）
+// Processing flow:
+//  1. verify the authenticated identity (only Agents can claim)
+//  2. call service to perform the claim (optimistic lock)
+//  3. handle claim conflicts (409 Conflict)
 func (h *NodeHandler) ClaimNode(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 从认证上下文获取操作者身份（非请求体）
+	// get the operator identity from the auth context (not the request body)
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 获取节点信息以判断认领权限
+	// get node info to determine claim permission
 	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -129,20 +129,20 @@ func (h *NodeHandler) ClaimNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if claims.UserType == "agent" {
-		// Agent 不能认领 human 分配的节点
+		// Agents cannot claim nodes assigned to humans
 		if node.AssigneeType == AssigneeTypeHuman {
 			response.Forbidden(w, "agents cannot claim human-assigned nodes")
 			return
 		}
 	} else {
-		// 人类只能认领 human 分配的节点
+		// humans can only claim nodes assigned to humans
 		if node.AssigneeType != AssigneeTypeHuman {
 			response.Forbidden(w, "only agents can claim this node")
 			return
 		}
 	}
 
-	// 调用 service 执行认领
+	// call service to perform the claim
 	nodeSvc := service.NewNodeService(h.Svc)
 	result, err := nodeSvc.Claim(r.Context(), nodeID, claims.UserID, claims.UserType)
 	if err != nil {
@@ -150,7 +150,7 @@ func (h *NodeHandler) ClaimNode(w http.ResponseWriter, r *http.Request) {
 			response.NotFound(w, "node not found")
 			return
 		}
-		// 处理特定错误消息
+		// handle specific error messages
 		errMsg := err.Error()
 		switch {
 		case strings.Contains(errMsg, "not a member"):
@@ -171,53 +171,53 @@ func (h *NodeHandler) ClaimNode(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// ApproveNode 处理 POST /tasks/{taskId}/nodes/{id}/approve 端点，审批通过指定节点，推进工作流到下一阶段。
+// ApproveNode handles the POST /tasks/{taskId}/nodes/{id}/approve endpoint, approving the specified node and advancing the workflow to the next stage.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - comment: string，审批意见
+// Request body:
+//   - comment: string, approval comment
 //
-// 响应：
-//   - 200: 审批通过，返回节点信息
-//   - 400: 节点 ID 无效
-//   - 401: 未认证
-//   - 403: 权限不足（Agent 需要 task:approve，人类需要 member+ 角色）
-//   - 404: 节点不存在
-//   - 409: 版本冲突
+// Response:
+//   - 200: approval passed, returns node info
+//   - 400: invalid node ID
+//   - 401: not authenticated
+//   - 403: insufficient permissions (Agents need task:approve, humans need member+ role)
+//   - 404: node does not exist
+//   - 409: version conflict
 func (h *NodeHandler) ApproveNode(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 从认证上下文获取操作者身份
+	// get the operator identity from the auth context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 权限检查：Agent 需要 task:approve，人类需要 member+ 角色
+	// permission check: Agents need task:approve, humans need member+ role
 	if err := checkNodeOpPermission(claims, types.PermTaskApprove); err != nil {
 		response.Forbidden(w, err.Error())
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req approveNodeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 执行审批
+	// call service to perform the approval
 	nodeSvc := service.NewNodeService(h.Svc)
 	result, err := nodeSvc.Approve(r.Context(), nodeID, claims.UserID, claims.UserType, req.Comment)
 	if err != nil {
@@ -242,54 +242,54 @@ func (h *NodeHandler) ApproveNode(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// RejectNode 处理 POST /tasks/{taskId}/nodes/{id}/reject 端点，驳回指定节点，支持回退到目标节点。
+// RejectNode handles the POST /tasks/{taskId}/nodes/{id}/reject endpoint, rejecting the specified node, supporting rollback to a target node.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - target_node_id: UUID，回退目标节点 ID（可选，默认回退到上一个节点）
-//   - comment: string，驳回意见
+// Request body:
+//   - target_node_id: UUID, rollback target node ID (optional, defaults to rolling back to the previous node)
+//   - comment: string, rejection comment
 //
-// 响应：
-//   - 200: 驳回成功，返回节点信息
-//   - 400: 参数错误或目标节点无效
-//   - 401: 未认证
-//   - 403: 权限不足（Agent 需要 task:reject，人类需要 member+ 角色）
-//   - 404: 节点不存在
-//   - 409: 版本冲突
+// Response:
+//   - 200: rejection successful, returns node info
+//   - 400: parameter error or invalid target node
+//   - 401: not authenticated
+//   - 403: insufficient permissions (Agents need task:reject, humans need member+ role)
+//   - 404: node does not exist
+//   - 409: version conflict
 func (h *NodeHandler) RejectNode(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 从认证上下文获取操作者身份
+	// get the operator identity from the auth context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 权限检查：Agent 需要 task:reject，人类需要 member+ 角色
+	// permission check: Agents need task:reject, humans need member+ role
 	if err := checkNodeOpPermission(claims, types.PermTaskReject); err != nil {
 		response.Forbidden(w, err.Error())
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req rejectNodeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 执行驳回
+	// call service to perform the rejection
 	nodeSvc := service.NewNodeService(h.Svc)
 	result, err := nodeSvc.Reject(r.Context(), nodeID, claims.UserID, claims.UserType, req.TargetNodeID, req.Comment)
 	if err != nil {
@@ -317,53 +317,53 @@ func (h *NodeHandler) RejectNode(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// ManualIntervention 处理 POST /tasks/{taskId}/nodes/{id}/manual 端点，将节点标记为需要人工干预。
+// ManualIntervention handles the POST /tasks/{taskId}/nodes/{id}/manual endpoint, marking a node as needing manual intervention.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - comment: string，干预说明
+// Request body:
+//   - comment: string, intervention explanation
 //
-// 响应：
-//   - 200: 标记成功，返回节点信息
-//   - 400: 节点 ID 无效
-//   - 401: 未认证
-//   - 403: 权限不足（Agent 需要 task:execute，人类需要 member+ 角色）
-//   - 404: 节点不存在
-//   - 409: 版本冲突
+// Response:
+//   - 200: marked successfully, returns node info
+//   - 400: invalid node ID
+//   - 401: not authenticated
+//   - 403: insufficient permissions (Agents need task:execute, humans need member+ role)
+//   - 404: node does not exist
+//   - 409: version conflict
 func (h *NodeHandler) ManualIntervention(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 从认证上下文获取操作者身份
+	// get the operator identity from the auth context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 权限检查：Agent 需要 task:execute，人类需要 member+ 角色
+	// permission check: Agents need task:execute, humans need member+ role
 	if err := checkNodeOpPermission(claims, types.PermTaskExecute); err != nil {
 		response.Forbidden(w, err.Error())
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req manualInterventionRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 标记人工干预
+	// call service to mark manual intervention
 	nodeSvc := service.NewNodeService(h.Svc)
 	node, err := nodeSvc.ManualIntervention(r.Context(), nodeID, claims.UserID, claims.UserType, req.Comment)
 	if err != nil {
@@ -388,34 +388,34 @@ func (h *NodeHandler) ManualIntervention(w http.ResponseWriter, r *http.Request)
 }
 
 
-// ResolveNode 处理 POST /tasks/{taskId}/nodes/{id}/resolve 端点，解决人工干预状态的节点，可选择重新分配给其他 Agent。
+// ResolveNode handles the POST /tasks/{taskId}/nodes/{id}/resolve endpoint, resolving a node in the manual-intervention state, with an option to reassign to another Agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - comment: string，解决说明
-//   - agent_id: UUID，可选，重新分配给其他 Agent
+// Request body:
+//   - comment: string, resolution explanation
+//   - agent_id: UUID, optional, reassign to another Agent
 //
-// 响应：
-//   - 200: 解决成功，返回节点信息
-//   - 400: 参数错误或节点不在人工干预状态
-//   - 401: 未认证
-//   - 403: 仅管理员/成员可解决
-//   - 404: 节点不存在
-//   - 409: 版本冲突
+// Response:
+//   - 200: resolved successfully, returns node info
+//   - 400: parameter error or node is not in manual-intervention state
+//   - 401: not authenticated
+//   - 403: only admins/members can resolve
+//   - 404: node does not exist
+//   - 409: version conflict
 func (h *NodeHandler) ResolveNode(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 仅管理员/成员可解决，Agent 或 viewer 不行
+	// only admins/members can resolve; Agents or viewers cannot
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "unauthorized")
@@ -430,14 +430,14 @@ func (h *NodeHandler) ResolveNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req resolveNodeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用 service 解决节点
+	// call service to resolve the node
 	action := service.ResolveActionReExecute
 	if req.Action == "complete" {
 		action = service.ResolveActionComplete
@@ -464,41 +464,41 @@ func (h *NodeHandler) ResolveNode(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, node)
 }
 
-// SkipClaim 处理 POST /tasks/{taskId}/nodes/{id}/skip-claim 端点，允许 Agent 放弃节点的续约权。
+// SkipClaim handles the POST /tasks/{taskId}/nodes/{id}/skip-claim endpoint, allowing an Agent to relinquish the continuation right of a node.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功放弃续约权
-//   - 400: 节点 ID 无效或 Agent 不持有续约权
-//   - 401: 未认证
-//   - 403: 非 Agent 无法操作
-//   - 409: 版本冲突
+// Response:
+//   - 200: continuation right relinquished successfully
+//   - 400: invalid node ID or Agent does not hold the continuation right
+//   - 401: not authenticated
+//   - 403: non-Agent cannot perform this operation
+//   - 409: version conflict
 func (h *NodeHandler) SkipClaim(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 从认证上下文获取操作者身份
+	// get the operator identity from the auth context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
-	// 仅 Agent 可以放弃续约权
+	// only Agents can relinquish the continuation right
 	if claims.UserType != "agent" {
 		response.Forbidden(w, "only agents can skip claim")
 		return
 	}
 
-	// 调用 service 放弃续约权
+	// call service to relinquish the continuation right
 	nodeSvc := service.NewNodeService(h.Svc)
 	err = nodeSvc.SkipClaim(r.Context(), nodeID, claims.UserID)
 	if err != nil {
@@ -518,17 +518,17 @@ func (h *NodeHandler) SkipClaim(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message":"continuation right released"}`))
 }
 
-// ListNodes 处理 GET /tasks/{taskId}/nodes 端点，列出指定任务的所有工作流节点。
+// ListNodes handles the GET /tasks/{taskId}/nodes endpoint, listing all workflow nodes for the specified task.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回节点列表
-//   - 400: 任务 ID 无效
+// Response:
+//   - 200: successfully returns the node list
+//   - 400: invalid task ID
 func (h *NodeHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "taskId")
 	if taskIDStr == "" {
 		response.BadRequest(w, "missing task id")
@@ -540,9 +540,9 @@ func (h *NodeHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 工作区归属已由 TaskAccessMiddleware 验证
+	// workspace ownership has already been verified by TaskAccessMiddleware
 
-	// 调用 service 查询节点
+	// call service to query nodes
 	nodeSvc := service.NewNodeService(h.Svc)
 	nodes, err := nodeSvc.ListNodes(r.Context(), taskID)
 	if err != nil {
@@ -554,51 +554,51 @@ func (h *NodeHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// CompleteNode 处理 POST /tasks/{taskId}/nodes/{id}/complete 端点，允许 Agent 完成其负责的标准类型节点。
+// CompleteNode handles the POST /tasks/{taskId}/nodes/{id}/complete endpoint, allowing an Agent to complete the standard-type node it is responsible for.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - summary: string，执行摘要
+// Request body:
+//   - summary: string, execution summary
 //
-// 响应：
-//   - 200: 完成成功，返回节点信息
-//   - 400: 节点 ID 无效或节点类型不支持
-//   - 401: 未认证
-//   - 403: 非负责人 Agent 无法完成
-//   - 404: 节点不存在
-//   - 409: 版本冲突或节点不在进行中状态
+// Response:
+//   - 200: completed successfully, returns node info
+//   - 400: invalid node ID or unsupported node type
+//   - 401: not authenticated
+//   - 403: non-responsible Agent cannot complete
+//   - 404: node does not exist
+//   - 409: version conflict or node is not in progress
 func (h *NodeHandler) CompleteNode(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 仅 Agent 可使用完成端点
+	// only Agents can use the complete endpoint
 	if claims.UserType != "agent" {
 		response.Forbidden(w, "only agents can complete nodes; members should use approve")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req completeNodeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证 Agent 是节点的负责人
+	// verify the Agent is the assignee of the node
 	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -609,25 +609,25 @@ func (h *NodeHandler) CompleteNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证负责人身份
+	// verify assignee identity
 	if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
 		response.Forbidden(w, "only the assigned agent can complete this node")
 		return
 	}
 
-	// 验证节点状态
+	// verify node status
 	if node.Status != TaskNodeStatusInProgress {
 		response.Conflict(w, fmt.Sprintf("node is not in progress: current status is %s", node.Status))
 		return
 	}
 
-	// 仅 standard 节点可完成（review 节点需要 approve/reject）
+	// only standard nodes can be completed (review nodes require approve/reject)
 	if node.NodeType != NodeTypeStandard {
 		response.BadRequest(w, "only standard nodes can be completed; review nodes require approve/reject")
 		return
 	}
 
-	// 调用 service 完成标准节点（不需要 task:approve 权限）
+	// call service to complete the standard node (does not require task:approve permission)
 	nodeSvc := service.NewNodeService(h.Svc)
 	result, err := nodeSvc.CompleteStandardNode(r.Context(), nodeID, claims.UserID, claims.UserType, req.Summary)
 	if err != nil {
@@ -648,49 +648,49 @@ func (h *NodeHandler) CompleteNode(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// InterruptAck 处理 POST /tasks/{taskId}/nodes/{id}/interrupt-ack 端点，Agent 确认已收到中断指令。
+// InterruptAck handles the POST /tasks/{taskId}/nodes/{id}/interrupt-ack endpoint, where an Agent acknowledges that it has received the interrupt instruction.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - comment: string，确认说明
+// Request body:
+//   - comment: string, acknowledgment explanation
 //
-// 响应：
-//   - 200: 确认成功
-//   - 400: 节点 ID 无效
-//   - 401: 未认证
-//   - 403: 非 Agent 无法确认或非负责人 Agent
+// Response:
+//   - 200: acknowledgment successful
+//   - 400: invalid node ID
+//   - 401: not authenticated
+//   - 403: non-Agent cannot acknowledge or non-responsible Agent
 func (h *NodeHandler) InterruptAck(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 仅 Agent 可确认中断
+	// only Agents can acknowledge interrupts
 	if claims.UserType != "agent" {
 		response.Forbidden(w, "only agents can acknowledge interrupts")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req interruptAckRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证 Agent 是节点的负责人
+	// verify the Agent is the assignee of the node
 	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -701,19 +701,19 @@ func (h *NodeHandler) InterruptAck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证负责人身份
+	// verify assignee identity
 	if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
 		response.Forbidden(w, "only the assigned agent can acknowledge this interrupt")
 		return
 	}
 
-	// 创建确认的流转记录
+	// create an acknowledgment transition record
 	commentStr := req.Comment
 	operatorIDStr := claims.UserID.String()
 	_, err = service.NewNodeService(h.Svc).CreateNodeTransition(r.Context(), CreateNodeTransitionParams{
 		TaskNodeID:   nodeID.String(),
 		FromStatus:   node.Status,
-		ToStatus:     node.Status, // 状态不变
+		ToStatus:     node.Status, // status unchanged
 		Action:       TransitionActionInterruptAck,
 		Comment:      &commentStr,
 		OperatorID:   &operatorIDStr,
@@ -727,17 +727,17 @@ func (h *NodeHandler) InterruptAck(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, map[string]string{"status": "acknowledged"})
 }
 
-// checkNodeOpPermission 验证认证用户是否有权限执行节点操作。
-// Agent 必须具有指定权限（通过中间件 RequireAgentPermission 检查——这是纵深防御）；
-// 人类用户需要 member 及以上角色。
+// checkNodeOpPermission verifies that the authenticated user has permission to perform node operations.
+// Agents must have the specified permission (checked via the RequireAgentPermission middleware - this is defense in depth);
+// human users need member or higher role.
 func checkNodeOpPermission(claims svcmw.AuthClaims, agentPermission string) error {
 	if claims.UserType == "agent" {
-		// Agent 权限通过中间件 RequireAgentPermission 检查
-		// 这是纵深防御检查——如果中间件未运行，记录警告
-		// 实际权限检查在 service 层执行
+		// Agent permissions are checked by the RequireAgentPermission middleware
+		// this is a defense-in-depth check - if the middleware did not run, log a warning
+		// the actual permission check is performed in the service layer
 		return nil
 	}
-	// 人类用户需要 member 及以上角色（viewer 不允许）
+	// human users need member or higher role (viewer is not allowed)
 	if types.MemberRoleLevel(claims.Role) < 2 {
 		return fmt.Errorf("insufficient permissions: member role or higher required")
 	}
@@ -745,54 +745,54 @@ func checkNodeOpPermission(claims svcmw.AuthClaims, agentPermission string) erro
 }
 
 
-// UpdateSummary 处理 POST /tasks/{taskId}/nodes/{id}/summary 端点，更新节点的执行摘要，仅节点负责人或 member+ 角色可操作。
+// UpdateSummary handles the POST /tasks/{taskId}/nodes/{id}/summary endpoint, updating the node's execution summary; only the node assignee or member+ role can operate.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - summary: string，执行摘要（必填）
+// Request body:
+//   - summary: string, execution summary (required)
 //
-// 响应：
-//   - 200: 成功返回更新后的节点信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 非负责人或权限不足
-//   - 404: 节点不存在
+// Response:
+//   - 200: successfully returns the updated node info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: non-assignee or insufficient permissions
+//   - 404: node does not exist
 func (h *NodeHandler) UpdateSummary(w http.ResponseWriter, r *http.Request) {
-	// 解析节点 ID
+	// parse node ID
 	nodeID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
 
-	// 工作区归属已由 NodeAccessMiddleware 验证
+	// workspace ownership has already been verified by NodeAccessMiddleware
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req updateSummaryRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证摘要必填
+	// verify summary is required
 	if req.Summary == "" {
 		response.BadRequest(w, "summary is required")
 		return
 	}
 
-	// 身份验证：Agent 必须是节点负责人，member 需要 member+ 角色
+	// identity verification: Agents must be the node assignee, members need member+ role
 	if claims.UserType == "agent" {
-		// 查询节点验证负责人身份
+		// query the node to verify assignee identity
 		node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -802,20 +802,20 @@ func (h *NodeHandler) UpdateSummary(w http.ResponseWriter, r *http.Request) {
 			response.InternalServerError(w, err)
 			return
 		}
-		// 验证负责人身份
+		// verify assignee identity
 		if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
 			response.Forbidden(w, "only the assigned agent can update this node's summary")
 			return
 		}
 	} else {
-		// 人类用户需要 member 及以上角色（viewer 不能更新摘要）
+		// human users need member or higher role (viewer cannot update the summary)
 		if err := requireWriteAccess(claims); err != nil {
 			response.Forbidden(w, err.Error())
 			return
 		}
 	}
 
-	// 调用 service 更新摘要
+	// call service to update the summary
 	node, err := service.NewNodeService(h.Svc).UpdateNodeSummary(r.Context(), nodeID, req.Summary)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

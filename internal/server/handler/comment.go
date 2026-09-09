@@ -1,7 +1,7 @@
-// comment.go 提供任务评论的创建、列表查询和编辑等 HTTP API 端点。
+// comment.go provides HTTP API endpoints for creating, listing, and editing task comments.
 //
-// 评论支持嵌套回复（通过 parent_id）和 @提及（通过 mentions 字段）。
-// 评论内容限制为 10000 字符，编辑有时间窗口限制。
+// Comments support nested replies (via parent_id) and @mentions (via the mentions field).
+// Comment content is limited to 10000 characters, and editing has a time window restriction.
 
 package handler
 
@@ -21,17 +21,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CommentHandler 处理任务评论相关的 HTTP 请求，包括创建、列表查询和编辑评论。
+// CommentHandler handles HTTP requests related to task comments, including creating, listing, and editing comments.
 type CommentHandler struct {
 	Svc *service.Service
 }
 
-// NewCommentHandler 创建 CommentHandler 实例。
+// NewCommentHandler creates a CommentHandler instance.
 func NewCommentHandler(svc *service.Service) *CommentHandler {
 	return &CommentHandler{Svc: svc}
 }
 
-// Routes 返回评论的路由表。
+// Routes returns the route table for comments.
 func (h *CommentHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -41,33 +41,33 @@ func (h *CommentHandler) Routes() chi.Router {
 	return r
 }
 
-// createCommentRequest 创建评论请求体。
+// createCommentRequest create comment request body.
 type createCommentRequest struct {
-	NodeID       *uuid.UUID  `json:"node_id"`        // 评论所属节点 ID（可选，空表示任务级评论）
-	SourceNodeID *uuid.UUID  `json:"source_node_id"` // 评论来源节点 ID（可选，用于 handoff）
-	ParentID     *uuid.UUID  `json:"parent_id"`      // 父评论 ID（可选，用于回复）
-	Content      string      `json:"content"`        // 评论内容
-	CommentType  string      `json:"comment_type"`   // 评论类型
-	Mentions     []uuid.UUID `json:"mentions"`       // @提及的用户 ID 列表
+	NodeID       *uuid.UUID  `json:"node_id"`        // node ID the comment belongs to (optional, empty means task-level comment)
+	SourceNodeID *uuid.UUID  `json:"source_node_id"` // comment source node ID (optional, used for handoff)
+	ParentID     *uuid.UUID  `json:"parent_id"`      // parent comment ID (optional, used for replies)
+	Content      string      `json:"content"`        // comment content
+	CommentType  string      `json:"comment_type"`   // comment type
+	Mentions     []uuid.UUID `json:"mentions"`       // list of @mentioned user IDs
 }
 
-// CreateComment 处理 POST /tasks/{taskId}/comments 端点，为指定任务创建评论，支持回复和@提及。
+// CreateComment handles the POST /tasks/{taskId}/comments endpoint, creating a comment for the specified task, supporting replies and @mentions.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - parent_id: UUID，父评论 ID（可选，用于嵌套回复）
-//   - content: string，评论内容（必填，最多 10000 字符）
-//   - mentions: UUID[]，@提及的用户 ID 列表
+// Request body:
+//   - parent_id: UUID, parent comment ID (optional, used for nested replies)
+//   - content: string, comment content (required, up to 10000 characters)
+//   - mentions: UUID[], list of @mentioned user IDs
 //
-// 响应：
-//   - 201: 成功创建评论
-//   - 400: 参数错误或内容超过限制
-//   - 401: 未认证
+// Response:
+//   - 201: comment created successfully
+//   - 400: parameter error or content exceeds the limit
+//   - 401: not authenticated
 func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "taskId")
 	var taskID int32
 	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
@@ -75,9 +75,9 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 工作区归属已由 TaskAccessMiddleware 验证
+	// workspace ownership has already been verified by TaskAccessMiddleware
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -87,20 +87,20 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req createCommentRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 验证内容长度
+	// validate content length
 	if len(req.Content) > 10000 {
 		response.BadRequest(w, "content must be at most 10000 characters")
 		return
 	}
 
-	// 转换并校验节点归属，防止把评论写入其他任务的节点评论区。
+	// convert and validate node ownership, to prevent writing a comment into another task's node comment section
 	var nodeID uuid.NullUUID
 	if req.NodeID != nil {
 		if !h.validateCommentNode(w, r, taskID, *req.NodeID) {
@@ -117,7 +117,7 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		sourceNodeID = uuid.NullUUID{UUID: *req.SourceNodeID, Valid: true}
 	}
 
-	// 转换父评论 ID，并校验回复不能跨任务。
+	// convert parent comment ID, and validate that replies cannot cross tasks
 	var parentID uuid.NullUUID
 	if req.ParentID != nil {
 		if !h.validateParentComment(w, r, taskID, *req.ParentID) {
@@ -140,11 +140,11 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 从认证信息派生作者身份（非请求体），防止伪造
+	// derive author identity from auth info (not the request body), to prevent spoofing
 	authorType := claims.UserType
 	authorID := claims.UserID
 
-	// 调用 service 创建评论
+	// call service to create the comment
 	commentSvc := service.NewCommentService(h.Svc)
 	comment, err := commentSvc.Create(r.Context(), buildCreateCommentParams(
 		taskID, nodeID, sourceNodeID, parentID, authorType, authorID, req.Content, commentType, mentions,
@@ -227,17 +227,17 @@ func (h *CommentHandler) validateParentComment(w http.ResponseWriter, r *http.Re
 	return true
 }
 
-// ListComments 处理 GET /tasks/{taskId}/comments 端点，列出指定任务的所有评论。
+// ListComments handles the GET /tasks/{taskId}/comments endpoint, listing all comments for the specified task.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回评论列表
-//   - 400: 任务 ID 无效
+// Response:
+//   - 200: successfully returns the comment list
+//   - 400: invalid task ID
 func (h *CommentHandler) ListComments(w http.ResponseWriter, r *http.Request) {
-	// 解析任务 ID
+	// parse task ID
 	taskIDStr := chi.URLParam(r, "taskId")
 	var taskID int32
 	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
@@ -245,7 +245,7 @@ func (h *CommentHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 工作区归属已由 TaskAccessMiddleware 验证
+	// workspace ownership has already been verified by TaskAccessMiddleware
 
 	commentSvc := service.NewCommentService(h.Svc)
 	nodeIDParam := strings.TrimSpace(r.URL.Query().Get("node_id"))

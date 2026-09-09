@@ -1,4 +1,4 @@
-// v4_features_test.go 覆盖 v4 新特性的测试。
+// v4_features_test.go covers tests for v4 new features.
 package handler_test
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/teammate/server/internal/clock"
 )
 
-// TestProjectList_AgentSeesOnlyMemberProjects 验证代理调用项目列表 API 时只能看到其所属的项目，而非工作区中的所有项目。
+// TestProjectList_AgentSeesOnlyMemberProjects verifies that an agent calling the project list API can only see projects it belongs to, not all projects in the workspace.
 func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -21,18 +21,18 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 	defer srv.Close()
 	client := srv.Client()
 
-	// 创建用户和工作区
+	// Create user and workspace
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建两个项目
+	// Create two projects
 	proj1ID := createProject(t, client, srv.URL, wsID, token)
 	proj2ID := createProject(t, client, srv.URL, wsID, token)
 
-	// 创建代理
+	// Create agent
 	agentID, apiToken := createAgent(t, client, srv.URL, wsID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
-	// Agent 列出项目——初始应看不到任何项目（不是任何项目的成员）
+	// Agent lists projects - should initially see no projects (not a member of any)
 	url := fmt.Sprintf("%s/api/workspaces/%s/projects", srv.URL, wsID)
 	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
 	if status != http.StatusOK {
@@ -47,10 +47,10 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 		t.Errorf("agent should see 0 projects (not a member of any), got %d", len(projects))
 	}
 
-	// 仅将 Agent 添加为 proj1 的成员（直接通过数据库）
+	// Add Agent only as a member of proj1 (directly via database)
 	addAgentToProject(t, q, proj1ID, agentID)
 
-	// Agent 再次列出项目——应只看到 proj1
+	// Agent lists projects again - should only see proj1
 	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
 	if status != http.StatusOK {
 		t.Fatalf("agent list projects after membership: expected 200, got %d, body: %s", status, respBody)
@@ -66,14 +66,14 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 		t.Errorf("agent should see proj1=%s, got %v", proj1ID, projects[0]["id"])
 	}
 
-	// 验证 proj2 ID 不在列表中
+	// Verify proj2 ID is not in the list
 	for _, p := range projects {
 		if p["id"] == proj2ID {
 			t.Error("agent should NOT see proj2 (not a member)")
 		}
 	}
 
-	// 人工用户列出项目——应至少看到我们创建的两个项目
+	// Human user lists projects - should see at least the two projects we created
 	_, status, respBody = doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
 		t.Fatalf("human list projects: expected 200, got %d, body: %s", status, respBody)
@@ -83,7 +83,7 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 		t.Fatalf("unmarshal projects: %v", err)
 	}
 
-	// 验证创建的两个项目都在列表中
+	// Verify both created projects are in the list
 	foundProj1, foundProj2 := false, false
 	for _, p := range projects {
 		if p["id"] == proj1ID {
@@ -98,7 +98,7 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 	}
 }
 
-// TestReservationWindow_ClaimWithinWindow 验证代理可以在预留窗口内重新认领节点（reservation_expires_at 尚未过期）。测试 V4 延续窗口功能。
+// TestReservationWindow_ClaimWithinWindow verifies that an agent can re-claim a node within the reservation window (reservation_expires_at has not expired). Tests the V4 continuation window feature.
 func TestReservationWindow_ClaimWithinWindow(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
@@ -116,28 +116,28 @@ func TestReservationWindow_ClaimWithinWindow(t *testing.T) {
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 	addAgentToProject(t, q, projID, agentID)
 
-	// 创建任务
+	// Create task
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	if len(nodes) == 0 {
 		t.Fatal("expected at least 1 node")
 	}
 	nodeID := nodes[0]["id"].(string)
 
-	// Agent 认领第一个节点
+	// Agent claims the first node
 	claimed := claimNode(t, client, srv.URL, taskID, nodeID, agentID, apiToken)
 	if claimed["status"] != "in_progress" {
 		t.Fatalf("expected in_progress after claim, got %v", claimed["status"])
 	}
 
-	// 同一 Agent 重新认领（在保留窗口内）——应成功
-	// 这模拟了 Agent 守护进程重新连接并重新认领
+	// Same Agent re-claims (within reservation window) - should succeed
+	// This simulates an agent daemon reconnecting and re-claiming
 	reclaimed := claimNode(t, client, srv.URL, taskID, nodeID, agentID, apiToken)
 	if reclaimed["status"] != "in_progress" {
 		t.Fatalf("expected in_progress after re-claim within window, got %v", reclaimed["status"])
 	}
 }
 
-// TestPermissionChangedEvent_GrantAndList 验证向代理授予权限后代理可以访问工作区资源。
+// TestPermissionChangedEvent_GrantAndList verifies that after granting permissions to an agent, it can access workspace resources.
 func TestPermissionChangedEvent_GrantAndList(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -149,10 +149,10 @@ func TestPermissionChangedEvent_GrantAndList(t *testing.T) {
 	token, wsID := registerTestUser(t, client, srv.URL)
 	agentID, apiToken := createAgent(t, client, srv.URL, wsID, token)
 
-	// 授予权限——应成功
+	// Grant permission - should succeed
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "task:execute", token)
 
-	// 验证 Agent 可以使用该 Token 列出项目
+	// Verify Agent can list projects using the token
 	url := fmt.Sprintf("%s/api/workspaces/%s/projects", srv.URL, wsID)
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
 	if status != http.StatusOK {
@@ -160,7 +160,7 @@ func TestPermissionChangedEvent_GrantAndList(t *testing.T) {
 	}
 }
 
-// newFakeClock 返回始终返回固定时间的 clock.Clock。
+// newFakeClock returns a clock.Clock that always returns a fixed time.
 func newFakeClock() clock.Clock {
 	return clock.NewFakeClock(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 }

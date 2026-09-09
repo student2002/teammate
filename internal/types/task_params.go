@@ -1,7 +1,7 @@
-// task_params.go 定义 Task 领域操作的领域参数结构体。
+// task_params.go defines the domain parameter structs for Task domain operations.
 //
-// 这些结构体是 sqlc 生成的 db.XxxParams 的 domain 对应物，
-// 字段一一对应，类型按 domain 风格映射：
+// These structs are the domain counterparts of the sqlc-generated db.XxxParams,
+// with fields mapped one-to-one and types mapped in domain style:
 //   - uuid.UUID → string
 //   - uuid.NullUUID → *string
 //   - sql.NullString → *string
@@ -15,13 +15,13 @@ import (
 	"time"
 )
 
-// CountTasksByStatusParams 是按状态统计任务的领域参数结构体。
+// CountTasksByStatusParams is the domain parameter struct for counting tasks by status.
 type CountTasksByStatusParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Statuses    []string `json:"statuses"`
 }
 
-// CreateCommentParams 是创建评论的领域参数结构体。
+// CreateCommentParams is the domain parameter struct for creating a comment.
 type CreateCommentParams struct {
 	TaskID       int32           `json:"task_id"`
 	NodeID       *string         `json:"node_id"`
@@ -35,7 +35,7 @@ type CreateCommentParams struct {
 	Mentions     []string        `json:"mentions"`
 }
 
-// CreateNodeTransitionParams 是创建节点状态流转记录的领域参数结构体。
+// CreateNodeTransitionParams is the domain parameter struct for creating a node state transition record.
 type CreateNodeTransitionParams struct {
 	TaskNodeID   string  `json:"task_node_id"`
 	FromStatus   string  `json:"from_status"`
@@ -47,7 +47,7 @@ type CreateNodeTransitionParams struct {
 	OperatorType string  `json:"operator_type"`
 }
 
-// CreateTaskParams 是创建任务的领域参数结构体。
+// CreateTaskParams is the domain parameter struct for creating a task.
 type CreateTaskParams struct {
 	ProjectID    string     `json:"project_id"`
 	Title        string     `json:"title"`
@@ -64,7 +64,7 @@ type CreateTaskParams struct {
 	WorkflowName string     `json:"workflow_name"`
 }
 
-// CreateTokenUsageParams 是创建 Token 用量记录的领域参数结构体。
+// CreateTokenUsageParams is the domain parameter struct for creating a token usage record.
 type CreateTokenUsageParams struct {
 	TaskNodeID   string  `json:"task_node_id"`
 	AgentID      string  `json:"agent_id"`
@@ -74,40 +74,40 @@ type CreateTokenUsageParams struct {
 	CostEstimate *string `json:"cost_estimate"`
 }
 
-// GetCompletedTasksOlderThanParams 是查询早于某时间点的已完成任务的领域参数结构体。
+// GetCompletedTasksOlderThanParams is the domain parameter struct for querying completed tasks older than a given point in time.
 type GetCompletedTasksOlderThanParams struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// GetInProgressNodesByAgentParams 是查询某 Agent 进行中节点的领域参数结构体。
+// GetInProgressNodesByAgentParams is the domain parameter struct for querying in-progress nodes for an Agent.
 type GetInProgressNodesByAgentParams struct {
 	AgentID string `json:"agent_id"`
 }
 
-// IsAgentProjectMemberParams 是判断 Agent 是否为项目成员的领域参数结构体。
+// IsAgentProjectMemberParams is the domain parameter struct for determining whether an Agent is a project member.
 type IsAgentProjectMemberParams struct {
 	ProjectID string `json:"project_id"`
 	AgentID   string `json:"agent_id"`
 }
 
-// ListExecutionContextCommentsParams 是列出执行上下文评论的领域参数结构体。
+// ListExecutionContextCommentsParams is the domain parameter struct for listing execution-context comments.
 type ListExecutionContextCommentsParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`
 }
 
-// ListNodeCommentsParams 是列出节点评论的领域参数结构体。
+// ListNodeCommentsParams is the domain parameter struct for listing node comments.
 type ListNodeCommentsParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`
 }
 
-// ListTasksParams 是列出任务的领域参数结构体。
+// ListTasksParams is the domain parameter struct for listing tasks.
 type ListTasksParams struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-// ListTasksPaginatedParams 是分页列出任务的领域参数结构体。
+// ListTasksPaginatedParams is the domain parameter struct for paginating tasks.
 type ListTasksPaginatedParams struct {
 	WorkspaceID string  `json:"workspace_id"`
 	Statuses    []string `json:"statuses"`
@@ -115,15 +115,15 @@ type ListTasksPaginatedParams struct {
 	Offset      int32   `json:"offset"`
 }
 
-// UpdateCommentParams 是更新评论的领域参数结构体。
+// UpdateCommentParams is the domain parameter struct for updating a comment.
 type UpdateCommentParams struct {
 	ID       string `json:"id"`
 	Content  string `json:"content"`
 }
 
-// UpdateTaskParams 是更新任务的领域参数结构体。
+// UpdateTaskParams is the domain parameter struct for updating a task.
 type UpdateTaskParams struct {
-	ID          int32      `json:"id"`               // 任务 ID（int32 serial，非 UUID）
+	ID          int32      `json:"id"`               // Task ID (int32 serial, not UUID)
 	Title       string     `json:"title"`
 	Description *string    `json:"description"`
 	Constraints *string    `json:"constraints"`
@@ -134,13 +134,13 @@ type UpdateTaskParams struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-// UpdateTaskGitBranchParams 是更新任务关联 Git 分支的领域参数结构体。
+// UpdateTaskGitBranchParams is the domain parameter struct for updating the Git branch associated with a task.
 type UpdateTaskGitBranchParams struct {
 	ID        string  `json:"id"`
 	GitBranch *string `json:"git_branch"`
 }
 
-// UpdateTaskStatusParams 是更新任务状态的领域参数结构体。
+// UpdateTaskStatusParams is the domain parameter struct for updating a task's status.
 type UpdateTaskStatusParams struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`

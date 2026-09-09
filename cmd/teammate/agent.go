@@ -1,4 +1,4 @@
-// agent.go 实现 agent 子命令，管理 Agent 的注册、状态查看、删除等操作。
+// agent.go implements the agent subcommand, managing agent registration, status viewing, deletion, and other operations.
 package main
 
 import (

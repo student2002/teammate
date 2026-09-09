@@ -1,4 +1,4 @@
-// template_stats.go 提供工作流模板统计的数据访问操作。
+// template_stats.go provides data access operations for workflow template statistics.
 package store
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// GetTemplateStats 获取指定模板名称的统计数据。
+// GetTemplateStats fetches statistics for the specified template name.
 func (s *Store) GetTemplateStats(ctx context.Context, name string) (types.GetTemplateStatsRow, error) {
 	row, err := s.q.GetTemplateStats(ctx, name)
 	if err != nil {

@@ -1,4 +1,4 @@
-// ratelimit_test.go 覆盖速率限制中间件的测试。
+// ratelimit_test.go covers tests for the rate limiting middleware.
 package middleware_test
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/teammate/server/internal/server/middleware"
 )
 
-// TestRateLimitMemoryFallback 测试限流在内存后备模式下的行为，验证超过最大请求数后返回 429。
+// TestRateLimitMemoryFallback tests rate limiting behavior in memory fallback mode, verifying that 429 is returned after exceeding the max request count.
 func TestRateLimitMemoryFallback(t *testing.T) {
 	config := middleware.RateLimitConfig{
 		Window:      60 * time.Second,
@@ -43,7 +43,7 @@ func TestRateLimitMemoryFallback(t *testing.T) {
 	}
 }
 
-// TestRateLimitDifferentKeys 测试不同 IP 地址使用独立的限流键，互不影响。
+// TestRateLimitDifferentKeys tests that different IP addresses use independent rate limit keys and do not interfere with each other.
 func TestRateLimitDifferentKeys(t *testing.T) {
 	config := middleware.RateLimitConfig{
 		Window:      60 * time.Second,
@@ -80,7 +80,7 @@ func TestRateLimitDifferentKeys(t *testing.T) {
 	}
 }
 
-// TestRateLimitHeaders 验证限流中间件正确设置 X-RateLimit-Limit 和 X-RateLimit-Remaining 响应头。
+// TestRateLimitHeaders verifies the rate limiting middleware correctly sets X-RateLimit-Limit and X-RateLimit-Remaining response headers.
 func TestRateLimitHeaders(t *testing.T) {
 	config := middleware.RateLimitConfig{
 		Window:      60 * time.Second,
@@ -105,7 +105,7 @@ func TestRateLimitHeaders(t *testing.T) {
 	}
 }
 
-// TestRateLimitXForwardedFor 测试通过 X-Forwarded-For 头部提取客户端 IP 进行限流。
+// TestRateLimitXForwardedFor tests extracting client IP from the X-Forwarded-For header for rate limiting.
 func TestRateLimitXForwardedFor(t *testing.T) {
 	config := middleware.RateLimitConfig{
 		Window:      60 * time.Second,
@@ -136,7 +136,7 @@ func TestRateLimitXForwardedFor(t *testing.T) {
 	}
 }
 
-// TestRateLimitRetryAfterHeader 测试被限流时响应中包含 Retry-After 头部，指示重试等待时间。
+// TestRateLimitRetryAfterHeader tests that the Retry-After header is included in the response when rate limited, indicating the retry wait time.
 func TestRateLimitRetryAfterHeader(t *testing.T) {
 	config := middleware.RateLimitConfig{
 		Window:      60 * time.Second,

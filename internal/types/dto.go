@@ -1,14 +1,14 @@
-// dto.go 提供 API 层的数据传输对象（DTO），确保 DB 模型与 API 响应解耦。
+// dto.go provides the API layer data transfer objects (DTOs), ensuring decoupling between DB models and API responses.
 //
-// 本文件包含：
-//   - 响应 DTO（*Response）：公开 API 响应，不包含敏感字段
-//   - 请求 DTO（*Req）：API 请求体结构
-//   - 辅助函数：如脱敏处理
+// This file contains:
+//   - Response DTOs (*Response): public API responses, excluding sensitive fields
+//   - Request DTOs (*Req): API request body structures
+//   - Helper functions: such as masking
 //
-// 设计原则：
-//   - public DTO 不包含 secret/敏感字段
-//   - execution DTO 包含解密后的敏感字段，仅限 agent 自身端点使用
-//   - handler 层显式将 DB model 映射为 DTO，避免字段泄漏
+// Design principles:
+//   - public DTOs do not include secret/sensitive fields
+//   - execution DTOs include decrypted sensitive fields, only used by the agent's own endpoints
+//   - the handler layer explicitly maps DB models to DTOs to avoid field leakage
 package types
 
 import (
@@ -18,9 +18,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// ─── 技能 DTO ────────────────────────────────────────────────
+// ─── Skill DTO ────────────────────────────────────────────────
 
-// SkillResponse 公开技能响应，不包含内部字段。
+// SkillResponse is the public skill response, excluding internal fields.
 type SkillResponse struct {
 	ID             uuid.UUID `json:"id"`
 	WorkspaceID    uuid.UUID `json:"workspace_id"`
@@ -31,9 +31,9 @@ type SkillResponse struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ─── MCP 服务器 DTO ───────────────────────────────────────────
+// ─── MCP Server DTO ───────────────────────────────────────────
 
-// McpServerResponse 公开 MCP 服务器响应，env_vars 永远脱敏。
+// McpServerResponse is the public MCP server response; env_vars are always masked.
 type McpServerResponse struct {
 	ID          uuid.UUID              `json:"id"`
 	WorkspaceID uuid.UUID              `json:"workspace_id"`
@@ -46,7 +46,7 @@ type McpServerResponse struct {
 	CreatedAt   time.Time              `json:"created_at"`
 }
 
-// McpServerExecutionResponse 执行期 MCP 服务器响应，env_vars 已解密包含明文值。
+// McpServerExecutionResponse is the execution-time MCP server response; env_vars are decrypted and contain plaintext values.
 type McpServerExecutionResponse struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`
@@ -59,9 +59,9 @@ type McpServerExecutionResponse struct {
 	AssignedAt time.Time `json:"assigned_at"`
 }
 
-// ─── Agent 绑定 DTO ────────────────────────────────────────
+// ─── Agent Binding DTO ────────────────────────────────────────
 
-// AgentMcpServerBindingResponse Agent-MCP 绑定响应（公开）。
+// AgentMcpServerBindingResponse is the Agent-MCP binding response (public).
 type AgentMcpServerBindingResponse struct {
 	AgentID     uuid.UUID `json:"agent_id"`
 	McpServerID uuid.UUID `json:"mcp_server_id"`
@@ -69,7 +69,7 @@ type AgentMcpServerBindingResponse struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// AgentSkillBindingResponse Agent-Skill 绑定响应（公开）。
+// AgentSkillBindingResponse is the Agent-Skill binding response (public).
 type AgentSkillBindingResponse struct {
 	AgentID   uuid.UUID `json:"agent_id"`
 	SkillID   uuid.UUID `json:"skill_id"`
@@ -79,7 +79,7 @@ type AgentSkillBindingResponse struct {
 
 // ─── Agent DTO ────────────────────────────────────────────────
 
-// AgentResponse 公开代理响应，不包含敏感字段（custom_env）。
+// AgentResponse is the public agent response, excluding sensitive fields (custom_env).
 type AgentResponse struct {
 	ID             uuid.UUID `json:"id"`
 	WorkspaceID    uuid.UUID `json:"workspace_id"`
@@ -97,7 +97,7 @@ type AgentResponse struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// MaskedEnvVars 返回脱敏后的环境变量映射（所有值替换为 "********"）。
+// MaskedEnvVars returns a masked environment variable map (all values replaced with "********").
 func MaskedEnvVars(raw json.RawMessage) map[string]string {
 	masked := make(map[string]string)
 	if len(raw) == 0 || string(raw) == "null" {
@@ -114,156 +114,156 @@ func MaskedEnvVars(raw json.RawMessage) map[string]string {
 }
 
 // ---------------------------------------------------------------------------
-// API 请求类型
+// API request types
 // ---------------------------------------------------------------------------
 
-// CreateWorkspaceReq 是创建工作区的请求体。
+// CreateWorkspaceReq is the request body for creating a workspace.
 type CreateWorkspaceReq struct {
-	Name        string `json:"name"`         // 工作区名称
-	Description string `json:"description"`  // 描述
-	IssuePrefix string `json:"issue_prefix"` // Issue 前缀
+	Name        string `json:"name"`         // Workspace name
+	Description string `json:"description"`  // Description
+	IssuePrefix string `json:"issue_prefix"` // Issue prefix
 }
 
-// UpdateWorkspaceReq 是更新工作区的请求体。
+// UpdateWorkspaceReq is the request body for updating a workspace.
 type UpdateWorkspaceReq struct {
-	Name        string `json:"name"`        // 名称
-	Description string `json:"description"` // 描述
+	Name        string `json:"name"`        // Name
+	Description string `json:"description"` // Description
 }
 
-// CreateProjectReq 是创建项目的请求体。
+// CreateProjectReq is the request body for creating a project.
 type CreateProjectReq struct {
-	Name              string  `json:"name"`               // 项目名称
-	Description       string  `json:"description"`        // 描述
-	Visibility        string  `json:"visibility"`         // 可见性
-	RepoURL           string  `json:"repo_url"`           // 代码仓库 URL
-	DefaultWorkflowID *string `json:"default_workflow_id"` // 默认工作流模板 ID
+	Name              string  `json:"name"`               // Project name
+	Description       string  `json:"description"`        // Description
+	Visibility        string  `json:"visibility"`         // Visibility
+	RepoURL           string  `json:"repo_url"`           // Repository URL
+	DefaultWorkflowID *string `json:"default_workflow_id"` // Default workflow template ID
 }
 
-// UpdateProjectReq 是更新项目的请求体。
+// UpdateProjectReq is the request body for updating a project.
 type UpdateProjectReq struct {
-	Name              string  `json:"name"`               // 名称
-	Description       string  `json:"description"`        // 描述
-	Status            string  `json:"status"`             // 状态
-	DefaultWorkflowID *string `json:"default_workflow_id"` // 默认工作流模板 ID
-	Context           string  `json:"context"`            // 项目上下文
+	Name              string  `json:"name"`               // Name
+	Description       string  `json:"description"`        // Description
+	Status            string  `json:"status"`             // Status
+	DefaultWorkflowID *string `json:"default_workflow_id"` // Default workflow template ID
+	Context           string  `json:"context"`            // Project context
 }
 
-// CreateAgentReq 是创建 Agent 的请求体。
+// CreateAgentReq is the request body for creating an Agent.
 type CreateAgentReq struct {
-	Name         string `json:"name"`         // Agent 名称
-	Provider     string `json:"provider"`     // AI 提供商
-	Instructions string `json:"instructions"` // 系统指令
-	Model        string `json:"model"`        // 使用的模型
+	Name         string `json:"name"`         // Agent name
+	Provider     string `json:"provider"`     // AI provider
+	Instructions string `json:"instructions"` // System instructions
+	Model        string `json:"model"`        // Model to use
 }
 
-// UpdateAgentReq 是更新 Agent 的请求体。
+// UpdateAgentReq is the request body for updating an Agent.
 type UpdateAgentReq struct {
-	Instructions string          `json:"instructions"` // 系统指令
-	Model        string          `json:"model"`        // 模型
-	Status       string          `json:"status"`       // 状态
-	CustomEnv    json.RawMessage `json:"custom_env"`   // 自定义环境变量
-	ExtraArgs    []string        `json:"extra_args"`   // 额外参数
+	Instructions string          `json:"instructions"` // System instructions
+	Model        string          `json:"model"`        // Model
+	Status       string          `json:"status"`       // Status
+	CustomEnv    json.RawMessage `json:"custom_env"`   // Custom environment variables
+	ExtraArgs    []string        `json:"extra_args"`   // Extra arguments
 }
 
-// CreateTaskReq 是创建任务的请求体。
+// CreateTaskReq is the request body for creating a task.
 type CreateTaskReq struct {
-	Title              string     `json:"title"`               // 任务标题
-	Description        string     `json:"description"`         // 任务描述
-	Constraints        string     `json:"constraints"`         // 约束条件
-	Type               string     `json:"type"`                // 任务类型
-	Priority           string     `json:"priority"`            // 优先级
-	WorkflowTemplateID string     `json:"workflow_template_id"` // 工作流模板 ID
-	DueDate            *time.Time `json:"due_date"`            // 截止日期
-	Labels             []string   `json:"labels"`              // 标签
+	Title              string     `json:"title"`               // Task title
+	Description        string     `json:"description"`         // Task description
+	Constraints        string     `json:"constraints"`         // Constraints
+	Type               string     `json:"type"`                // Task type
+	Priority           string     `json:"priority"`            // Priority
+	WorkflowTemplateID string     `json:"workflow_template_id"` // Workflow template ID
+	DueDate            *time.Time `json:"due_date"`            // Due date
+	Labels             []string   `json:"labels"`              // Labels
 }
 
-// UpdateTaskReq 是更新任务的请求体。
+// UpdateTaskReq is the request body for updating a task.
 type UpdateTaskReq struct {
-	Title       string     `json:"title"`       // 标题
-	Description string     `json:"description"` // 描述
-	Priority    string     `json:"priority"`    // 优先级
-	Labels      []string   `json:"labels"`      // 标签
-	DueDate     *time.Time `json:"due_date"`    // 截止日期
-	Constraints string     `json:"constraints"` // 约束条件
+	Title       string     `json:"title"`       // Title
+	Description string     `json:"description"` // Description
+	Priority    string     `json:"priority"`    // Priority
+	Labels      []string   `json:"labels"`      // Labels
+	DueDate     *time.Time `json:"due_date"`    // Due date
+	Constraints string     `json:"constraints"` // Constraints
 }
 
-// CreateWorkflowTemplateReq 是创建工作流模板的请求体。
+// CreateWorkflowTemplateReq is the request body for creating a workflow template.
 type CreateWorkflowTemplateReq struct {
-	Name        string           `json:"name"`        // 模板名称
-	Description string           `json:"description"` // 描述
-	Nodes       []TemplateNodeDef `json:"nodes"`      // 模板节点列表
+	Name        string           `json:"name"`        // Template name
+	Description string           `json:"description"` // Description
+	Nodes       []TemplateNodeDef `json:"nodes"`      // Template node list
 }
 
-// TemplateNodeDef 定义工作流模板创建请求中的单个节点。
+// TemplateNodeDef defines a single node in a workflow template creation request.
 type TemplateNodeDef struct {
-	Name            string          `json:"name"`             // 节点名称
-	Description     string          `json:"description"`      // 描述
-	SortOrder       int             `json:"sort_order"`       // 排序顺序
-	NodeType        string          `json:"node_type"`        // 节点类型
-	AssigneeType    string          `json:"assignee_type"`    // 分配者类型
-	AssigneeID      *string         `json:"assignee_id"`      // 指定分配者 ID
-	TimeoutMinutes  int             `json:"timeout_minutes"`  // 超时时间
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`    // 只读目录
-	FullControlDirs json.RawMessage `json:"full_control_dirs"` // 完全控制目录
-	Artifact        json.RawMessage `json:"artifact"`         // 产物定义
+	Name            string          `json:"name"`             // Node name
+	Description     string          `json:"description"`      // Description
+	SortOrder       int             `json:"sort_order"`       // Sort order
+	NodeType        string          `json:"node_type"`        // Node type
+	AssigneeType    string          `json:"assignee_type"`    // Assignee type
+	AssigneeID      *string         `json:"assignee_id"`      // Specified assignee ID
+	TimeoutMinutes  int             `json:"timeout_minutes"`  // Timeout duration
+	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`    // Read-only directories
+	FullControlDirs json.RawMessage `json:"full_control_dirs"` // Full control directories
+	Artifact        json.RawMessage `json:"artifact"`         // Artifact definition
 }
 
-// ClaimNodeReq 是认领工作流节点的请求体。
+// ClaimNodeReq is the request body for claiming a workflow node.
 type ClaimNodeReq struct {
 	AgentID string `json:"agent_id"` // Agent ID
 }
 
-// ApproveNodeReq 是审批工作流节点的请求体。
+// ApproveNodeReq is the request body for approving a workflow node.
 type ApproveNodeReq struct {
-	Comment string `json:"comment"` // 审批评论
+	Comment string `json:"comment"` // Approval comment
 }
 
-// RejectNodeReq 是退回工作流节点的请求体。
+// RejectNodeReq is the request body for rejecting a workflow node.
 type RejectNodeReq struct {
-	TargetNodeID string `json:"target_node_id"` // 回退目标节点 ID
-	Comment      string `json:"comment"`        // 驳回评论
+	TargetNodeID string `json:"target_node_id"` // Rollback target node ID
+	Comment      string `json:"comment"`        // Rejection comment
 }
 
-// ManualInterventionReq 是手动介入工作流节点的请求体。
+// ManualInterventionReq is the request body for manual intervention on a workflow node.
 type ManualInterventionReq struct {
-	Comment string `json:"comment"` // 介入说明
+	Comment string `json:"comment"` // Intervention description
 }
 
-// CreateCommentReq 是创建评论的请求体。
+// CreateCommentReq is the request body for creating a comment.
 type CreateCommentReq struct {
-	Content  string   `json:"content"`  // 评论内容
-	Mentions []string `json:"mentions"` // 提及列表
+	Content  string   `json:"content"`  // Comment content
+	Mentions []string `json:"mentions"` // Mention list
 }
 
-// RegisterRuntimeReq 是注册 Runtime 的请求体。
+// RegisterRuntimeReq is the request body for registering a Runtime.
 type RegisterRuntimeReq struct {
-	DaemonID string `json:"daemon_id"` // 守护进程 ID
-	Provider string `json:"provider"`  // AI 提供商
-	Version  string `json:"version"`   // 版本
+	DaemonID string `json:"daemon_id"` // Daemon ID
+	Provider string `json:"provider"`  // AI provider
+	Version  string `json:"version"`   // Version
 }
 
-// ReportTokenUsageReq 是上报 Token 用量的请求体。
+// ReportTokenUsageReq is the request body for reporting token usage.
 type ReportTokenUsageReq struct {
-	TaskNodeID   uuid.UUID `json:"task_node_id"`   // 节点 ID
-	InputTokens  int32     `json:"input_tokens"`   // 输入 Token 数
-	OutputTokens int32     `json:"output_tokens"`  // 输出 Token 数
-	TotalTokens  int32     `json:"total_tokens"`   // 总 Token 数
-	CostEstimate string    `json:"cost_estimate"`  // 费用估算
+	TaskNodeID   uuid.UUID `json:"task_node_id"`   // Node ID
+	InputTokens  int32     `json:"input_tokens"`   // Input token count
+	OutputTokens int32     `json:"output_tokens"`  // Output token count
+	TotalTokens  int32     `json:"total_tokens"`   // Total token count
+	CostEstimate string    `json:"cost_estimate"`  // Cost estimate
 }
 
-// CreateSkillReq 是创建技能的请求体。
+// CreateSkillReq is the request body for creating a skill.
 type CreateSkillReq struct {
-	Name           string `json:"name"`            // 技能名称
-	Description    string `json:"description"`     // 描述
-	Category       string `json:"category"`        // 分类
-	PromptTemplate string `json:"prompt_template"` // 提示词模板
+	Name           string `json:"name"`            // Skill name
+	Description    string `json:"description"`     // Description
+	Category       string `json:"category"`        // Category
+	PromptTemplate string `json:"prompt_template"` // Prompt template
 }
 
-// CreateMcpServerReq 是创建 MCP 服务器的请求体。
+// CreateMcpServerReq is the request body for creating an MCP server.
 type CreateMcpServerReq struct {
-	Name     string          `json:"name"`      // 服务器名称
+	Name     string          `json:"name"`      // Server name
 	URL      string          `json:"url"`       // URL
-	Type     string          `json:"type"`      // 类型
-	AuthType string          `json:"auth_type"` // 认证类型
-	EnvVars  json.RawMessage `json:"env_vars"`  // 环境变量
+	Type     string          `json:"type"`      // Type
+	AuthType string          `json:"auth_type"` // Authentication type
+	EnvVars  json.RawMessage `json:"env_vars"`  // Environment variables
 }

@@ -1,5 +1,5 @@
-// mcp.go 提供 MCP（Model Context Protocol）服务器管理的业务逻辑。
-// MCP 服务器为 Agent 提供外部工具和数据源，支持健康检查、加密存储环境变量等功能。
+// mcp.go provides the business logic for MCP (Model Context Protocol) server management.
+// MCP servers provide external tools and data sources for Agents, supporting health checks, encrypted storage of environment variables, etc.
 package service
 
 import (
@@ -16,26 +16,26 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// McpService 提供 MCP 服务器管理相关的业务逻辑。
-// MCP（Model Context Protocol）服务器为 Agent 提供外部工具和数据源。
+// McpService provides the business logic for MCP server management.
+// MCP (Model Context Protocol) servers provide external tools and data sources for Agents.
 type McpService struct {
 	svc *Service
 }
 
-// NewMcpService 创建一个新的 McpService 实例。
+// NewMcpService creates a new McpService instance.
 func NewMcpService(svc *Service) *McpService {
 	return &McpService{svc: svc}
 }
 
-// Create 创建一个新的 MCP 服务器。
+// Create creates a new MCP server.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 创建 MCP 服务器的参数，包含工作区 ID、名称、URL、类型、认证方式等
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for creating the MCP server, including workspace ID, name, URL, type, auth method, etc.
 //
-// 返回：
-//   - types.McpServer: 创建的 MCP 服务器记录
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.McpServer: the created MCP server record
+//   - error: possible errors (database write failure)
 func (s *McpService) Create(ctx context.Context, params types.CreateMcpServerParams) (types.McpServer, error) {
 	encrypted, err := encryptMCPEnvVars(params.EnvVars, params.EnvVars != nil)
 	if err != nil {
@@ -49,15 +49,15 @@ func (s *McpService) Create(ctx context.Context, params types.CreateMcpServerPar
 	return maskMCPServerEnvVars(server), nil
 }
 
-// List 列出指定工作区的所有 MCP 服务器。
+// List lists all MCP servers for the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - []types.McpServer: MCP 服务器列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.McpServer: list of MCP servers
+//   - error: possible errors (database query failure)
 func (s *McpService) List(ctx context.Context, workspaceID uuid.UUID) ([]types.McpServer, error) {
 	servers, err := s.svc.Store.ListMcpServers(ctx, workspaceID)
 	if err != nil {
@@ -69,28 +69,28 @@ func (s *McpService) List(ctx context.Context, workspaceID uuid.UUID) ([]types.M
 	return servers, nil
 }
 
-// Get 根据 ID 获取 MCP 服务器信息。
+// Get retrieves MCP server info by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: MCP 服务器 ID
+// Parameters:
+//   - ctx: request context
+//   - id: MCP server ID
 //
-// 返回：
-//   - types.McpServer: MCP 服务器信息
-//   - error: 可能的错误（服务器不存在）
+// Returns:
+//   - types.McpServer: MCP server info
+//   - error: possible errors (server does not exist)
 func (s *McpService) Get(ctx context.Context, id uuid.UUID) (types.McpServer, error) {
 	return s.svc.Store.GetMcpServer(ctx, id)
 }
 
-// UpdateStatus 更新 MCP 服务器的连接状态（connected/disconnected）。
+// UpdateStatus updates the connection status of an MCP server (connected/disconnected).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新状态的参数，包含服务器 ID 和新状态
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for updating the status, including the server ID and the new status
 //
-// 返回：
-//   - types.McpServer: 更新后的 MCP 服务器记录
-//   - error: 可能的错误（数据库更新失败）
+// Returns:
+//   - types.McpServer: the updated MCP server record
+//   - error: possible errors (database update failure)
 func (s *McpService) UpdateStatus(ctx context.Context, params types.UpdateMcpServerStatusParams) (types.McpServer, error) {
 	server, err := s.svc.Store.UpdateMcpServerStatus(ctx, params)
 	if err != nil {
@@ -99,26 +99,26 @@ func (s *McpService) UpdateStatus(ctx context.Context, params types.UpdateMcpSer
 	return maskMCPServerEnvVars(server), nil
 }
 
-// Update 更新 MCP 服务器的配置信息。
+// Update updates the configuration of an MCP server.
 //
-// 所有指针参数支持三态语义：nil=保持现有值，非 nil=替换。
-// envVars 额外支持 {} = 清空。
+// All pointer parameters support three-state semantics: nil = keep existing value, non-nil = replace.
+// envVars additionally supports {} = clear.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: MCP 服务器 ID
-//   - name: 新的服务器名称（nil=保持）
-//   - url: 新的服务器 URL（nil=保持）
-//   - mcpType: 新的服务器类型（nil=保持）
-//   - authType: 新的认证方式（nil=保持）
-//   - envVars: 环境变量（nil=保持，{} = 清空，有值=替换）
-//   - status: 新的连接状态（nil=保持）
+// Parameters:
+//   - ctx: request context
+//   - id: MCP server ID
+//   - name: new server name (nil = keep)
+//   - url: new server URL (nil = keep)
+//   - mcpType: new server type (nil = keep)
+//   - authType: new auth method (nil = keep)
+//   - envVars: environment variables (nil = keep, {} = clear, with value = replace)
+//   - status: new connection status (nil = keep)
 //
-// 返回：
-//   - types.McpServer: 更新后的 MCP 服务器记录
-//   - error: 可能的错误（服务器不存在、数据库更新失败）
+// Returns:
+//   - types.McpServer: the updated MCP server record
+//   - error: possible errors (server does not exist, database update failure)
 func (s *McpService) Update(ctx context.Context, id uuid.UUID, name, url, mcpType *string, authType *string, envVars []byte, status *string) (types.McpServer, error) {
-	// 获取当前值，合并非 nil 的更新字段
+	// Get the current value and merge the non-nil update fields
 	current, err := s.svc.Store.GetMcpServer(ctx, id)
 	if err != nil {
 		return types.McpServer{}, fmt.Errorf("get current mcp server: %w", err)
@@ -145,10 +145,10 @@ func (s *McpService) Update(ctx context.Context, id uuid.UUID, name, url, mcpTyp
 		newStatus = *status
 	}
 
-	// envVars 三态语义
+	// envVars three-state semantics
 	var encryptedEnvVars pqtype.NullRawMessage
 	if envVars == nil {
-		encryptedEnvVars = rawToNullRaw(current.EnvVars) // 保持现有值
+		encryptedEnvVars = rawToNullRaw(current.EnvVars) // keep existing value
 	} else {
 		encryptedEnvVars, err = encryptMCPEnvVars(envVars, true)
 		if err != nil {
@@ -167,38 +167,38 @@ func (s *McpService) Update(ctx context.Context, id uuid.UUID, name, url, mcpTyp
 	if err != nil {
 		return types.McpServer{}, fmt.Errorf("update mcp server: %w", err)
 	}
-	_ = newStatus // status 通过 UpdateStatus 单独更新
+	_ = newStatus // status is updated separately via UpdateStatus
 	return maskMCPServerEnvVars(server), nil
 }
 
-// Delete 删除一个 MCP 服务器。
+// Delete deletes an MCP server.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: MCP 服务器 ID
+// Parameters:
+//   - ctx: request context
+//   - id: MCP server ID
 //
-// 返回：
-//   - error: 可能的错误（服务器不存在、数据库删除失败）
+// Returns:
+//   - error: possible errors (server does not exist, database deletion failure)
 func (s *McpService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.svc.Store.DeleteMcpServer(ctx, id)
 }
 
-// HealthCheck 对 MCP 服务器执行健康检查，通过 TCP 连接测试服务器可达性。
-// 连接超时时间为 5 秒。
+// HealthCheck performs a health check on an MCP server, testing reachability via a TCP connection.
+// The connection timeout is 5 seconds.
 //
-// 步骤：
-//  1. 获取 MCP 服务器信息
-//  2. 从 URL 中提取 host:port
-//  3. 尝试 TCP 连接到目标地址（5 秒超时）
-//  4. 根据连接结果更新服务器状态
+// Steps:
+//  1. Get the MCP server info
+//  2. Extract the host:port from the URL
+//  3. Attempt a TCP connection to the target address (5-second timeout)
+//  4. Update the server status based on the connection result
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: MCP 服务器 ID
+// Parameters:
+//   - ctx: request context
+//   - id: MCP server ID
 //
-// 返回：
-//   - types.McpServer: 更新状态后的 MCP 服务器记录
-//   - error: 可能的错误（服务器不存在、数据库更新失败）
+// Returns:
+//   - types.McpServer: the MCP server record after status update
+//   - error: possible errors (server does not exist, database update failure)
 func (s *McpService) HealthCheck(ctx context.Context, id uuid.UUID) (types.McpServer, error) {
 	server, err := s.Get(ctx, id)
 	if err != nil {
@@ -219,7 +219,7 @@ func (s *McpService) HealthCheck(ctx context.Context, id uuid.UUID) (types.McpSe
 }
 
 // ---------------------------------------------------------------------------
-// MCP 环境变量加密/脱敏辅助函数
+// MCP environment variable encryption/masking helper functions
 // ---------------------------------------------------------------------------
 
 const encryptedMCPEnvMarker = "teammate-mcp-env-v1"
@@ -229,8 +229,8 @@ type encryptedMCPEnvVars struct {
 	Values map[string]string `json:"values"`
 }
 
-// rawToNullRaw 将 json.RawMessage 转为 pqtype.NullRawMessage。
-// 复用 store 包同名 helper 不现实（service 不 import store），故在本包内提供。
+// rawToNullRaw converts a json.RawMessage to a pqtype.NullRawMessage.
+// Reusing the same-named helper in the store package is not feasible (service does not import store), so it is provided within this package.
 func rawToNullRaw(rm json.RawMessage) pqtype.NullRawMessage {
 	if rm == nil {
 		return pqtype.NullRawMessage{}
@@ -333,8 +333,8 @@ func parseMCPEnvVars(raw json.RawMessage) (map[string]string, error) {
 	return values, nil
 }
 
-// stripURLForDial 从 URL 中提取 host:port 用于 TCP 拨号。
-// 支持 http:// 和 https:// 前缀，自动补全默认端口（HTTP:80，HTTPS:443）。
+// stripURLForDial extracts the host:port from a URL for TCP dialing.
+// Supports the http:// and https:// prefixes, and auto-completes default ports (HTTP: 80, HTTPS: 443).
 func stripURLForDial(rawURL string) string {
 	u := rawURL
 	isHTTPS := false
@@ -360,7 +360,7 @@ func stripURLForDial(rawURL string) string {
 	return u
 }
 
-// containsColon 检查字符串是否包含冒号。
+// containsColon checks whether a string contains a colon.
 func containsColon(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] == ':' {

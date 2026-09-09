@@ -1,10 +1,10 @@
-// workflow.go 提供工作流模板的数据访问操作。
+// workflow.go provides data access operations for workflow templates.
 //
-// 工作流模板（Workflow Template）定义了任务执行的有序节点步骤，
-// 如：需求分析 → 技术设计 → 编码实现 → 审查 → 部署。
+// A Workflow Template defines the ordered node steps for task execution,
+// e.g.: requirements analysis → technical design → coding → review → deployment.
 //
-// 模板包含元数据和模板节点列表，模板节点定义了每个步骤的
-// 名称、类型、分配者类型、超时时间等。
+// A template contains metadata and a list of template nodes; each template node defines the
+// name, type, assignee type, timeout, etc. for each step.
 package store
 
 import (
@@ -19,15 +19,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateWorkflowTemplate 在事务中创建工作流模板及其模板节点。
+// CreateWorkflowTemplate creates a workflow template and its template nodes within a transaction.
 //
-// 注意：入参 nodes 用 db.CreateTemplateNodeParams（事务内部需 n.TemplateID = template.ID 赋值）。
-// 未来若改用 types.CreateTemplateNodeParams，需在循环内做类型转换。
+// Note: the nodes parameter uses db.CreateTemplateNodeParams (within the transaction, n.TemplateID = template.ID must be assigned).
+// If this is changed to types.CreateTemplateNodeParams in the future, type conversion must be done inside the loop.
 //
-// 返回：
-//   - types.WorkflowTemplate: 创建的模板记录
-//   - []types.WorkflowTemplateNode: 创建的模板节点列表
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.WorkflowTemplate: the created template record
+//   - []types.WorkflowTemplateNode: list of created template nodes
+//   - error: error if creation fails
 func (s *Store) CreateWorkflowTemplate(ctx context.Context, params types.CreateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -76,7 +76,7 @@ func (s *Store) CreateWorkflowTemplate(ctx context.Context, params types.CreateW
 	return domainTpl, domainNodes, nil
 }
 
-// GetWorkflowTemplate 根据 ID 查询单个工作流模板记录。
+// GetWorkflowTemplate queries a single workflow template record by ID.
 func (s *Store) GetWorkflowTemplate(ctx context.Context, id uuid.UUID) (types.WorkflowTemplate, error) {
 	tpl, err := s.q.GetWorkflowTemplate(ctx, id)
 	if err != nil {
@@ -85,7 +85,7 @@ func (s *Store) GetWorkflowTemplate(ctx context.Context, id uuid.UUID) (types.Wo
 	return ToDomainWorkflowTemplate(tpl)
 }
 
-// ListWorkflowTemplates 查询指定工作区内的所有工作流模板。
+// ListWorkflowTemplates queries all workflow templates within the specified workspace.
 func (s *Store) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UUID) ([]types.WorkflowTemplate, error) {
 	templates, err := s.q.ListWorkflowTemplates(ctx, workspaceID)
 	if err != nil {
@@ -94,15 +94,15 @@ func (s *Store) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UUID
 	return ToDomainWorkflowTemplateSlice(templates)
 }
 
-// UpdateWorkflowTemplate 更新工作流模板的元数据。
+// UpdateWorkflowTemplate updates the metadata of a workflow template.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters
 //
-// 返回：
-//   - types.WorkflowTemplate: 更新后的模板记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.WorkflowTemplate: the updated template record
+//   - error: error if the update fails
 func (s *Store) UpdateWorkflowTemplate(ctx context.Context, params types.UpdateWorkflowTemplateParams) (types.WorkflowTemplate, error) {
 	dbParams, err := FromDomainUpdateWorkflowTemplateParams(params)
 	if err != nil {
@@ -119,9 +119,9 @@ func (s *Store) UpdateWorkflowTemplate(ctx context.Context, params types.UpdateW
 	return ToDomainWorkflowTemplate(tpl)
 }
 
-// UpdateWorkflowTemplateWithNodes 在事务中更新工作流模板并替换所有节点。
+// UpdateWorkflowTemplateWithNodes updates a workflow template and replaces all nodes within a transaction.
 //
-// 注意：入参 nodes 用 types.CreateTemplateNodeParams，事务内部转换为 db 后赋值 TemplateID。
+// Note: the nodes parameter uses types.CreateTemplateNodeParams; within the transaction it is converted to db and then assigned TemplateID.
 func (s *Store) UpdateWorkflowTemplateWithNodes(ctx context.Context, params types.UpdateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -139,18 +139,18 @@ func (s *Store) UpdateWorkflowTemplateWithNodes(ctx context.Context, params type
 	if err != nil {
 		return types.WorkflowTemplate{}, nil, err
 	}
-	// 更新模板元数据
+	// Update template metadata
 	template, err := qtx.UpdateWorkflowTemplate(ctx, dbParams)
 	if err != nil {
 		return types.WorkflowTemplate{}, nil, fmt.Errorf("update workflow template: %w", err)
 	}
 
-	// 删除所有旧节点（没有外键约束阻止此操作）
+	// Delete all old nodes (no foreign key constraint prevents this operation)
 	if err := qtx.DeleteTemplateNodesByTemplate(ctx, dbParams.ID); err != nil {
 		return types.WorkflowTemplate{}, nil, fmt.Errorf("delete old template nodes: %w", err)
 	}
 
-	// 创建新节点
+	// Create new nodes
 	createdNodes := make([]db.WorkflowTemplateNode, 0, len(nodes))
 	for _, n := range nodes {
 		dbNode, err := FromDomainCreateTemplateNodeParams(n)
@@ -215,7 +215,7 @@ func normalizeUpdateWorkflowTemplateParams(ctx context.Context, s *Store, params
 	return params, nil
 }
 
-// DeleteWorkflowTemplate 在事务中删除工作流模板及其所有节点。
+// DeleteWorkflowTemplate deletes a workflow template and all its nodes within a transaction.
 func (s *Store) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -225,7 +225,7 @@ func (s *Store) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) error 
 
 	qtx := s.q.WithTx(tx)
 
-	// 002_remove_fks 后 projects.default_workflow_id 不再有外键，须显式置空
+	// After 002_remove_fks, projects.default_workflow_id no longer has a foreign key; it must be explicitly set to NULL
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE projects SET default_workflow_id = NULL WHERE default_workflow_id = $1`, id); err != nil {
 		return fmt.Errorf("clear projects.default_workflow_id: %w", err)
@@ -246,7 +246,7 @@ func (s *Store) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-// ListTemplateNodes 查询指定模板的所有模板节点。
+// ListTemplateNodes queries all template nodes of the specified template.
 func (s *Store) ListTemplateNodes(ctx context.Context, templateID uuid.UUID) ([]types.WorkflowTemplateNode, error) {
 	nodes, err := s.q.ListTemplateNodes(ctx, templateID)
 	if err != nil {

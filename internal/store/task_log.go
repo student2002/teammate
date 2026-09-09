@@ -1,4 +1,4 @@
-// task_log.go 提供任务日志的数据访问操作。
+// task_log.go provides data access operations for task logs.
 package store
 
 import (
@@ -11,15 +11,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateTaskLog 创建一条任务日志记录。
+// CreateTaskLog creates a task log record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 任务日志参数（含 task_id、node_id、type、content、timestamp）
+// Parameters:
+//   - ctx: request context
+//   - params: task log parameters (including task_id, node_id, type, content, timestamp)
 //
-// 返回：
-//   - types.TaskLog: 创建的日志记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.TaskLog: the created log record
+//   - error: error if creation fails
 func (s *Store) CreateTaskLog(ctx context.Context, params types.CreateTaskLogParams) (types.TaskLog, error) {
 	nodeID, err := stringToUUID(params.NodeID)
 	if err != nil {
@@ -46,15 +46,15 @@ func (s *Store) CreateTaskLog(ctx context.Context, params types.CreateTaskLogPar
 	}, nil
 }
 
-// ListTaskLogsByTask 列出指定任务的所有日志记录。
+// ListTaskLogsByTask lists all log records of the specified task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
 //
-// 返回：
-//   - []types.TaskLog: 日志记录列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.TaskLog: list of log records
+//   - error: error if the query fails
 func (s *Store) ListTaskLogsByTask(ctx context.Context, taskID int32) ([]types.TaskLog, error) {
 	logs, err := s.q.ListTaskLogsByTask(ctx, taskID)
 	if err != nil {
@@ -75,16 +75,16 @@ func (s *Store) ListTaskLogsByTask(ctx context.Context, taskID int32) ([]types.T
 	return out, nil
 }
 
-// ListTaskLogsByTaskNode 列出指定任务和节点的日志记录。
+// ListTaskLogsByTaskNode lists log records of the specified task and node.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
-//   - nodeID: 节点 UUID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
+//   - nodeID: node UUID
 //
-// 返回：
-//   - []types.TaskLog: 日志记录列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.TaskLog: list of log records
+//   - error: error if the query fails
 func (s *Store) ListTaskLogsByTaskNode(ctx context.Context, taskID int32, nodeID uuid.UUID) ([]types.TaskLog, error) {
 	logs, err := s.q.ListTaskLogsByTaskNode(ctx, db.ListTaskLogsByTaskNodeParams{
 		TaskID: taskID,

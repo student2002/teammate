@@ -1,4 +1,4 @@
-// node_test.go 覆盖任务节点数据访问的测试。
+// node_test.go covers task node data access tests.
 package store_test
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestApproveNodeInTx_BasicApproval 验证在事务中审批节点的基本流程。
+// TestApproveNodeInTx_BasicApproval verifies the basic flow of approving a node within a transaction.
 func TestApproveNodeInTx_BasicApproval(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()

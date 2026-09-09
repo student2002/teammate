@@ -1,67 +1,67 @@
 # ==============================================================
-# Teammate Server — 多阶段 Docker 构建（支持国内镜像源）
+# Teammate Server — multi-stage Docker build (with China mirror support)
 #
-# 构建阶段：golang:1.26-alpine 编译 Go 二进制
-# 运行阶段：alpine:3.21 最小镜像，含 ca-certificates + 迁移文件
+# Build stage: golang:1.26-alpine compiles the Go binary
+# Runtime stage: alpine:3.21 minimal image with ca-certificates + migration files
 #
-# 构建：
+# Build:
 #   docker build -f product/Dockerfile -t teammate:latest .
 #
-# 国内镜像加速构建：
+# Build with China mirror acceleration:
 #   docker build -f product/Dockerfile -t teammate:latest \
 #     --build-arg GOPROXY=https://goproxy.cn,direct \
 #     --build-arg ALPINE_REPO=mirrors.tuna.tsinghua.edu.cn .
 #
-# 运行：
+# Run:
 #   docker run -p 8080:8080 --env-file .env teammate:latest
 #   docker run --rm teammate:latest migrate --path /app/migrations
 # ==============================================================
 
-# ---- 构建参数 ----
+# ---- Build args ----
 ARG GO_IMAGE=golang:1.26-alpine
 ARG RUNTIME_IMAGE=alpine:3.21
 
-# ---- 构建阶段 ----
+# ---- Build stage ----
 FROM $GO_IMAGE AS builder
 
 ARG GOPROXY
-# 国内用户可传 --build-arg GOPROXY=https://goproxy.cn,direct
+# China users can pass --build-arg GOPROXY=https://goproxy.cn,direct
 RUN if [ -n "$GOPROXY" ]; then go env -w GOPROXY="$GOPROXY"; fi
 
 WORKDIR /build
 
-# 先复制依赖文件，最大化构建缓存
+# Copy dependency files first to maximize build cache
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 复制源码并编译（CGO_ENABLED=0 不需要 gcc）
+# Copy source and build (CGO_ENABLED=0, no gcc needed)
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /teammate-server ./cmd/teammate-server
 
-# ---- 运行阶段 ----
+# ---- Runtime stage ----
 FROM $RUNTIME_IMAGE
 
 ARG ALPINE_REPO
-# 国内用户可传 --build-arg ALPINE_REPO=mirrors.aliyun.com
+# China users can pass --build-arg ALPINE_REPO=mirrors.aliyun.com
 RUN if [ -n "$ALPINE_REPO" ]; then \
       sed -i "s|dl-cdn.alpinelinux.org|$ALPINE_REPO|g" /etc/apk/repositories; \
     fi
 
-# CA 证书（HTTPS/OAuth 需要）+ 时区
+# CA certificates (required by HTTPS/OAuth) + timezone data
 RUN apk add --no-cache ca-certificates tzdata && \
     update-ca-certificates
 
-# 部署二进制（独立于 `teammate` CLI）：teammate-server 启动服务 / 执行迁移
+# Deployment binary (separate from the `teammate` CLI): teammate-server starts the service / runs migrations
 COPY --from=builder /teammate-server /usr/local/bin/teammate-server
 
-# 迁移文件 — 复制到 /app/migrations，运行时需指定 --path /app/migrations
-#   迁移：docker compose run --rm app migrate --path /app/migrations
+# Migration files — copied to /app/migrations; specify --path /app/migrations at runtime
+#   Migrate: docker compose run --rm app migrate --path /app/migrations
 COPY --from=builder /build/internal/db/migrations /app/migrations
 
 EXPOSE 8080
 
-# ENTRYPOINT 固定为部署二进制；无 CMD 参数时启动服务（根命令默认行为）：
-#   docker run -p 8080:8080 --env-file .env teammate:latest  -> 启动服务
-#   docker compose run --rm app migrate --path /app/migrations -> 执行迁移（追加到 ENTRYPOINT）
+# ENTRYPOINT is fixed to the deployment binary; with no CMD arguments it starts the service (root command default):
+#   docker run -p 8080:8080 --env-file .env teammate:latest  -> start service
+#   docker compose run --rm app migrate --path /app/migrations -> run migrations (appended to ENTRYPOINT)
 ENTRYPOINT ["teammate-server"]
 CMD []

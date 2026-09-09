@@ -1,4 +1,4 @@
-// session_auth_test.go 覆盖会话认证的测试。
+// session_auth_test.go tests covering session authentication.
 package handler_test
 
 import (
@@ -21,8 +21,8 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// setupAuthSessionTestRouter 创建带有完整认证处理器的测试路由器，
-// 包含需要认证的路由（登出、whoami）。
+// setupAuthSessionTestRouter creates a test router with full auth handlers,
+// including routes that require authentication (logout, whoami).
 func setupAuthSessionTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 	t.Helper()
 
@@ -31,11 +31,11 @@ func setupAuthSessionTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 	svc := service.New(db, nil, nil)
 	r := chi.NewRouter()
 
-	// Auth 路由（公开）
+	// Auth routes (public)
 	authHandler := handler.NewAuthHandler(svc, testJWTSecret)
 	r.Mount("/api/auth", authHandler.Routes())
 
-	// 认证路由——使用不同的路径前缀避免 chi Mount 冲突
+	// Authenticated routes — uses a different path prefix to avoid chi Mount conflicts
 	r.Group(func(r chi.Router) {
 		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
 		r.Get("/api/auth/whoami", authHandler.Whoami)
@@ -46,12 +46,12 @@ func setupAuthSessionTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 	return r, ts
 }
 
-// TestSessionTokenExchange 验证通过 API 令牌交换会话令牌的功能。
+// TestSessionTokenExchange verifies session token exchange via API token.
 func TestSessionTokenExchange(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
 
-	// 首先注册成员，获取有效的 JWT
+	// First register a member to get a valid JWT
 	email := "session-exchange-" + uuid.New().String()[:8] + "@test.com"
 	regBody := map[string]string{
 		"name":     "Session Exchange User",
@@ -67,19 +67,19 @@ func TestSessionTokenExchange(t *testing.T) {
 	json.Unmarshal(respBody, &regResult)
 	jwtToken := regResult["token"].(string)
 
-	// 为代理创建一个 API 令牌（需要直接插入）
-	// 由于无法通过 API 轻松创建代理 API 令牌，
-	// 我们使用无效凭证格式测试 token-exchange 端点
+	// Create an API token for agent (requires direct insertion)
+	// Since agent API tokens cannot be easily created via API,
+	// we test the token-exchange endpoint with invalid credentials
 	exchangeBody := map[string]string{
 		"api_token": "tm_invalidtoken123",
 	}
 	_, status, _ = doRequest(t, client, http.MethodPost, ts.URL+"/api/auth/token-exchange", exchangeBody)
-	// 响应失败，因为凭证在数据库中不存在
+	// Response fails because credentials do not exist in the database
 	if status != http.StatusUnauthorized {
 		t.Logf("token exchange with invalid token: got status %d (expected 401)", status)
 	}
 
-	// 验证 JWT 凭证在认证端点上有效
+	// Verify JWT credentials are valid on the auth endpoint
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	resp, err := client.Do(req)
@@ -91,19 +91,19 @@ func TestSessionTokenExchange(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("whoami with JWT: expected 200, got %d", resp.StatusCode)
 	}
-	t.Log("会话令牌交换：JWT 认证对 whoami 有效")
+	t.Log("Session token exchange: JWT authentication works for whoami")
 }
 
-// TestSessionTokenExpiry 验证过期的会话令牌会被拒绝。
+// TestSessionTokenExpiry verifies that expired session tokens are rejected.
 func TestSessionTokenExpiry(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
 
-	// 手动构造一个过期的 JWT
-	// 测试是否拒绝过期令牌
-	// JWT 会检查 "exp" 声明
-	// 由于无法在不直接操作令牌的情况下轻松创建过期的 JWT，
-	// 我们改用格式错误的令牌进行测试
+	// Manually construct an expired JWT
+	// Test whether expired tokens are rejected
+	// JWT checks the "exp" claim
+	// Since we cannot easily create an expired JWT without directly manipulating the token,
+	// we test with a malformed token instead
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req.Header.Set("Authorization", "Bearer expired.invalid.token")
 	resp, err := client.Do(req)
@@ -115,11 +115,11 @@ func TestSessionTokenExpiry(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expired/invalid JWT: expected 401, got %d", resp.StatusCode)
 	}
-	t.Log("会话令牌过期：无效过期令牌被正确拒绝")
+	t.Log("Session token expiry: invalid expired token correctly rejected")
 }
 
-// TestLogout 验证登出后会话令牌失效。
-// TestWhoami 验证 whoami 端点返回正确的用户信息。
+// TestLogout verifies that session token is invalidated after logout.
+// TestWhoami verifies that the whoami endpoint returns correct user information.
 func TestWhoami(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
@@ -140,7 +140,7 @@ func TestWhoami(t *testing.T) {
 	json.Unmarshal(respBody, &regResult)
 	jwtToken := regResult["token"].(string)
 
-	// 调用 whoami
+	// Call whoami
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	resp, err := client.Do(req)
@@ -165,11 +165,11 @@ func TestWhoami(t *testing.T) {
 	if whoamiResult["user_type"] != "member" {
 		t.Fatalf("whoami: expected user_type 'member', got %v", whoamiResult["user_type"])
 	}
-	t.Logf("whoami：返回正确的信息 (name=%s, email=%s, type=%s)",
+	t.Logf("whoami: returned correct info (name=%s, email=%s, type=%s)",
 		whoamiResult["name"], whoamiResult["email"], whoamiResult["user_type"])
 }
 
-// TestWhoamiUnauthenticated 验证 whoami 需要认证。
+// TestWhoamiUnauthenticated verifies that whoami requires authentication.
 func TestWhoamiUnauthenticated(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
@@ -184,20 +184,20 @@ func TestWhoamiUnauthenticated(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("whoami without auth: expected 401, got %d", resp.StatusCode)
 	}
-	t.Log("whoami 未认证时正确返回 401")
+	t.Log("whoami correctly returns 401 when unauthenticated")
 }
 
-// TestRSAEncryptionRoundtrip 验证 RSA 加密往返：
-// 上传公钥、获取加密密钥、验证解密
-// 测试认证处理器和 crypto 包的集成。
+// TestRSAEncryptionRoundtrip verifies RSA encryption roundtrip:
+// upload public key, get encrypted key, verify decryption
+// Tests the integration of auth handler and crypto package.
 func TestRSAEncryptionRoundtrip(t *testing.T) {
-	// 生成 RSA 密钥对
+	// Generate RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate RSA key: %v", err)
 	}
 
-	// 将公钥编码为 PEM 格式
+	// Encode public key to PEM format
 	pubKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		t.Fatalf("marshal public key: %v", err)
@@ -207,17 +207,17 @@ func TestRSAEncryptionRoundtrip(t *testing.T) {
 		Bytes: pubKeyBytes,
 	})
 
-	// 测试加密/解密往返
+	// Test encrypt/decrypt roundtrip
 	secretData := "super-secret-api-key-sk-1234567890"
 
-	// 使用公钥加密
+	// Encrypt with public key
 	hash := sha256.New()
 	ciphertext, err := rsa.EncryptOAEP(hash, rand.Reader, &privateKey.PublicKey, []byte(secretData), nil)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	// 使用私钥解密
+	// Decrypt with private key
 	hash2 := sha256.New()
 	decrypted, err := rsa.DecryptOAEP(hash2, rand.Reader, privateKey, ciphertext, nil)
 	if err != nil {
@@ -228,13 +228,13 @@ func TestRSAEncryptionRoundtrip(t *testing.T) {
 		t.Fatalf("roundtrip failed: got %q, want %q", decrypted, secretData)
 	}
 
-	// 验证 PEM 可以被解析
+	// Verify PEM can be parsed
 	parsedKey, err := parsePublicKeyPEM(pubKeyPEM)
 	if err != nil {
 		t.Fatalf("parse PEM: %v", err)
 	}
 
-	// 使用解析后的密钥加密
+	// Encrypt with parsed key
 	hash3 := sha256.New()
 	ciphertext2, err := rsa.EncryptOAEP(hash3, rand.Reader, parsedKey, []byte(secretData), nil)
 	if err != nil {
@@ -251,10 +251,10 @@ func TestRSAEncryptionRoundtrip(t *testing.T) {
 		t.Fatalf("roundtrip with parsed key failed: got %q, want %q", decrypted2, secretData)
 	}
 
-	t.Log("RSA 加密往返：PEM 公钥 → 加密 → 解密成功")
+	t.Log("RSA encryption roundtrip: PEM public key → encrypt → decrypt succeeded")
 }
 
-// TestTokenExchangeInvalidFormat 验证非 tm_ 前缀的令牌会被拒绝。
+// TestTokenExchangeInvalidFormat verifies that tokens without the tm_ prefix are rejected.
 func TestTokenExchangeInvalidFormat(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
@@ -277,10 +277,10 @@ func TestTokenExchangeInvalidFormat(t *testing.T) {
 			}
 		})
 	}
-	t.Log("令牌交换：格式错误的令牌被正确拒绝")
+	t.Log("Token exchange: malformed tokens correctly rejected")
 }
 
-// TestJWTTokenAuthentication 验证完整的 JWT 认证流程。
+// TestJWTTokenAuthentication verifies the complete JWT authentication flow.
 func TestJWTTokenAuthentication(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
@@ -300,7 +300,7 @@ func TestJWTTokenAuthentication(t *testing.T) {
 	json.Unmarshal(respBody, &regResult)
 	jwtToken := regResult["token"].(string)
 
-	// 使用 JWT 进行认证请求
+	// Make authenticated request with JWT
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	resp, err := client.Do(req)
@@ -313,7 +313,7 @@ func TestJWTTokenAuthentication(t *testing.T) {
 		t.Fatalf("authenticated request: expected 200, got %d", resp.StatusCode)
 	}
 
-	// 使用无效的 JWT
+	// Use invalid JWT
 	req2, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req2.Header.Set("Authorization", "Bearer invalid.jwt.token")
 	resp2, err := client.Do(req2)
@@ -325,10 +325,10 @@ func TestJWTTokenAuthentication(t *testing.T) {
 	if resp2.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("invalid JWT: expected 401, got %d", resp2.StatusCode)
 	}
-	t.Log("JWT 认证：有效令牌被接受，无效令牌被拒绝")
+	t.Log("JWT authentication: valid token accepted, invalid token rejected")
 }
 
-// TestLoginAndSessionFlow 测试完整的登录 + 会话流程。
+// TestLoginAndSessionFlow tests the complete login + session flow.
 func TestLoginAndSessionFlow(t *testing.T) {
 	_, ts := setupAuthSessionTestRouter(t)
 	client := ts.Client()
@@ -336,7 +336,7 @@ func TestLoginAndSessionFlow(t *testing.T) {
 	email := "session-flow-" + uuid.New().String()[:8] + "@test.com"
 	password := "Test123456"
 
-	// 注册
+	// Register
 	regBody := map[string]string{
 		"name":     "Session Flow User",
 		"email":    email,
@@ -347,7 +347,7 @@ func TestLoginAndSessionFlow(t *testing.T) {
 		t.Fatalf("register: expected 201, got %d", status)
 	}
 
-	// 登录
+	// Login
 	loginBody := map[string]string{
 		"email":    email,
 		"password": password,
@@ -365,7 +365,7 @@ func TestLoginAndSessionFlow(t *testing.T) {
 		t.Fatal("login: expected token in response")
 	}
 
-	// 使用登录令牌调用 whoami
+	// Call whoami with login token
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := client.Do(req)
@@ -383,10 +383,10 @@ func TestLoginAndSessionFlow(t *testing.T) {
 	if whoamiResult["email"] != email {
 		t.Fatalf("whoami email: expected %q, got %v", email, whoamiResult["email"])
 	}
-	t.Log("登录 + 会话流程：注册并登录 + whoami 成功")
+	t.Log("Login + session flow: register, login + whoami succeeded")
 }
 
-// parsePublicKeyPEM 是一个辅助函数，用于解析 PEM 编码的 RSA 公钥。
+// parsePublicKeyPEM is a helper function that parses a PEM-encoded RSA public key.
 func parsePublicKeyPEM(pemData []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(pemData)
 	if block == nil {

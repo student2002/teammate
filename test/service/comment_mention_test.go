@@ -1,4 +1,4 @@
-// comment_mention_test.go 覆盖评论 @提及 触发 SSE 事件（mention:trigger）的发布逻辑。
+// comment_mention_test.go covers the publish logic of comment @mention triggering SSE events (mention:trigger).
 package service_test
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// recordingHub 记录所有 Publish 调用，用于验证 SSE 事件发布的目标与载荷。
+// recordingHub records all Publish calls, used to verify SSE event publish targets and payloads.
 type recordingHub struct {
 	mu          sync.Mutex
 	subscribers []string
@@ -41,9 +41,9 @@ func (h *recordingHub) recorded() ([]string, []types.SSEEvent) {
 	return subs, events
 }
 
-// createOnlineRuntime 为指定代理创建在线 runtime 并返回其 ID。
-// publishToAgent 按 runtime 粒度投递（SSE 连接按 runtimeId 订阅），
-// 且只发给在线 runtime（离线直接丢弃），测试需模拟在线场景。
+// createOnlineRuntime creates an online runtime for the specified agent and returns its ID.
+// publishToAgent delivers at runtime granularity (SSE connections subscribe by runtimeId),
+// and only sends to online runtimes (offline ones are discarded), so tests need to simulate the online scenario.
 func createOnlineRuntime(t *testing.T, svc *service.Service, agentID string) string {
 	t.Helper()
 	rt, err := svc.Store.CreateRuntime(context.Background(), types.CreateRuntimeParams{
@@ -58,8 +58,8 @@ func createOnlineRuntime(t *testing.T, svc *service.Service, agentID string) str
 	return rt.ID
 }
 
-// TestCommentCreate_PublishesMentionTrigger 验证创建评论时，
-// 只向被 @提及 的 Agent 发布 mention:trigger，非 Agent 提及（成员/无效 ID）不发布。
+// TestCommentCreate_PublishesMentionTrigger verifies that when a comment is created,
+// mention:trigger is only published to @mentioned Agents, non-Agent mentions (members/invalid IDs) are not published.
 func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	hub := &recordingHub{}
@@ -71,9 +71,9 @@ func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 		TaskID:      env.taskID,
 		AuthorType:  "member",
 		AuthorID:    uuid.NewString(),
-		Content:     "请处理 @agent1",
+		Content:     "Please handle @agent1",
 		CommentType: "text",
-		Mentions:    []string{env.agent1ID, uuid.NewString()}, // agent1 + 非 Agent（成员/无效）
+		Mentions:    []string{env.agent1ID, uuid.NewString()}, // agent1 + non-Agent (member/invalid)
 	})
 	if err != nil {
 		t.Fatalf("create comment: %v", err)
@@ -102,8 +102,8 @@ func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 	}
 }
 
-// TestCommentUpdate_PublishesOnlyNewMentions 验证编辑评论时，
-// 只对新增的 @提及 发布 mention:trigger，已存在的提及不重复发布。
+// TestCommentUpdate_PublishesOnlyNewMentions verifies that when a comment is edited,
+// mention:trigger is only published for newly added @mentions, existing mentions are not re-published.
 func TestCommentUpdate_PublishesOnlyNewMentions(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	hub := &recordingHub{}
@@ -116,7 +116,7 @@ func TestCommentUpdate_PublishesOnlyNewMentions(t *testing.T) {
 		TaskID:      env.taskID,
 		AuthorType:  "member",
 		AuthorID:    uuid.NewString(),
-		Content:     "@agent1 处理",
+		Content:     "@agent1 handle this",
 		CommentType: "text",
 		Mentions:    []string{env.agent1ID},
 	})
@@ -124,14 +124,14 @@ func TestCommentUpdate_PublishesOnlyNewMentions(t *testing.T) {
 		t.Fatalf("create comment: %v", err)
 	}
 
-	// 首次创建后应只有 1 次发布
+	// After initial creation, there should be only 1 publish
 	subs, _ := hub.recorded()
 	if len(subs) != 1 {
 		t.Fatalf("expected 1 event after create, got %d", len(subs))
 	}
 
-	// 编辑：新增 @agent2，保留 @agent1 —— 只应发布 agent2
-	_, err = commentSvc.Update(context.Background(), uuid.MustParse(comment.ID), "@agent1 @agent2 处理",
+	// Edit: add @agent2, keep @agent1 — only agent2 should be published
+	_, err = commentSvc.Update(context.Background(), uuid.MustParse(comment.ID), "@agent1 @agent2 handle this",
 		[]uuid.UUID{uuid.MustParse(env.agent1ID), uuid.MustParse(env.agent2ID)})
 	if err != nil {
 		t.Fatalf("update comment: %v", err)

@@ -1,4 +1,4 @@
-// community_dto.go 为 community.go 提供参数构建器。
+// community_dto.go provides parameter builders for community.go.
 package handler
 
 import (
@@ -7,9 +7,9 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateCommunityWorkflowParams 从请求字段构建 types.CreateCommunityWorkflowParams。
+// buildCreateCommunityWorkflowParams builds types.CreateCommunityWorkflowParams from request fields.
 func buildCreateCommunityWorkflowParams(
 	name string,
 	description string,
@@ -38,7 +38,7 @@ func buildCreateCommunityWorkflowParams(
 	}
 }
 
-// nullRawToBytes 将 pqtype.NullRawMessage 转换为 []byte，无效时返回空 []byte。
+// nullRawToBytes converts a pqtype.NullRawMessage to []byte, returning an empty []byte when invalid.
 func nullRawToBytes(n pqtype.NullRawMessage) []byte {
 	if n.Valid {
 		return n.RawMessage

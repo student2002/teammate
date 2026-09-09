@@ -1,4 +1,4 @@
-// autostart_test.go 覆盖自动启动接口的测试。
+// autostart_test.go covers tests for auto-start endpoints.
 package handler_test
 
 import (
@@ -13,7 +13,7 @@ import (
 	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
-// TestAutoStartFirstNode 验证 CreateTask 在 assignee_type 为 'auto' 时自动启动第一个节点，为 'any_agent' 时保持为 'pending'。
+// TestAutoStartFirstNode verifies that CreateTask auto-starts the first node when assignee_type is 'auto', and keeps it 'pending' when it's 'any_agent'.
 func TestAutoStartFirstNode(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -23,11 +23,11 @@ func TestAutoStartFirstNode(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 测试 1：第一个 assignee_type='auto' 的节点应以 'in_progress' 启动
+	// Test 1: first node with assignee_type='auto' should start as 'in_progress'
 	projID := createProject(t, client, srv.URL, wsID, token)
 
-	// 创建一个第一个节点 assignee_type='auto' 的工作流模板
-	// 我们需要通过数据库创建它，因为 API 不易支持 'auto' 类型
+	// Create a workflow template with first node assignee_type='auto'
+	// We need to create it via database since the API doesn't easily support 'auto' type
 	q := dbQueries(t, db)
 	wsUUID := parseUUID(t, wsID)
 
@@ -43,7 +43,7 @@ func TestAutoStartFirstNode(t *testing.T) {
 		t.Fatalf("create auto workflow template: %v", err)
 	}
 
-	// 创建自动类型的第一个节点
+	// Create the auto-type first node
 	_, err = q.CreateTemplateNode(t.Context(), dbgen.CreateTemplateNodeParams{
 		TemplateID:      autoTpl.ID,
 		Name:            "auto-code",
@@ -61,7 +61,7 @@ func TestAutoStartFirstNode(t *testing.T) {
 		t.Fatalf("create auto template node: %v", err)
 	}
 
-	// 创建 standard 类型的第二个节点
+	// Create the standard-type second node
 	_, err = q.CreateTemplateNode(t.Context(), dbgen.CreateTemplateNodeParams{
 		TemplateID:      autoTpl.ID,
 		Name:            "review",
@@ -79,7 +79,7 @@ func TestAutoStartFirstNode(t *testing.T) {
 		t.Fatalf("create review template node: %v", err)
 	}
 
-	// 设置
+	// Setup
 	projUUID := parseUUID(t, projID)
 	_, _ = q.UpdateProject(t.Context(), dbgen.UpdateProjectParams{
 		ID:                projUUID,
@@ -92,7 +92,7 @@ func TestAutoStartFirstNode(t *testing.T) {
 		MaxReviewCycles:   sql.NullInt32{Int32: 3, Valid: true},
 	})
 
-	// 创建任务 → 验证第一个节点是 'in_progress' 而不是 'pending'
+	// Create task → verify first node is 'in_progress' not 'pending'
 	taskID, nodes := createTask(t, client, srv.URL, projID, autoTpl.ID.String(), token)
 	defer deleteTask(t, client, srv.URL, projID, taskID, token)
 
@@ -106,15 +106,15 @@ func TestAutoStartFirstNode(t *testing.T) {
 	}
 	t.Logf("Auto first node status: %v (correctly auto-started)", firstNode["status"])
 
-	// 测试 2：第一个 assignee_type='any_agent' 的节点应为 'pending'
-	// 注册第二个用户以获得独立的工作区
+	// Test 2: first node with assignee_type='any_agent' should be 'pending'
+	// Register a second user to get an independent workspace
 	token2, wsID2 := registerTestUser(t, client, srv.URL)
 
 	projID2 := createProject(t, client, srv.URL, wsID2, token2)
 	tplID2 := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID2, token2)
 	setProjectDefaultWorkflow(t, client, srv.URL, wsID2, projID2, tplID2, token2)
 
-	// 创建任务 → 验证第一个节点是 'pending'
+	// Create task → verify first node is 'pending'
 	taskID2, nodes2 := createTask(t, client, srv.URL, projID2, tplID2, token2)
 	defer deleteTask(t, client, srv.URL, projID2, taskID2, token2)
 

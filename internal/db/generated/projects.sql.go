@@ -29,7 +29,7 @@ type CreateProjectParams struct {
 	Context     sql.NullString `db:"context" json:"context"`
 }
 
-// 项目查询
+// Project queries
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
 	row := q.db.QueryRowContext(ctx, createProject,
 		arg.WorkspaceID,

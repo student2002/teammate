@@ -1,4 +1,4 @@
-// node_interrupt.go 提供任务节点中断操作的数据访问。
+// node_interrupt.go provides data access operations for task node interrupts.
 package store
 
 import (

@@ -26,7 +26,7 @@ type CreateGitCredentialParams struct {
 	CreatedBy    uuid.NullUUID `db:"created_by" json:"created_by"`
 }
 
-// Git 凭据查询
+// Git credential queries
 func (q *Queries) CreateGitCredential(ctx context.Context, arg CreateGitCredentialParams) (GitCredential, error) {
 	row := q.db.QueryRowContext(ctx, createGitCredential,
 		arg.ProjectID,

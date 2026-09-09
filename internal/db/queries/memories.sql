@@ -1,4 +1,4 @@
--- 记忆查询
+-- Memory queries
 
 -- name: CreateMemory :one
 INSERT INTO memories (workspace_id, source_task_id, type, title, content, tags, confidence, verified, metadata)

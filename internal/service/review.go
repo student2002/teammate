@@ -1,15 +1,15 @@
-// review.go 实现代码审查的业务逻辑，包括审查队列管理和自我审查检测。
+// review.go implements the business logic for code review, including review queue management and self-review detection.
 //
-// 本文件包含：
-//   - ReviewService 结构体：代码审查服务，封装审查队列和自我审查检测
-//   - ReviewQueueItem 结构体：审查队列条目，包含任务、节点和审查者信息
-//   - GetReviewQueue：获取指定项目的审查队列，返回 pending 和 in_progress 状态的审查节点
-//   - SelfReviewCheckResult 结构体：自我审查检查结果，包含作者、审查者和风险级别
-//   - CheckSelfReview：检查审查节点是否为自我审查，比较审查者和前序节点作者是否为同一代理
+// This file contains:
+//   - ReviewService struct: code review service, encapsulating the review queue and self-review detection
+//   - ReviewQueueItem struct: review queue entry, containing task, node, and reviewer information
+//   - GetReviewQueue: retrieves the review queue for a specified project, returning pending and in_progress review nodes
+//   - SelfReviewCheckResult struct: self-review check result, containing author, reviewer, and risk level
+//   - CheckSelfReview: checks whether a review node is a self-review, comparing whether the reviewer and the preceding node's author are the same agent
 //
-// 审查队列列出项目中所有待处理和进行中的审查节点，按创建时间正序排列。
-// 自我审查检测用于防止代理审查自己编写的代码，确保代码审查的独立性和客观性。
-// 自我审查被判定为高风险行为，需要在系统层面进行规避。
+// The review queue lists all pending and in-progress review nodes in a project, ordered by creation time ascending.
+// Self-review detection is used to prevent an agent from reviewing its own code, ensuring the independence and objectivity of code review.
+// Self-review is considered a high-risk behavior and must be avoided at the system level.
 package service
 
 import (
@@ -22,40 +22,40 @@ import (
 	"github.com/google/uuid"
 )
 
-// ReviewService 提供代码审查相关的业务逻辑。
+// ReviewService provides the business logic for code review.
 type ReviewService struct {
 	svc *Service
 }
 
-// NewReviewService 创建一个新的 ReviewService 实例。
+// NewReviewService creates a new ReviewService instance.
 func NewReviewService(svc *Service) *ReviewService {
 	return &ReviewService{svc: svc}
 }
 
-// ReviewQueueItem 表示审查队列中的一项，包含任务信息、节点信息和分配的审查者。
+// ReviewQueueItem represents an item in the review queue, containing task information, node information, and the assigned reviewer.
 type ReviewQueueItem struct {
-	TaskID       int32     `json:"task_id"`        // 关联的任务 ID
-	TaskTitle    string    `json:"task_title"`     // 任务标题
-	NodeID       string    `json:"node_id"`        // 节点 ID
-	NodeName     string    `json:"node_name"`      // 节点名称
-	NodeStatus   string    `json:"node_status"`    // 节点状态（pending/in_progress）
-	AssigneeType string    `json:"assignee_type"`  // 分配者类型（specific_agent/human）
-	AssigneeID   *string   `json:"assignee_id"`    // 分配者 ID
-	AgentName    *string   `json:"agent_name"`     // 分配的代理名称
-	CreatedAt    time.Time `json:"created_at"`     // 创建时间
-	UpdatedAt    time.Time `json:"updated_at"`     // 更新时间
+	TaskID       int32     `json:"task_id"`        // associated task ID
+	TaskTitle    string    `json:"task_title"`     // task title
+	NodeID       string    `json:"node_id"`        // node ID
+	NodeName     string    `json:"node_name"`      // node name
+	NodeStatus   string    `json:"node_status"`    // node status (pending/in_progress)
+	AssigneeType string    `json:"assignee_type"`  // assignee type (specific_agent/human)
+	AssigneeID   *string   `json:"assignee_id"`    // assignee ID
+	AgentName    *string   `json:"agent_name"`     // name of the assigned agent
+	CreatedAt    time.Time `json:"created_at"`     // creation time
+	UpdatedAt    time.Time `json:"updated_at"`     // update time
 }
 
-// GetReviewQueue 获取指定项目的审查队列，返回所有 pending 和 in_progress 状态的审查节点。
-// 按创建时间正序排列，最早的审查排在前面。
+// GetReviewQueue retrieves the review queue for the specified project, returning all pending and in_progress review nodes.
+// Ordered by creation time ascending, with the earliest reviews first.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - []ReviewQueueItem: 审查队列列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []ReviewQueueItem: review queue list
+//   - error: possible error (database query failure)
 func (s *ReviewService) GetReviewQueue(ctx context.Context, projectID uuid.UUID) ([]ReviewQueueItem, error) {
 	rows, err := s.svc.Store.GetReviewQueue(ctx, projectID)
 	if err != nil {
@@ -81,32 +81,32 @@ func (s *ReviewService) GetReviewQueue(ctx context.Context, projectID uuid.UUID)
 	return items, nil
 }
 
-// SelfReviewCheckResult 保存自我审查检查的结果。
+// SelfReviewCheckResult holds the result of a self-review check.
 type SelfReviewCheckResult struct {
-	IsSelfReview bool   `json:"is_self_review"` // 是否为自我审查
-	AuthorID     string `json:"author_id"`      // 代码作者 ID
-	ReviewerID   string `json:"reviewer_id"`    // 审查者 ID
-	RiskLevel    string `json:"risk_level"`     // 风险级别（none/high）
+	IsSelfReview bool   `json:"is_self_review"` // whether it is a self-review
+	AuthorID     string `json:"author_id"`      // code author ID
+	ReviewerID   string `json:"reviewer_id"`    // reviewer ID
+	RiskLevel    string `json:"risk_level"`     // risk level (none/high)
 }
 
-// CheckSelfReview 检查审查节点是否为自我审查。
-// 比较审查者和前序节点（代码作者）是否为同一代理。
-// 自我审查是高风险行为，需要避免。
+// CheckSelfReview checks whether a review node is a self-review.
+// It compares whether the reviewer and the assignee of the preceding node (code author) are the same agent.
+// Self-review is a high-risk behavior and should be avoided.
 //
-// 步骤：
-//  1. 获取审查节点的分配者（审查者）
-//  2. 获取前序节点的分配者（代码作者），按排序在前的最近节点查找（兼容 0 或 1 起始编号）
-//  3. 比较两者是否为同一代理
-//  4. 返回检查结果，包含风险级别
+// Steps:
+//  1. Get the assignee of the review node (reviewer)
+//  2. Get the assignee of the preceding node (code author), looking up the nearest node sorted earlier (compatible with 0- or 1-based numbering)
+//  3. Compare whether the two are the same agent
+//  4. Return the check result, including the risk level
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
-//   - nodeID: 审查节点 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
+//   - nodeID: review node ID
 //
-// 返回：
-//   - *SelfReviewCheckResult: 自我审查检查结果
-//   - error: 可能的错误（节点不存在）
+// Returns:
+//   - *SelfReviewCheckResult: self-review check result
+//   - error: possible error (node does not exist)
 func (s *ReviewService) CheckSelfReview(ctx context.Context, taskID int32, nodeID uuid.UUID) (*SelfReviewCheckResult, error) {
 	reviewerID, err := s.svc.Store.GetReviewNodeReviewer(ctx, nodeID, taskID)
 	if err != nil {

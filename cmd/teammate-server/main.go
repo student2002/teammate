@@ -1,12 +1,13 @@
-// cmd/teammate-server —— Teammate Server 独立部署二进制（部署工具链入口）。
+// cmd/teammate-server — Teammate Server standalone deployment binary (entry point for the deployment toolchain).
 //
-// 与 `teammate` 管理 CLI 解耦：CLI 定位为纯 HTTP API（零直连 DB），启动服务与
-// schema 迁移属运维前置操作，由本二进制承担。用法：
+// Decoupled from the `teammate` management CLI: the CLI is positioned as a pure HTTP API
+// (zero direct DB access), while starting the service and running schema migrations are
+// operations prior to deployment that are handled by this binary. Usage:
 //
-//	teammate-server                 # 启动 HTTP 服务（被测 ./internal/server）
-//	teammate-server migrate --path <dir>   # 执行数据库迁移
+//	teammate-server                 # start the HTTP service (under test: ./internal/server)
+//	teammate-server migrate --path <dir>   # run database migrations
 //
-// 详见 docs/命令行工具设计.md §5.10。配置经 TEAMS_* 环境变量注入（server.LoadConfig）。
+// See the CLI tool design doc (§5.10). Configuration is injected via TEAMS_* environment variables (server.LoadConfig).
 package main
 
 import (
@@ -23,7 +24,7 @@ var migratePath string
 
 var rootCmd = &cobra.Command{
 	Use:   "teammate-server",
-	Short: "Teammate Server（部署工具链）：启动服务 / 执行数据库迁移",
+	Short: "Teammate Server (deployment toolchain): start service / run database migrations",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := server.LoadConfig()
 

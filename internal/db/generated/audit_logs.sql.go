@@ -33,7 +33,7 @@ type CreateAuditLogParams struct {
 	RequestID    uuid.NullUUID         `db:"request_id" json:"request_id"`
 }
 
-// 审计日志
+// Audit log queries
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error) {
 	row := q.db.QueryRowContext(ctx, createAuditLog,
 		arg.WorkspaceID,

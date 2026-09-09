@@ -25,7 +25,7 @@ type CreateMemberParams struct {
 	Email string `db:"email" json:"email"`
 }
 
-// 成员
+// Members
 func (q *Queries) CreateMember(ctx context.Context, arg CreateMemberParams) (Member, error) {
 	row := q.db.QueryRowContext(ctx, createMember, arg.Name, arg.Email)
 	var i Member
@@ -54,7 +54,7 @@ type CreateWorkspaceParams struct {
 	IsDefault   bool           `db:"is_default" json:"is_default"`
 }
 
-// 工作区
+// Workspaces
 func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
 	row := q.db.QueryRowContext(ctx, createWorkspace,
 		arg.Name,
@@ -88,7 +88,7 @@ type CreateWorkspaceMemberParams struct {
 	Role        string    `db:"role" json:"role"`
 }
 
-// 工作区成员
+// Workspace members
 func (q *Queries) CreateWorkspaceMember(ctx context.Context, arg CreateWorkspaceMemberParams) (WorkspaceMember, error) {
 	row := q.db.QueryRowContext(ctx, createWorkspaceMember, arg.WorkspaceID, arg.MemberID, arg.Role)
 	var i WorkspaceMember

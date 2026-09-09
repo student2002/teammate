@@ -1,4 +1,4 @@
-// security_r2_test.go 覆盖安全回归（R2）测试。
+// security_r2_test.go covers security regression (R2) tests.
 package handler_test
 
 import (
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestAgentWriteOperationsRequireMemberRole 验证代理的写操作（创建、更新、删除、轮换 Token、授予/撤销权限）通过 requireWriteAccess 防御深度检查被阻止。
+// TestAgentWriteOperationsRequireMemberRole verifies that agent write operations (create, update, delete, rotate token, grant/revoke permissions) are blocked by the requireWriteAccess defense-in-depth check.
 func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -18,10 +18,10 @@ func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建代理
+	// Create agent
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 
-	// Agent 尝试创建另一个 Agent——应被禁止
+	// Agent attempts to create another agent — should be forbidden
 	body := map[string]interface{}{
 		"name":         "unauthorized-agent",
 		"provider":     "claude",
@@ -34,7 +34,7 @@ func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 		t.Errorf("agent creating agent: expected 403, got %d", status)
 	}
 
-	// Agent 尝试更新 Agent——应被禁止
+	// Agent attempts to update agent — should be forbidden
 	updateBody := map[string]interface{}{
 		"instructions": "hacked",
 	}
@@ -44,23 +44,23 @@ func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 		t.Errorf("agent updating agent: expected 403, got %d", status)
 	}
 
-	// Agent 尝试删除 Agent——应被禁止
+	// Agent attempts to delete agent — should be forbidden
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodDelete, url, agentToken, nil)
 	if status != http.StatusForbidden {
 		t.Errorf("agent deleting agent: expected 403, got %d", status)
 	}
 }
 
-// TestProjectGetVerifiesWorkspace 验证 GetProject 检查工作区所有权。注意：此测试受测试路由器的 URL 参数处理限制。
+// TestProjectGetVerifiesWorkspace verifies that GetProject checks workspace ownership. Note: this test is limited by the test router's URL parameter handling.
 func TestProjectGetVerifiesWorkspace(t *testing.T) {
-	// 此测试被跳过，因为测试路由器的中间件会添加 workspaceId
-	// 作为 "id" URL 参数，这与项目的 "id" 参数冲突。
-	// checkProjectWorkspace 逻辑通过服务层测试进行验证
-	// 以及 CheckMemberProjectAccess 的工作区校验。
+	// This test is skipped because the test router's middleware adds workspaceId
+	// as the "id" URL parameter, which conflicts with the project's "id" parameter.
+	// The checkProjectWorkspace logic is verified through service-layer tests
+	// and workspace validation in CheckMemberProjectAccess.
 	t.Skip("test router URL param conflict — covered by service tests")
 }
 
-// TestCommentAuthorDerivedFromClaims 验证评论的 author_type 和 author_id 从认证声明派生，而非请求体。
+// TestCommentAuthorDerivedFromClaims verifies that comment author_type and author_id are derived from auth claims, not the request body.
 func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -76,8 +76,8 @@ func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 
 	taskID, _ := createTask(t, client, srv.URL, projID, tplID, token)
 
-	// 创建评论——请求体不再包含 author_type/author_id 字段
-	// 服务器应从 JWT 声明中推导这些字段
+	// Create comment — the request body no longer contains author_type/author_id fields
+	// The server should derive these fields from JWT claims
 	body := map[string]interface{}{
 		"content":  "Test comment from member",
 		"mentions": []string{},
@@ -89,7 +89,7 @@ func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 	}
 }
 
-// TestTokenUsageAgentMustBeAssignee 验证代理只能报告其分配到的节点的 Token 用量。
+// TestTokenUsageAgentMustBeAssignee verifies that agents can only report token usage for nodes they are assigned to.
 func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -113,10 +113,10 @@ func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	codeNodeID := nodes[0]["id"].(string)
 
-	// Agent1 认领 code 节点
+	// Agent1 claims the code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
 
-	// Agent2 尝试为 agent1 的节点上报 Token 用量——应被禁止
+	// Agent2 attempts to report token usage for agent1's node — should be forbidden
 	body := map[string]interface{}{
 		"task_node_id":  codeNodeID,
 		"model":         "claude-3.5-sonnet",
@@ -130,14 +130,14 @@ func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
 		t.Errorf("agent2 reporting token usage for agent1's node: expected 403, got %d", status)
 	}
 
-	// Agent1 可以为自己节点的 Token 用量上报
+	// Agent1 can report token usage for its own node
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body)
 	if status != http.StatusCreated {
 		t.Errorf("agent1 reporting token usage for own node: expected 201, got %d", status)
 	}
 }
 
-// TestUpdateSummaryAgentMustBeAssignee 验证代理只能更新其分配到的节点的摘要。
+// TestUpdateSummaryAgentMustBeAssignee verifies that agents can only update summaries for nodes they are assigned to.
 func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
@@ -161,10 +161,10 @@ func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	codeNodeID := nodes[0]["id"].(string)
 
-	// Agent1 认领 code 节点
+	// Agent1 claims the code node
 	claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
 
-	// Agent2 尝试更新 agent1 节点的摘要——应被禁止
+	// Agent2 attempts to update agent1's node summary — should be forbidden
 	body := map[string]interface{}{
 		"summary": "Hacked summary",
 	}
@@ -174,7 +174,7 @@ func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
 		t.Errorf("agent2 updating summary for agent1's node: expected 403, got %d", status)
 	}
 
-	// Agent1 可以更新自己节点的摘要
+	// Agent1 can update its own node summary
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body)
 	if status != http.StatusOK {
 		t.Errorf("agent1 updating summary for own node: expected 200, got %d", status)

@@ -1,10 +1,10 @@
-// execution_session.go 提供执行会话的数据访问操作。
+// execution_session.go provides data access operations for execution sessions.
 //
-// 执行会话（Execution Session）追踪 Agent 每次执行节点任务的完整生命周期，
-// 包含会话创建、状态更新、完成/中断处理。
+// An Execution Session tracks the full lifecycle of an Agent executing a node task each time,
+// including session creation, state updates, and completion/interruption handling.
 //
-// 每个会话关联一个 Runtime、一个 TaskNode，记录工作目录、分支、
-// 提交哈希、Claude 会话 ID 等执行上下文。
+// Each session is associated with one Runtime and one TaskNode, and records execution context
+// such as the working directory, branch, commit hash, and Claude session ID.
 package store
 
 import (
@@ -17,15 +17,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateExecutionSession 创建一条新的执行会话记录。
+// CreateExecutionSession creates a new execution session record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 会话创建参数，包含 runtime ID、node ID、工作目录等
+// Parameters:
+//   - ctx: request context
+//   - params: session creation parameters, including runtime ID, node ID, working directory, etc.
 //
-// 返回：
-//   - types.ExecutionSession: 创建的会话记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the created session record
+//   - error: returns an error if creation fails
 func (s *Store) CreateExecutionSession(ctx context.Context, params types.CreateExecutionSessionParams) (types.ExecutionSession, error) {
 	dbParams, err := FromDomainCreateExecutionSessionParams(params)
 	if err != nil {
@@ -38,15 +38,15 @@ func (s *Store) CreateExecutionSession(ctx context.Context, params types.CreateE
 	return ToDomainExecutionSession(session)
 }
 
-// GetExecutionSession 根据 ID 查询单条执行会话记录。
+// GetExecutionSession queries a single execution session record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 会话的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the session UUID
 //
-// 返回：
-//   - types.ExecutionSession: 会话记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the session record
+//   - error: returns an error if the query fails
 func (s *Store) GetExecutionSession(ctx context.Context, id uuid.UUID) (types.ExecutionSession, error) {
 	session, err := s.q.GetExecutionSession(ctx, id)
 	if err != nil {
@@ -55,18 +55,18 @@ func (s *Store) GetExecutionSession(ctx context.Context, id uuid.UUID) (types.Ex
 	return ToDomainExecutionSession(session)
 }
 
-// GetActiveSessionByAgentAndWorkdir 查询指定 Agent 和工作目录下最近的已完成会话。
+// GetActiveSessionByAgentAndWorkdir queries the most recent completed session for the specified Agent and working directory.
 //
-// 用于 Agent 重连时恢复之前的执行上下文。
+// Used to restore the previous execution context when an Agent reconnects.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
-//   - workdir: 工作目录路径
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent UUID
+//   - workdir: working directory path
 //
-// 返回：
-//   - types.ExecutionSession: 会话记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the session record
+//   - error: returns an error if the query fails
 func (s *Store) GetActiveSessionByAgentAndWorkdir(ctx context.Context, agentID uuid.UUID, workdir string) (types.ExecutionSession, error) {
 	session, err := s.q.GetActiveSessionByAgentAndWorkdir(ctx, db.GetActiveSessionByAgentAndWorkdirParams{
 		AgentID: uuid.NullUUID{UUID: agentID, Valid: true},
@@ -78,18 +78,18 @@ func (s *Store) GetActiveSessionByAgentAndWorkdir(ctx context.Context, agentID u
 	return ToDomainExecutionSession(session)
 }
 
-// UpdateSessionClaudeID 更新执行会话的 Claude 会话 ID。
+// UpdateSessionClaudeID updates the Claude session ID of an execution session.
 //
-// Claude 会话 ID 用于恢复之前的对话上下文，避免重复注入完整背景。
+// The Claude session ID is used to restore the previous conversation context, avoiding re-injecting the full background.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 会话的 UUID
-//   - claudeSessionID: Claude 会话 ID
+// Parameters:
+//   - ctx: request context
+//   - id: the session UUID
+//   - claudeSessionID: Claude session ID
 //
-// 返回：
-//   - types.ExecutionSession: 更新后的会话记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the updated session record
+//   - error: returns an error if the update fails
 func (s *Store) UpdateSessionClaudeID(ctx context.Context, id uuid.UUID, claudeSessionID string) (types.ExecutionSession, error) {
 	session, err := s.q.UpdateSessionClaudeID(ctx, db.UpdateSessionClaudeIDParams{
 		ID:              id,
@@ -101,16 +101,16 @@ func (s *Store) UpdateSessionClaudeID(ctx context.Context, id uuid.UUID, claudeS
 	return ToDomainExecutionSession(session)
 }
 
-// CompleteExecutionSession 将执行会话标记为已完成，记录最终提交哈希。
+// CompleteExecutionSession marks an execution session as completed and records the final commit hash.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 会话的 UUID
-//   - headCommit: 完成时的 Git HEAD 提交哈希
+// Parameters:
+//   - ctx: request context
+//   - id: the session UUID
+//   - headCommit: the Git HEAD commit hash at completion
 //
-// 返回：
-//   - types.ExecutionSession: 更新后的会话记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the updated session record
+//   - error: returns an error if the update fails
 func (s *Store) CompleteExecutionSession(ctx context.Context, id uuid.UUID, headCommit string) (types.ExecutionSession, error) {
 	session, err := s.q.CompleteExecutionSession(ctx, db.CompleteExecutionSessionParams{
 		ID:         id,
@@ -122,17 +122,17 @@ func (s *Store) CompleteExecutionSession(ctx context.Context, id uuid.UUID, head
 	return ToDomainExecutionSession(session)
 }
 
-// InterruptExecutionSession 将执行会话标记为已中断。
+// InterruptExecutionSession marks an execution session as interrupted.
 //
-// 中断由 task:interrupt 事件触发，Agent 收到后执行 SIGTERM→SIGKILL 停止进程。
+// Interruption is triggered by a task:interrupt event; after receiving it, the Agent executes SIGTERM->SIGKILL to stop the process.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 会话的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the session UUID
 //
-// 返回：
-//   - types.ExecutionSession: 更新后的会话记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the updated session record
+//   - error: returns an error if the update fails
 func (s *Store) InterruptExecutionSession(ctx context.Context, id uuid.UUID) (types.ExecutionSession, error) {
 	session, err := s.q.InterruptExecutionSession(ctx, id)
 	if err != nil {
@@ -141,17 +141,17 @@ func (s *Store) InterruptExecutionSession(ctx context.Context, id uuid.UUID) (ty
 	return ToDomainExecutionSession(session)
 }
 
-// GetLatestCompletedSessionByAgent 查询指定 Agent 最近一次包含 Claude 会话 ID 的已完成会话。
+// GetLatestCompletedSessionByAgent queries the most recent completed session containing a Claude session ID for the specified Agent.
 //
-// 用于获取可恢复的 Claude 会话上下文。
+// Used to obtain a recoverable Claude session context.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent UUID
 //
-// 返回：
-//   - types.ExecutionSession: 会话记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.ExecutionSession: the session record
+//   - error: returns an error if the query fails
 func (s *Store) GetLatestCompletedSessionByAgent(ctx context.Context, agentID uuid.UUID) (types.ExecutionSession, error) {
 	session, err := s.q.GetLatestCompletedSessionByAgent(ctx, uuid.NullUUID{UUID: agentID, Valid: true})
 	if err != nil {

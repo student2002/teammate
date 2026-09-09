@@ -1,7 +1,7 @@
-// agent.go 提供 AI 代理（Agent）的 CRUD 管理、技能绑定、MCP 服务器绑定、Token 轮换及权限管理等 HTTP API 端点。
+// agent.go provides HTTP API endpoints for AI agent (Agent) CRUD management, skill binding, MCP server binding, Token rotation, and permission management.
 //
-// 所有端点均需认证，写操作需要 member 及以上角色权限。
-// Agent 的 custom_env 字段仅对写权限用户（owner/admin/member）可见，防止密钥泄露。
+// All endpoints require authentication; write operations require member or higher role permissions.
+// The agent's custom_env field is only visible to users with write permissions (owner/admin/member) to prevent secret leakage.
 
 package handler
 
@@ -21,17 +21,17 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// AgentHandler 处理 AI 代理相关的 HTTP 请求，包括创建、查询、更新、删除代理，管理代理的技能和 MCP 服务器绑定，以及代理权限控制。
+// AgentHandler handles HTTP requests related to AI agents, including creating, querying, updating, and deleting agents, managing agent skill and MCP server bindings, and agent permission control.
 type AgentHandler struct {
 	Svc *service.Service
 }
 
-// NewAgentHandler 创建 AgentHandler 实例。
+// NewAgentHandler creates an AgentHandler instance.
 func NewAgentHandler(svc *service.Service) *AgentHandler {
 	return &AgentHandler{Svc: svc}
 }
 
-// Routes 返回 Agent 的完整路由表（包含读写操作）。
+// Routes returns the complete route table for Agents (including read and write operations).
 func (h *AgentHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -49,14 +49,14 @@ func (h *AgentHandler) Routes() chi.Router {
 		r.Delete("/mcp-servers/{serverId}", h.RemoveMcpServer)
 		r.Get("/in-progress-nodes", h.GetInProgressNodes)
 
-		// daemon-only MCP 执行端点：返回解密后的 env_vars，仅 Agent 自身可访问
+		// daemon-only MCP execution endpoint: returns decrypted env_vars, only accessible by the Agent itself
 		r.Get("/execution/mcp-servers", h.GetExecutionMcpServers)
 	})
 
 	return r
 }
 
-// ReadRoutes 返回 Agent 的只读路由表（仅查询操作）。
+// ReadRoutes returns the read-only route table for Agents (query operations only).
 func (h *AgentHandler) ReadRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -70,7 +70,7 @@ func (h *AgentHandler) ReadRoutes() chi.Router {
 	return r
 }
 
-// WriteRoutes 返回 Agent 的写入路由表（仅修改操作）。
+// WriteRoutes returns the write route table for Agents (modification operations only).
 func (h *AgentHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -88,63 +88,63 @@ func (h *AgentHandler) WriteRoutes() chi.Router {
 }
 
 
-// CreateAgent 处理 POST /workspaces/{workspaceId}/agents 端点，创建新的 AI 代理并生成 API Token。
+// CreateAgent handles the POST /workspaces/{workspaceId}/agents endpoint, creating a new AI agent and generating an API Token.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，代理名称（必填）
-//   - provider: string，代理提供者，默认 "claude"
-//   - instructions: string，代理执行指令
-//   - model: string，使用模型
-//   - status: string，初始状态，默认 "offline"
-//   - custom_env: object，自定义环境变量
-//   - extra_args: string[]，额外命令行参数
-//   - git_name: string，Git 提交用户名
-//   - git_email: string，Git 提交邮箱
+// Request body:
+//   - name: string, agent name (required)
+//   - provider: string, agent provider, default "claude"
+//   - instructions: string, agent execution instructions
+//   - model: string, model to use
+//   - status: string, initial status, default "offline"
+//   - custom_env: object, custom environment variables
+//   - extra_args: string[], extra command-line arguments
+//   - git_name: string, Git commit username
+//   - git_email: string, Git commit email
 //
-// 响应：
-//   - 201: 成功创建，返回代理信息和 API Token
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限（需要 member 及以上角色）
+// Response:
+//   - 201: created successfully, returns agent info and API Token
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission (requires member or higher role)
 //
-// 处理流程：
-//  1. 验证认证状态和写入权限
-//  2. 解析工作区 ID 和请求体
-//  3. 设置默认值（provider=claude, status=offline）
-//  4. 调用 service 创建代理并生成 API Token
-//  5. 记录审计日志
+// Processing flow:
+//  1. verify authentication status and write permission
+//  2. parse workspace ID and request body
+//  3. set default values (provider=claude, status=offline)
+//  4. call service to create the agent and generate an API Token
+//  5. record audit log
 func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态
+	// verify authentication status
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
-	// 验证写入权限（member 及以上）
+	// verify write permission (member or higher)
 	if err := requireWriteAccess(claims); err != nil {
 		response.Forbidden(w, err.Error())
 		return
 	}
 
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req createAgentRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 设置默认值
+	// set default values
 	provider := req.Provider
 	if provider == "" {
 		provider = AgentProviderClaude
@@ -155,7 +155,7 @@ func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		status = AgentStatusOffline
 	}
 
-	// custom_env 直接以 json.RawMessage 透传给 service
+	// custom_env is passed through to the service directly as json.RawMessage
 	customEnv := req.CustomEnv
 
 	extraArgs := req.ExtraArgs
@@ -173,13 +173,13 @@ func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 
 	agentSvc := service.NewAgentService(h.Svc)
 
-	// 获取创建者的成员 ID，用于权限授予
+	// get the creator's member ID for permission granting
 	var grantedBy uuid.UUID
 	if claims.UserID != uuid.Nil {
 		grantedBy = claims.UserID
 	}
 
-	// 调用 service 创建代理
+	// call service to create the agent
 	result, err := agentSvc.Create(r.Context(), buildCreateAgentParams(
 		workspaceID, req.Name, provider, req.Instructions, req.Model, status, customEnv, extraArgs, gitName, gitEmail,
 	), grantedBy)
@@ -188,14 +188,14 @@ func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 返回创建结果（包含 API Token）
+	// return creation result (including the API Token)
 	w.WriteHeader(http.StatusCreated)
 	response.JSON(w, r, createAgentResponse{
 		agentResponse: agentToResponseWithEnv(result.Agent),
 		APIToken:      result.APIToken,
 	})
 
-	// 记录审计日志
+	// record audit log
 	auditSvc := service.NewAuditService(h.Svc)
 	if err := auditSvc.Log(r.Context(), service.AuditLogEntry{
 		WorkspaceID:  workspaceID,
@@ -211,16 +211,16 @@ func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListAgents 处理 GET /workspaces/{workspaceId}/agents 端点，列出工作区下的所有 AI 代理。
+// ListAgents handles the GET /workspaces/{workspaceId}/agents endpoint, listing all AI agents under the workspace.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回代理列表
-//   - 400: 工作区 ID 无效
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns the agent list
+//   - 400: invalid workspace ID
+//   - 401: not authenticated
 func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -235,7 +235,7 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 列表响应不包含 custom_env（防止密钥泄露）
+	// list response does not include custom_env (to prevent secret leakage)
 	result := make([]agentResponse, len(agents))
 	agentIDs := make([]uuid.UUID, len(agents))
 	for i, a := range agents {
@@ -248,7 +248,7 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 		agentIDs[i] = parsed
 	}
 
-	// 批量填充 Token 用量（从 token_usage 表实时聚合）
+	// batch-fill Token usage (aggregated in real time from the token_usage table)
 	tuSvc := service.NewTokenUsageService(h.Svc)
 	if tokenMap, err := tuSvc.GetByAgents(r.Context(), agentIDs); err == nil {
 		for i := range result {
@@ -262,17 +262,17 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, result)
 }
 
-// GetAgent 处理 GET /workspaces/{workspaceId}/agents/{id} 端点，查询指定 AI 代理的详细信息。
+// GetAgent handles the GET /workspaces/{workspaceId}/agents/{id} endpoint, querying the detailed info of the specified AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回代理详情
-//   - 400: 代理 ID 无效
-//   - 401: 未认证
-//   - 404: 代理不存在或不在当前工作区
+// Response:
+//   - 200: successfully returns agent details
+//   - 400: invalid agent ID
+//   - 401: not authenticated
+//   - 404: agent does not exist or is not in the current workspace
 func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -280,13 +280,13 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	agent := checkAgentWorkspace(h.Svc, w, r, id)
 	if agent == nil {
 		return
 	}
 
-	// 仅写权限用户可查看 custom_env
+	// only users with write permission can view custom_env
 	claims, _ := svcmw.GetAuthFromContext(r.Context())
 	if requireWriteAccess(claims) == nil {
 		response.JSON(w, r, agentToResponseWithEnv(*agent))
@@ -296,29 +296,29 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// UpdateAgent 处理 PUT /workspaces/{workspaceId}/agents/{id} 端点，更新 AI 代理的配置信息。
+// UpdateAgent handles the PUT /workspaces/{workspaceId}/agents/{id} endpoint, updating the AI agent's configuration info.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - instructions: string，代理执行指令
-//   - model: string，使用模型
-//   - status: string，代理状态
-//   - custom_env: object，自定义环境变量
-//   - extra_args: string[]，额外命令行参数
-//   - git_name: string，Git 提交用户名
-//   - git_email: string，Git 提交邮箱
+// Request body:
+//   - instructions: string, agent execution instructions
+//   - model: string, model to use
+//   - status: string, agent status
+//   - custom_env: object, custom environment variables
+//   - extra_args: string[], extra command-line arguments
+//   - git_name: string, Git commit username
+//   - git_email: string, Git commit email
 //
-// 响应：
-//   - 200: 成功返回更新后的代理信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理不存在
+// Response:
+//   - 200: successfully returns the updated agent info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent does not exist
 func (h *AgentHandler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -329,26 +329,26 @@ func (h *AgentHandler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, id) == nil {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req updateAgentRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// custom_env 直接以 json.RawMessage 透传给 service
+	// custom_env is passed through to the service directly as json.RawMessage
 	customEnv := req.CustomEnv
 
 	extraArgs := req.ExtraArgs
@@ -356,7 +356,7 @@ func (h *AgentHandler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		extraArgs = []string{}
 	}
 
-	// 调用 service 更新代理
+	// call service to update the agent
 	agentSvc := service.NewAgentService(h.Svc)
 	agent, err := agentSvc.Update(r.Context(), buildUpdateAgentParams(
 		id, req.Instructions, req.Model, req.Status, customEnv, extraArgs, req.GitName, req.GitEmail,
@@ -373,20 +373,20 @@ func (h *AgentHandler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, agentToResponseWithEnv(agent))
 }
 
-// DeleteAgent 处理 DELETE /workspaces/{workspaceId}/agents/{id} 端点，删除指定的 AI 代理。
+// DeleteAgent handles the DELETE /workspaces/{workspaceId}/agents/{id} endpoint, deleting the specified AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功删除
-//   - 400: 代理 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理不存在
+// Response:
+//   - 204: deleted successfully
+//   - 400: invalid agent ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent does not exist
 func (h *AgentHandler) DeleteAgent(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -397,27 +397,27 @@ func (h *AgentHandler) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	agent := checkAgentWorkspace(h.Svc, w, r, id)
 	if agent == nil {
 		return
 	}
 
-	// 调用 service 删除代理
+	// call service to delete the agent
 	agentSvc := service.NewAgentService(h.Svc)
 	if err := agentSvc.Delete(r.Context(), id); err != nil {
 		response.InternalServerError(w, err)
 		return
 	}
 
-	// 记录审计日志
+	// record audit log
 	workspaceID, _ := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	auditSvc := service.NewAuditService(h.Svc)
 	if err := auditSvc.Log(r.Context(), service.AuditLogEntry{
@@ -436,17 +436,17 @@ func (h *AgentHandler) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListSkills 处理 GET /workspaces/{workspaceId}/agents/{id}/skills 端点，列出 AI 代理已绑定的技能列表。
+// ListSkills handles the GET /workspaces/{workspaceId}/agents/{id}/skills endpoint, listing the skills bound to the AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回技能列表
-//   - 400: 代理 ID 无效
-//   - 401: 未认证
-//   - 404: 代理不存在
+// Response:
+//   - 200: successfully returns the skill list
+//   - 400: invalid agent ID
+//   - 401: not authenticated
+//   - 404: agent does not exist
 func (h *AgentHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -454,7 +454,7 @@ func (h *AgentHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
 		return
 	}
@@ -469,7 +469,7 @@ func (h *AgentHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, skills)
 }
 
-// ListMcpServers 处理 GET /workspaces/{workspaceId}/agents/{id}/mcp-servers 端点，列出 AI 代理已绑定的 MCP 服务器。
+// ListMcpServers handles the GET /workspaces/{workspaceId}/agents/{id}/mcp-servers endpoint, listing the MCP servers bound to the AI agent.
 func (h *AgentHandler) ListMcpServers(w http.ResponseWriter, r *http.Request) {
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -497,12 +497,12 @@ func (h *AgentHandler) ListMcpServers(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, servers)
 }
 
-// GetExecutionMcpServers 处理 GET /workspaces/{workspaceId}/agents/{id}/execution/mcp-servers 端点，
-// 返回 Agent 执行所需的 MCP 服务器列表（env_vars 已解密）。
+// GetExecutionMcpServers handles the GET /workspaces/{workspaceId}/agents/{id}/execution/mcp-servers endpoint,
+// returning the list of MCP servers needed for Agent execution (env_vars decrypted).
 //
-// 鉴权：仅 Agent 自身可访问（user_type=agent 且 user_id 匹配路径 {id}），
-// 人类用户和其他 Agent 访问返回 403。
-// 该端点专供 Agent daemon 执行时使用，返回完整解密后的环境变量。
+// Authentication: only the Agent itself can access (user_type=agent and user_id matches the path {id}),
+// human users and other Agents get 403.
+// This endpoint is dedicated to Agent daemon execution and returns the fully decrypted environment variables.
 func (h *AgentHandler) GetExecutionMcpServers(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -516,7 +516,7 @@ func (h *AgentHandler) GetExecutionMcpServers(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// 强鉴权：仅 Agent 自身可访问
+	// strong authentication: only the Agent itself can access
 	if claims.UserType != "agent" || claims.UserID != agentID {
 		response.Forbidden(w, "only the agent itself can access execution MCP servers")
 		return
@@ -534,24 +534,24 @@ func (h *AgentHandler) GetExecutionMcpServers(w http.ResponseWriter, r *http.Req
 
 
 
-// AddSkill 处理 POST /workspaces/{workspaceId}/agents/{id}/skills 端点，为 AI 代理绑定一个技能。
+// AddSkill handles the POST /workspaces/{workspaceId}/agents/{id}/skills endpoint, binding a skill to the AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - skill_id: UUID，技能 ID（必填）
-//   - enabled: bool，是否启用
+// Request body:
+//   - skill_id: UUID, skill ID (required)
+//   - enabled: bool, whether to enable
 //
-// 响应：
-//   - 201: 成功绑定技能
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理不存在
+// Response:
+//   - 201: skill bound successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent does not exist
 func (h *AgentHandler) AddSkill(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -562,19 +562,19 @@ func (h *AgentHandler) AddSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req addSkillRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
@@ -584,7 +584,7 @@ func (h *AgentHandler) AddSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 调用 service 绑定技能
+	// call service to bind the skill
 	agentSvc := service.NewAgentService(h.Svc)
 	skill, err := agentSvc.AddSkill(r.Context(), buildAddAgentSkillParams(agentID, req.SkillID, req.Enabled))
 	if err != nil {
@@ -596,20 +596,20 @@ func (h *AgentHandler) AddSkill(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, skill)
 }
 
-// RemoveSkill 处理 DELETE /workspaces/{workspaceId}/agents/{id}/skills/{skillId} 端点，移除 AI 代理的指定技能。
+// RemoveSkill handles the DELETE /workspaces/{workspaceId}/agents/{id}/skills/{skillId} endpoint, removing the specified skill from the AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功移除
-//   - 400: 代理 ID 或技能 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理或技能不存在
+// Response:
+//   - 204: removed successfully
+//   - 400: invalid agent ID or skill ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent or skill does not exist
 func (h *AgentHandler) RemoveSkill(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -620,26 +620,26 @@ func (h *AgentHandler) RemoveSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
 		return
 	}
 
-	// 解析技能 ID
+	// parse skill ID
 	skillID, err := uuid.Parse(chi.URLParam(r, "skillId"))
 	if err != nil {
 		response.BadRequest(w, "invalid skill id")
 		return
 	}
 
-	// 调用 service 移除技能
+	// call service to remove the skill
 	agentSvc := service.NewAgentService(h.Svc)
 	if err := agentSvc.RemoveSkill(r.Context(), buildRemoveAgentSkillParams(agentID, skillID)); err != nil {
 		response.InternalServerError(w, err)
@@ -650,24 +650,24 @@ func (h *AgentHandler) RemoveSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// AddMcpServer 处理 POST /workspaces/{workspaceId}/agents/{id}/mcp-servers 端点，为 AI 代理绑定 MCP 服务器。
+// AddMcpServer handles the POST /workspaces/{workspaceId}/agents/{id}/mcp-servers endpoint, binding an MCP server to the AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - mcp_server_id: UUID，MCP 服务器 ID（必填）
-//   - enabled: bool，是否启用
+// Request body:
+//   - mcp_server_id: UUID, MCP server ID (required)
+//   - enabled: bool, whether to enable
 //
-// 响应：
-//   - 201: 成功绑定 MCP 服务器
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理不存在
+// Response:
+//   - 201: MCP server bound successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent does not exist
 func (h *AgentHandler) AddMcpServer(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -678,19 +678,19 @@ func (h *AgentHandler) AddMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req addMcpServerRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
@@ -700,7 +700,7 @@ func (h *AgentHandler) AddMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 调用 service 绑定 MCP 服务器
+	// call service to bind the MCP server
 	agentSvc := service.NewAgentService(h.Svc)
 	server, err := agentSvc.AddMcpServer(r.Context(), buildAddAgentMcpServerParams(agentID, req.McpServerID, req.Enabled))
 	if err != nil {
@@ -712,20 +712,20 @@ func (h *AgentHandler) AddMcpServer(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, server)
 }
 
-// RemoveMcpServer 处理 DELETE /workspaces/{workspaceId}/agents/{id}/mcp-servers/{serverId} 端点，移除 AI 代理绑定的 MCP 服务器。
+// RemoveMcpServer handles the DELETE /workspaces/{workspaceId}/agents/{id}/mcp-servers/{serverId} endpoint, removing the MCP server bound to the AI agent.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 204: 成功移除
-//   - 400: 代理 ID 或服务器 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理或 MCP 服务器不存在
+// Response:
+//   - 204: removed successfully
+//   - 400: invalid agent ID or server ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent or MCP server does not exist
 func (h *AgentHandler) RemoveMcpServer(w http.ResponseWriter, r *http.Request) {
-	// 验证认证状态和写入权限
+	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
@@ -736,26 +736,26 @@ func (h *AgentHandler) RemoveMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 解析代理 ID
+	// parse agent ID
 	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid agent id")
 		return
 	}
 
-	// 验证代理属于当前工作区
+	// verify the agent belongs to the current workspace
 	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
 		return
 	}
 
-	// 解析服务器 ID
+	// parse server ID
 	serverID, err := uuid.Parse(chi.URLParam(r, "serverId"))
 	if err != nil {
 		response.BadRequest(w, "invalid server id")
 		return
 	}
 
-	// 调用 service 移除 MCP 服务器
+	// call service to remove the MCP server
 	agentSvc := service.NewAgentService(h.Svc)
 	if err := agentSvc.RemoveMcpServer(r.Context(), buildRemoveAgentMcpServerParams(agentID, serverID)); err != nil {
 		response.InternalServerError(w, err)
@@ -766,25 +766,25 @@ func (h *AgentHandler) RemoveMcpServer(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// RotateAgentToken 处理 POST /workspaces/{workspaceId}/agents/{id}/rotate-token 端点，轮换 AI 代理的 API Token。
+// RotateAgentToken handles the POST /workspaces/{workspaceId}/agents/{id}/rotate-token endpoint, rotating the AI agent's API Token.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回新的 API Token
-//   - 400: 代理 ID 无效
-//   - 401: 未认证
-//   - 403: 无权限
-//   - 404: 代理不存在
-// --- Agent 权限管理 ---
+// Response:
+//   - 200: successfully returns the new API Token
+//   - 400: invalid agent ID
+//   - 401: not authenticated
+//   - 403: no permission
+//   - 404: agent does not exist
+// --- Agent permission management ---
 
-// GetInProgressNodes 处理 GET /agents/{id}/in-progress-nodes 端点，
-// 查询指定 Agent 认领但未完成（in_progress）的节点，用于 Agent 重启后恢复执行。
+// GetInProgressNodes handles the GET /agents/{id}/in-progress-nodes endpoint,
+// querying nodes claimed by the specified Agent but not yet completed (in_progress), used to resume execution after an Agent restart.
 //
-// 鉴权：仅 Agent 自身可查询（user_type=agent 且 user_id 匹配路径 {id}），
-// 人类用户无权查询此端点。
+// Authentication: only the Agent itself can query (user_type=agent and user_id matches the path {id}),
+// human users are not allowed to query this endpoint.
 func (h *AgentHandler) GetInProgressNodes(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -803,7 +803,7 @@ func (h *AgentHandler) GetInProgressNodes(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 鉴权：仅 Agent 自身可查询
+	// authentication: only the Agent itself can query
 	if claims.UserType != "agent" || claims.UserID != agentID {
 		response.Forbidden(w, "only the agent itself can query its in-progress nodes")
 		return

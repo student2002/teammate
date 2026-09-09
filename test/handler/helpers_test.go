@@ -1,4 +1,4 @@
-// helpers_test.go 覆盖 handler 层辅助函数的测试。
+// helpers_test.go provides test helpers for the handler layer.
 package handler_test
 
 import (
@@ -29,15 +29,15 @@ import (
 	"github.com/teammate/server/test/testdb"
 )
 
-// TestMain 确保测试数据库存在后再运行测试。
+// TestMain ensures the test database exists before running tests.
 func TestMain(m *testing.M) {
-	// 确保测试数据库存在
+	// Ensure test database exists
 	if _, err := testdb.SetupTestDB(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to setup test database: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 初始化 AES 加密密钥（env_vars 加密所需）
+	// Initialize AES encryption key (required for env_vars encryption)
 	if err := crypto.SetEncryptionKey([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to set encryption key: %v\n", err)
 		os.Exit(1)
@@ -63,7 +63,7 @@ func testAPIKeyAuthenticator(svc *service.Service) svcmw.APIKeyAuthenticator {
 	}
 }
 
-// getTestDSN 获取测试数据库 DSN 字符串。
+// getTestDSN returns the test database DSN string.
 func getTestDSN() string {
 	return testdb.GetTestDSN()
 }
@@ -90,7 +90,7 @@ func configureWorkspaceAuthForTest(svc *service.Service) (svcmw.WorkspaceAccessC
 			return "", fmt.Errorf("unknown user type")
 		}
 	}
-	// checker 通过返回值传递给调用方，不再设置全局
+	// checker is passed to the caller via return value, no longer set globally
 
 	projSvc := service.NewProjectService(svc)
 	projectAccessChecker := func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (svcmw.WorkspaceContext, error) {
@@ -145,7 +145,7 @@ func configureWorkspaceAuthForTest(svc *service.Service) (svcmw.WorkspaceAccessC
 	return workspaceAccessChecker, projectAccessChecker, taskWorkspaceChecker, nodeWorkspaceChecker
 }
 
-// setupTestRouter 创建带有所有处理器路由和认证中间件的测试路由器。// 使用生产路由器配置（server.NewRouter），确保测试路由与生产路由一致。
+// setupTestRouter creates a test router with all handler routes and auth middleware. // Uses production router configuration (server.NewRouter) to ensure test routes match production.
 func setupTestRouter(t *testing.T) (chi.Router, *sql.DB, *dbgen.Queries) {
 	t.Helper()
 
@@ -176,7 +176,7 @@ func setupTestRouter(t *testing.T) (chi.Router, *sql.DB, *dbgen.Queries) {
 	return router, db, q
 }
 
-// setupTestRouterWithClock 创建使用自定义时钟的测试路由器（用于测试时间相关逻辑）。// 使用生产路由器配置（server.NewRouter），确保测试路由与生产路由一致。
+// setupTestRouterWithClock creates a test router with a custom clock (for testing time-related logic). // Uses production router configuration (server.NewRouter) to ensure test routes match production.
 func setupTestRouterWithClock(t *testing.T, c clock.Clock) (chi.Router, *sql.DB) {
 	t.Helper()
 
@@ -207,7 +207,7 @@ func setupTestRouterWithClock(t *testing.T, c clock.Clock) (chi.Router, *sql.DB)
 	return router, db
 }
 
-// registerTestUser 通过注册 API 创建测试用户并返回 JWT Token 和工作区 ID。
+// registerTestUser creates a test user via the register API and returns a JWT Token and workspace ID.
 func registerTestUser(t *testing.T, client *http.Client, baseURL string) (string, string) {
 	t.Helper()
 
@@ -237,7 +237,7 @@ func registerTestUser(t *testing.T, client *http.Client, baseURL string) (string
 		t.Fatalf("registerTestUser: expected workspace_id in register response, got %v", result)
 	}
 
-	// 为注册创建的工作区和成员注册清理
+	// Register cleanup for workspace and member created during registration
 	memberID := extractMemberIDFromJWT(t, token)
 	t.Cleanup(func() {
 		if db, err := sql.Open("pgx", testdb.GetTestDSN()); err == nil {
@@ -250,7 +250,7 @@ func registerTestUser(t *testing.T, client *http.Client, baseURL string) (string
 	return token, wsID
 }
 
-// extractMemberIDFromJWT 解码 JWT Token 并提取 sub（成员 ID）声明。
+// extractMemberIDFromJWT decodes the JWT Token and extracts the sub (member ID) claim.
 func extractMemberIDFromJWT(t *testing.T, token string) string {
 	t.Helper()
 	parts := strings.Split(token, ".")
@@ -307,7 +307,7 @@ func doRequest(t *testing.T, client *http.Client, method, url string, body inter
 	return resp, resp.StatusCode, respBody
 }
 
-// doRequestWithToken 使用 JWT Bearer Token 执行 HTTP 请求。
+// doRequestWithToken executes an HTTP request using a JWT Bearer Token.
 func doRequestWithToken(t *testing.T, client *http.Client, method, url, token string, body interface{}) (*http.Response, int, []byte) {
 	t.Helper()
 
@@ -343,7 +343,7 @@ func doRequestWithToken(t *testing.T, client *http.Client, method, url, token st
 	return resp, resp.StatusCode, respBody
 }
 
-// doRequestWithAPIKey 使用 API 密钥（X-API-Key 头部）执行 HTTP 请求。// 用于代理认证场景，代理直接使用其 API Token。
+// doRequestWithAPIKey executes an HTTP request using an API key (X-API-Key header). // Used for agent authentication scenarios where the agent uses its API Token directly.
 func doRequestWithAPIKey(t *testing.T, client *http.Client, method, url, apiKey string, body interface{}) (*http.Response, int, []byte) {
 	t.Helper()
 
@@ -381,7 +381,7 @@ func doRequestWithAPIKey(t *testing.T, client *http.Client, method, url, apiKey 
 
 // ---------- Helpers ----------
 
-// createWorkspace 通过 API 创建工作区并返回其 ID。
+// createWorkspace creates a workspace via the API and returns its ID.
 func createWorkspace(t *testing.T, client *http.Client, baseURL, token string) string {
 	t.Helper()
 
@@ -402,7 +402,7 @@ func createWorkspace(t *testing.T, client *http.Client, baseURL, token string) s
 	}
 	wsID := result["id"].(string)
 
-	// 为通过 API 创建工作区注册清理
+	// Register cleanup for workspace created via API
 	t.Cleanup(func() {
 		if db, err := sql.Open("pgx", testdb.GetTestDSN()); err == nil {
 			defer db.Close()
@@ -413,7 +413,7 @@ func createWorkspace(t *testing.T, client *http.Client, baseURL, token string) s
 	return wsID
 }
 
-// createProject 通过 API 在指定工作区下创建项目并返回项目 ID。
+// createProject creates a project in the specified workspace via the API and returns the project ID.
 func createProject(t *testing.T, client *http.Client, baseURL, wsID, token string) string {
 	t.Helper()
 
@@ -437,7 +437,7 @@ func createProject(t *testing.T, client *http.Client, baseURL, wsID, token strin
 	return result["id"].(string)
 }
 
-// createWorkflowTemplate3Nodes 创建包含 3 个节点（编码→审查→部署）的工作流模板。
+// createWorkflowTemplate3Nodes creates a workflow template with 3 nodes (code → review → deploy).
 func createWorkflowTemplate3Nodes(t *testing.T, client *http.Client, baseURL, wsID, token string) string {
 	t.Helper()
 
@@ -485,7 +485,7 @@ func createWorkflowTemplate3Nodes(t *testing.T, client *http.Client, baseURL, ws
 	return tplMap["id"].(string)
 }
 
-// createWorkflowTemplate2Nodes 创建包含 2 个节点（编码+审查）的工作流模板。
+// createWorkflowTemplate2Nodes creates a workflow template with 2 nodes (code + review).
 func createWorkflowTemplate2Nodes(t *testing.T, client *http.Client, baseURL, wsID, token string) string {
 	t.Helper()
 
@@ -552,7 +552,7 @@ func createAgent(t *testing.T, client *http.Client, baseURL, wsID, token string)
 	return agentID, apiToken
 }
 
-// grantAgentPermission 直接通过 service 层向代理授予权限（原 HTTP 端点 /permissions 已移除）。
+// grantAgentPermission grants a permission to an agent directly via the service layer (the original HTTP endpoint /permissions has been removed).
 func grantAgentPermission(t *testing.T, client *http.Client, baseURL, wsID, agentID, permission, token string) {
 	t.Helper()
 
@@ -568,14 +568,14 @@ func grantAgentPermission(t *testing.T, client *http.Client, baseURL, wsID, agen
 	if err != nil {
 		t.Fatalf("grantAgentPermission: invalid agent id %q: %v", agentID, err)
 	}
-	// granted_by 使用 token 对应的真实 member ID（避免外键约束失败）
+	// granted_by uses the real member ID corresponding to the token (to avoid foreign key constraint failure)
 	grantedBy := uuid.MustParse(extractMemberIDFromJWT(t, token))
 	if _, err := permSvc.Grant(context.Background(), agentUUID, permission, "*", nil, grantedBy); err != nil {
 		t.Fatalf("grantAgentPermission(%s): %v", permission, err)
 	}
 }
 
-// grantAgentAllTaskPermissions 向代理授予所有任务相关权限。
+// grantAgentAllTaskPermissions grants all task-related permissions to an agent.
 func grantAgentAllTaskPermissions(t *testing.T, client *http.Client, baseURL, wsID, agentID, token string) {
 	t.Helper()
 	for _, perm := range []string{"task:claim", "task:execute", "task:approve", "task:reject", "task:comment"} {
@@ -749,8 +749,8 @@ func registerRuntime(t *testing.T, client *http.Client, baseURL, workspaceID, ag
 		"status":   "online",
 	}
 	url := baseURL + "/api/workspaces/" + workspaceID + "/runtimes"
-	// 先尝试使用成员 Token；如果被拒绝（非管理员），调用方应
-	// 改用 registerRuntimeWithAgentToken。
+	// Try using the member Token first; if rejected (non-admin), the caller should
+	// switch to registerRuntimeWithAgentToken.
 	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
 	if status != http.StatusCreated {
 		t.Fatalf("registerRuntime: expected 201, got %d, body: %s", status, respBody)
@@ -785,7 +785,7 @@ func registerRuntimeWithAgentToken(t *testing.T, client *http.Client, baseURL, w
 	return result["id"].(string)
 }
 
-// syncRuntime 直接通过 service 层同步运行时（原 HTTP 端点 /runtimes/{id}/sync 已移除）。
+// syncRuntime synchronizes the runtime directly via the service layer (the original HTTP endpoint /runtimes/{id}/sync has been removed).
 func syncRuntime(t *testing.T, client *http.Client, baseURL, workspaceID, runtimeID, token string) map[string]interface{} {
 	t.Helper()
 

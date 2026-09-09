@@ -1,4 +1,4 @@
-// Package crypto_test 包含 crypto 包的测试，涵盖 RSA 加密/解密往返、PEM 密钥解析（PKIX 和 PKCS1 格式）、无效密钥的错误处理以及边界情况（空数据、超大数据）。
+// Package crypto_test contains tests for the crypto package, covering RSA encryption/decryption roundtrips, PEM key parsing (PKIX and PKCS1 formats), error handling for invalid keys, and edge cases (empty data, oversized data).
 package crypto_test
 
 import (
@@ -13,57 +13,57 @@ import (
 	"github.com/teammate/server/internal/crypto"
 )
 
-// newHash 创建用于 RSA-OAEP 加密的 SHA-256 哈希实例。
+// newHash creates a SHA-256 hash instance for RSA-OAEP encryption.
 func newHash() hash.Hash {
 	return sha256.New()
 }
 
-// TestRSAEncryptionDecryptionRoundtrip 验证完整的 RSA 加密/解密周期：生成密钥对、用公钥加密、用私钥解密。
+// TestRSAEncryptionDecryptionRoundtrip verifies the full RSA encryption/decryption cycle: generate key pair, encrypt with public key, decrypt with private key.
 func TestRSAEncryptionDecryptionRoundtrip(t *testing.T) {
-	// 生成 RSA 密钥对
+	// Generate RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 	publicKey := &privateKey.PublicKey
 
-	// 测试数据
+	// Test data
 	plaintext := []byte("Hello, RSA encryption roundtrip test!")
 
-	// 使用公钥加密
+	// Encrypt with public key
 	ciphertext, err := crypto.EncryptWithPublicKey(publicKey, plaintext)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	// 验证密文与明文不同
+	// Verify ciphertext differs from plaintext
 	if string(ciphertext) == string(plaintext) {
 		t.Fatal("ciphertext should not equal plaintext")
 	}
 
-	// 使用私钥解密
+	// Decrypt with private key
 	hash := newHash()
 	decrypted, err := rsa.DecryptOAEP(hash, rand.Reader, privateKey, ciphertext, nil)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}
 
-	// 验证 roundtrip
+	// Verify roundtrip
 	if string(decrypted) != string(plaintext) {
 		t.Fatalf("decrypted text does not match original: got %q, want %q", decrypted, plaintext)
 	}
 	t.Log("RSA encryption/decryption roundtrip successful")
 }
 
-// TestRSAEncryptionWithParsedPublicKey 验证使用解析后的 PEM 公钥进行加密。
+// TestRSAEncryptionWithParsedPublicKey verifies encryption with a parsed PEM public key.
 func TestRSAEncryptionWithParsedPublicKey(t *testing.T) {
-	// 生成密钥对
+	// Generate key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// 将公钥编码为 PEM（PKIX 格式）
+	// Encode the public key as PEM (PKIX format)
 	pubKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		t.Fatalf("marshal public key: %v", err)
@@ -73,20 +73,20 @@ func TestRSAEncryptionWithParsedPublicKey(t *testing.T) {
 		Bytes: pubKeyBytes,
 	})
 
-	// 解析 PEM 公钥
+	// Parse the PEM public key
 	parsedPubKey, err := crypto.ParsePublicKey(pubKeyPEM)
 	if err != nil {
 		t.Fatalf("parse public key: %v", err)
 	}
 
-	// 使用解析出的公钥加密
+	// Encrypt with the parsed public key
 	plaintext := []byte("Test with parsed PEM public key")
 	ciphertext, err := crypto.EncryptWithPublicKey(parsedPubKey, plaintext)
 	if err != nil {
 		t.Fatalf("encrypt with parsed key: %v", err)
 	}
 
-	// 使用原始私钥解密
+	// Decrypt with the original private key
 	hash := newHash()
 	decrypted, err := rsa.DecryptOAEP(hash, rand.Reader, privateKey, ciphertext, nil)
 	if err != nil {
@@ -99,27 +99,27 @@ func TestRSAEncryptionWithParsedPublicKey(t *testing.T) {
 	t.Log("RSA encryption with parsed PEM public key successful")
 }
 
-// TestRSAPKCS1PublicKey 验证解析 PKCS1 格式公钥。
+// TestRSAPKCS1PublicKey verifies parsing a PKCS1 format public key.
 func TestRSAPKCS1PublicKey(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// 以 PKCS1 格式编码公钥
+	// Encode the public key in PKCS1 format
 	pubKeyBytes := x509.MarshalPKCS1PublicKey(&privateKey.PublicKey)
 	pubKeyPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "RSA PUBLIC KEY",
 		Bytes: pubKeyBytes,
 	})
 
-	// 解析 PEM 公钥
+	// Parse the PEM public key
 	parsedPubKey, err := crypto.ParsePublicKey(pubKeyPEM)
 	if err != nil {
 		t.Fatalf("parse PKCS1 public key: %v", err)
 	}
 
-	// 验证它可用于加密
+	// Verify it can be used for encryption
 	plaintext := []byte("PKCS1 format test")
 	ciphertext, err := crypto.EncryptWithPublicKey(parsedPubKey, plaintext)
 	if err != nil {
@@ -138,7 +138,7 @@ func TestRSAPKCS1PublicKey(t *testing.T) {
 	t.Log("RSA PKCS1 public key parsing and encryption successful")
 }
 
-// TestInvalidPublicKey 验证无效的 PEM 数据返回错误。
+// TestInvalidPublicKey verifies that invalid PEM data returns an error.
 func TestInvalidPublicKey(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -184,7 +184,7 @@ func TestInvalidPublicKey(t *testing.T) {
 	}
 }
 
-// TestEncryptWithPublicKeyEmptyData 验证空数据的加密。
+// TestEncryptWithPublicKeyEmptyData verifies encryption of empty data.
 func TestEncryptWithPublicKeyEmptyData(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -208,14 +208,14 @@ func TestEncryptWithPublicKeyEmptyData(t *testing.T) {
 	t.Log("RSA encryption/decryption of empty data successful")
 }
 
-// TestEncryptWithPublicKeyTooLarge 验证超出密钥大小的数据返回错误。
+// TestEncryptWithPublicKeyTooLarge verifies that data exceeding the key size returns an error.
 func TestEncryptWithPublicKeyTooLarge(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	// 使用 SHA-256 和 2048 位密钥的 RSA-OAEP 最多可加密 190 字节
+	// RSA-OAEP with SHA-256 and a 2048-bit key can encrypt at most 190 bytes
 	largeData := make([]byte, 300)
 	for i := range largeData {
 		largeData[i] = byte(i % 256)

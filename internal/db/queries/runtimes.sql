@@ -1,4 +1,4 @@
--- 运行时查询
+-- Runtime queries
 
 -- name: CreateRuntime :one
 INSERT INTO runtimes (agent_id, daemon_id, provider, version, status, session_token_hash, session_expires_at, public_key)

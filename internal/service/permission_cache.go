@@ -1,7 +1,7 @@
-// permission_cache.go 实现代理权限检查结果的 Redis 缓存层。
-// 使用 Redis 存储权限检查结果以减少数据库查询次数，
-// 缓存命中时直接返回，未命中时回退到数据库查询并缓存结果。
-// 缓存 TTL 为 60 秒，权限变更时通过 SCAN 批量删除相关缓存键。
+// permission_cache.go implements the Redis cache layer for agent permission check results.
+// It uses Redis to store permission check results to reduce the number of database queries.
+// On a cache hit it returns directly; on a miss it falls back to a database query and caches the result.
+// The cache TTL is 60 seconds; on permission changes, related cache keys are batch-deleted via SCAN.
 package service
 
 import (
@@ -14,42 +14,42 @@ import (
 )
 
 const (
-	// permCachePrefix 是权限缓存键的前缀，格式为 "agent_perm:{agentID}:{permission}"
+	// permCachePrefix is the prefix of permission cache keys, formatted as "agent_perm:{agentID}:{permission}"
 	permCachePrefix = "agent_perm:"
-	// permCacheTTL 是权限缓存的过期时间，60 秒后自动失效
+	// permCacheTTL is the expiration time of the permission cache, automatically invalidated after 60 seconds
 	permCacheTTL = 60 * time.Second
 )
 
-// PermissionCache 使用 Redis 缓存代理权限检查结果。
-// 缓存键格式为 "agent_perm:{agentID}:{permission}"，值为 "1"（有权限）或 "0"（无权限）。
+// PermissionCache uses Redis to cache agent permission check results.
+// The cache key format is "agent_perm:{agentID}:{permission}", and the value is "1" (has permission) or "0" (no permission).
 type PermissionCache struct {
 	rdb *redis.Client
 }
 
-// NewPermissionCache 创建一个新的 PermissionCache 实例。
-// 如果 rdb 为 nil，所有操作为空操作，检查将直接回退到数据库查询。
+// NewPermissionCache creates a new PermissionCache instance.
+// If rdb is nil, all operations are no-ops and checks fall back directly to database queries.
 func NewPermissionCache(rdb *redis.Client) *PermissionCache {
 	return &PermissionCache{rdb: rdb}
 }
 
-// HasPermission 先检查 Redis 缓存，缓存未命中时通过提供的回退函数查询数据库。
+// HasPermission checks the Redis cache first; on a cache miss it queries the database via the provided fallback function.
 //
-// 步骤：
-//  1. 若 Redis 客户端为空，直接调用回退函数查询数据库
-//  2. 根据 agentID 和 permission 构建缓存键，查询 Redis
-//  3. 缓存命中：直接返回缓存值（"1" 表示有权限，"0" 表示无权限）
-//  4. 缓存未命中：调用回退函数查询数据库
-//  5. 将查询结果写入 Redis 缓存（TTL 60 秒）
+// Steps:
+//  1. If the Redis client is empty, call the fallback function directly to query the database
+//  2. Build the cache key from agentID and permission, and query Redis
+//  3. Cache hit: return the cached value directly ("1" means has permission, "0" means no permission)
+//  4. Cache miss: call the fallback function to query the database
+//  5. Write the query result to the Redis cache (TTL 60 seconds)
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: 代理 ID
-//   - permission: 权限标识符
-//   - checkFn: 回退函数，当缓存未命中时调用以查询数据库
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent ID
+//   - permission: permission identifier
+//   - checkFn: fallback function, called on a cache miss to query the database
 //
-// 返回：
-//   - bool: 代理是否拥有指定权限
-//   - error: 可能的错误（Redis 查询失败、回退函数返回错误）
+// Returns:
+//   - bool: whether the agent has the specified permission
+//   - error: possible errors (Redis query failure, fallback function returning an error)
 func (c *PermissionCache) HasPermission(ctx context.Context, agentID uuid.UUID, permission string, checkFn func() (bool, error)) (bool, error) {
 	if c.rdb == nil {
 		return checkFn()
@@ -71,20 +71,20 @@ func (c *PermissionCache) HasPermission(ctx context.Context, agentID uuid.UUID, 
 	return result, nil
 }
 
-// Invalidate 使用 SCAN 迭代器删除指定代理的所有缓存权限条目。
-// 当代理的权限被授予或撤销时调用此方法，确保缓存一致性。
+// Invalidate uses a SCAN iterator to delete all cached permission entries for the specified agent.
+// This is called when an agent's permissions are granted or revoked to ensure cache consistency.
 //
-// 步骤：
-//  1. 构建匹配模式 "agent_perm:{agentID}:*"
-//  2. 使用 SCAN 迭代器分批扫描匹配的键
-//  3. 逐个删除匹配的缓存键
+// Steps:
+//  1. Build the match pattern "agent_perm:{agentID}:*"
+//  2. Use a SCAN iterator to scan matching keys in batches
+//  3. Delete matching cache keys one by one
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: 代理 ID，用于定位需要清除的缓存键
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent ID, used to locate the cache keys that need to be cleared
 //
-// 返回：
-//   - error: 可能的错误（Redis SCAN 迭代失败）
+// Returns:
+//   - error: possible errors (Redis SCAN iteration failure)
 func (c *PermissionCache) Invalidate(ctx context.Context, agentID uuid.UUID) error {
 	if c.rdb == nil {
 		return nil

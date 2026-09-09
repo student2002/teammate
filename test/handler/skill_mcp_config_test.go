@@ -1,4 +1,4 @@
-// skill_mcp_config_test.go 覆盖技能与 MCP 配置接口的测试。
+// skill_mcp_config_test.go tests covering skill and MCP configuration APIs.
 package handler_test
 
 import (
@@ -13,10 +13,10 @@ func TestSkillUpdatePartialKeepsExistingName(t *testing.T) {
 
 	_, status, body := doRequestWithToken(t, client, http.MethodPost,
 		ts.URL+"/api/workspaces/"+wsID+"/skills", token, map[string]interface{}{
-			"name":            "OpenClaw 写作",
-			"description":     "初始描述",
-			"category":        "文档",
-			"prompt_template": "初始模板",
+			"name":            "OpenClaw Writing",
+			"description":     "Initial description",
+			"category":        "Documentation",
+			"prompt_template": "Initial template",
 		})
 	if status != http.StatusCreated {
 		t.Fatalf("create skill: expected 201, got %d, body: %s", status, body)
@@ -28,7 +28,7 @@ func TestSkillUpdatePartialKeepsExistingName(t *testing.T) {
 
 	_, status, body = doRequestWithToken(t, client, http.MethodPut,
 		ts.URL+"/api/workspaces/"+wsID+"/skills/"+created["id"].(string), token, map[string]interface{}{
-			"description": "更新后的描述",
+			"description": "Updated description",
 		})
 	if status != http.StatusOK {
 		t.Fatalf("update skill: expected 200, got %d, body: %s", status, body)
@@ -37,10 +37,10 @@ func TestSkillUpdatePartialKeepsExistingName(t *testing.T) {
 	if err := json.Unmarshal(body, &updated); err != nil {
 		t.Fatalf("decode updated skill: %v", err)
 	}
-	if updated["name"] != "OpenClaw 写作" {
+	if updated["name"] != "OpenClaw Writing" {
 		t.Fatalf("expected name to be kept, got %v", updated["name"])
 	}
-	if updated["description"] != "更新后的描述" {
+	if updated["description"] != "Updated description" {
 		t.Fatalf("expected updated description, got %#v", updated["description"])
 	}
 }
@@ -51,8 +51,8 @@ func TestSkillUpdateRejectsExplicitEmptyName(t *testing.T) {
 
 	_, status, body := doRequestWithToken(t, client, http.MethodPost,
 		ts.URL+"/api/workspaces/"+wsID+"/skills", token, map[string]interface{}{
-			"name":     "安全审计",
-			"category": "安全",
+			"name":     "Security Audit",
+			"category": "Security",
 		})
 	if status != http.StatusCreated {
 		t.Fatalf("create skill: expected 201, got %d, body: %s", status, body)

@@ -1,4 +1,4 @@
-// memory_test.go 覆盖记忆接口的测试。
+// memory_test.go tests the memory API.
 package handler_test
 
 import (
@@ -44,7 +44,7 @@ func createMemoryViaAPI(t *testing.T, client *http.Client, baseURL, token, works
 	return result
 }
 
-// TestCreateMemory 验证通过 API 创建记忆的基本流程。
+// TestCreateMemory verifies the basic flow of creating a memory via the API.
 func TestCreateMemory(t *testing.T) {
 	ts, _ := setupMemoryRouter(t)
 	defer ts.Close()
@@ -65,7 +65,7 @@ func TestCreateMemory(t *testing.T) {
 	}
 }
 
-// TestListMemoriesByWorkspace 验证按工作区列出所有记忆。
+// TestListMemoriesByWorkspace verifies listing all memories by workspace.
 func TestListMemoriesByWorkspace(t *testing.T) {
 	ts, _ := setupMemoryRouter(t)
 	defer ts.Close()
@@ -73,11 +73,11 @@ func TestListMemoriesByWorkspace(t *testing.T) {
 	client := ts.Client()
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	// 创建两条记忆
+	// Create two memories
 	createMemoryViaAPI(t, client, ts.URL, token, wsID, "insight", "Insight 1", "Content 1", []string{})
 	createMemoryViaAPI(t, client, ts.URL, token, wsID, "convention", "Convention 1", "Content 2", []string{})
 
-	// 列出工作区的所有记忆
+	// List all memories in the workspace
 	url := fmt.Sprintf("%s/api/memories?workspace_id=%s", ts.URL, wsID)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
@@ -94,7 +94,7 @@ func TestListMemoriesByWorkspace(t *testing.T) {
 	}
 }
 
-// TestDeleteMemory 验证删除记忆操作及删除后验证。
+// TestDeleteMemory verifies the delete memory operation and post-deletion verification.
 func TestDeleteMemory(t *testing.T) {
 	ts, _ := setupMemoryRouter(t)
 	defer ts.Close()
@@ -105,13 +105,13 @@ func TestDeleteMemory(t *testing.T) {
 	mem := createMemoryViaAPI(t, client, ts.URL, token, wsID, "insight", "To Delete", "Will be deleted", []string{})
 	memID := mem["id"].(string)
 
-	// 删除
+	// Delete
 	_, status, _ := doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/api/memories/%s", ts.URL, memID), token, nil)
 	if status != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", status)
 	}
 
-	// 通过列出验证它已被删除
+	// Verify it has been deleted by listing
 	url := fmt.Sprintf("%s/api/memories?workspace_id=%s", ts.URL, wsID)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
@@ -137,12 +137,12 @@ func TestSearchMemoriesText(t *testing.T) {
 	client := ts.Client()
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	// 创建标题不同的记忆
+	// Create memories with different titles
 	createMemoryViaAPI(t, client, ts.URL, token, wsID, "architecture", "Redis Cache Strategy", "Use Redis for caching with TTL", []string{"redis", "cache"})
 	createMemoryViaAPI(t, client, ts.URL, token, wsID, "decision", "Database Choice", "We chose PostgreSQL over MySQL", []string{"database"})
 	createMemoryViaAPI(t, client, ts.URL, token, wsID, "convention", "Code Style Guide", "Use tabs not spaces", []string{"style"})
 
-	// 搜索 "Redis"
+	// Search for "Redis"
 	url := fmt.Sprintf("%s/api/memories/search?q=Redis&workspace_id=%s", ts.URL, wsID)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
@@ -162,7 +162,7 @@ func TestSearchMemoriesText(t *testing.T) {
 		t.Errorf("expected 'Redis Cache Strategy', got %v", result[0]["title"])
 	}
 
-	// 搜索 "PostgreSQL"（在内容中）
+	// Search for "PostgreSQL" (in content)
 	url = fmt.Sprintf("%s/api/memories/search?q=PostgreSQL&workspace_id=%s", ts.URL, wsID)
 	_, status, respBody = doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
@@ -177,7 +177,7 @@ func TestSearchMemoriesText(t *testing.T) {
 		t.Errorf("expected 1 result for 'PostgreSQL', got %d", len(result))
 	}
 
-	// 搜索匹配多个条目的内容
+	// Search content matching multiple entries
 	url = fmt.Sprintf("%s/api/memories/search?q=use&workspace_id=%s", ts.URL, wsID)
 	_, status, respBody = doRequestWithToken(t, client, http.MethodGet, url, token, nil)
 	if status != http.StatusOK {
@@ -188,7 +188,7 @@ func TestSearchMemoriesText(t *testing.T) {
 		t.Fatalf("decode search results: %v", err)
 	}
 
-	// "use" 出现在 "Use Redis for caching" 和 "Use tabs not spaces" 中
+	// "use" appears in "Use Redis for caching" and "Use tabs not spaces"
 	if len(result) < 2 {
 		t.Errorf("expected at least 2 results for 'use', got %d", len(result))
 	}

@@ -1,10 +1,10 @@
-// agent.go 提供 AI 代理（Agent）的数据访问操作。
+// agent.go provides data access operations for AI agents (Agent).
 //
-// 包含 Agent 的完整生命周期管理：创建、查询、更新、删除，
-// 以及 API Token 生成、轮换和撤销，技能和 MCP 服务器关联管理。
+// It covers the full Agent lifecycle management: create, query, update, delete,
+// as well as API Token generation, rotation, and revocation, plus skill and MCP server association management.
 //
-// API Token 格式：tm_{agent_id_short}_{40_random_hex}
-// Token 存储采用双重哈希：bcrypt 用于安全存储，SHA-256 用于高效查找。
+// API Token format: tm_{agent_id_short}_{40_random_hex}
+// Token storage uses dual hashing: bcrypt for secure storage, SHA-256 for efficient lookup.
 package store
 
 import (
@@ -23,23 +23,23 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateAgent 创建新的 Agent 并生成 API Token。
+// CreateAgent creates a new Agent and generates an API Token.
 //
-// 执行步骤：
-//  1. 插入 Agent 记录到 agents 表
-//  2. 生成格式为 tm_{agent_id_short}_{40_hex_chars} 的 API Token
-//  3. 使用 bcrypt 哈希 Token 并存储到 auth_tokens 表
-//  4. 计算 SHA-256 查找哈希用于高效数据库查询
-//  5. Token 有效期 365 天
+// Steps:
+//  1. Insert the Agent record into the agents table
+//  2. Generate an API Token with the format tm_{agent_id_short}_{40_hex_chars}
+//  3. Hash the Token with bcrypt and store it in the auth_tokens table
+//  4. Compute a SHA-256 lookup hash for efficient database queries
+//  5. The Token is valid for 365 days
 //
-// 参数：
-//   - ctx: 请求上下文，支持超时和取消
-//   - params: Agent 创建参数，包含名称、提供商、指令等
+// Parameters:
+//   - ctx: request context, supports timeout and cancellation
+//   - params: Agent creation parameters, including name, provider, instructions, etc.
 //
-// 返回：
-//   - db.Agent: 创建的 Agent 记录
-//   - string: 生成的 API Token 明文（仅在创建时返回一次）
-//   - error: 创建失败时返回错误
+// Returns:
+//   - db.Agent: the created Agent record
+//   - string: the generated API Token plaintext (returned only once at creation time)
+//   - error: error returned when creation fails
 func (s *Store) CreateAgent(ctx context.Context, params types.CreateAgentParams) (types.Agent, string, error) {
 	dbParams, err := FromDomainCreateAgentParams(params)
 	if err != nil {
@@ -50,19 +50,19 @@ func (s *Store) CreateAgent(ctx context.Context, params types.CreateAgentParams)
 		return types.Agent{}, "", fmt.Errorf("create agent: %w", err)
 	}
 
-	// 生成 API Token：tm_{agent_id_short}_{40_hex_chars}
+	// Generate the API Token: tm_{agent_id_short}_{40_hex_chars}
 	apiToken, err := GenerateAgentToken(agent.ID)
 	if err != nil {
 		return types.Agent{}, "", fmt.Errorf("generate agent token: %w", err)
 	}
 
-	// 在 auth_tokens 中存储 bcrypt 哈希（安全、加盐、慢哈希）
+	// Store the bcrypt hash in auth_tokens (secure, salted, slow hash)
 	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(apiToken), bcrypt.DefaultCost)
 	if err != nil {
 		return types.Agent{}, "", fmt.Errorf("hash agent token: %w", err)
 	}
 
-	// 计算 SHA-256 查找哈希以实现高效的数据库查询
+	// Compute a SHA-256 lookup hash for efficient database queries
 	shaHash := sha256.Sum256([]byte(apiToken))
 	lookupHash := hex.EncodeToString(shaHash[:])
 
@@ -81,15 +81,15 @@ func (s *Store) CreateAgent(ctx context.Context, params types.CreateAgentParams)
 	return domainAgent, apiToken, nil
 }
 
-// GetAgent 根据 ID 查询单个 Agent 记录。
+// GetAgent queries a single Agent record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: Agent 的 UUID 标识符
+// Parameters:
+//   - ctx: request context
+//   - id: the Agent's UUID identifier
 //
-// 返回：
-//   - db.Agent: Agent 记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.Agent: the Agent record
+//   - error: error returned when the query fails
 func (s *Store) GetAgent(ctx context.Context, id uuid.UUID) (types.Agent, error) {
 	agent, err := s.q.GetAgent(ctx, id)
 	if err != nil {
@@ -98,15 +98,15 @@ func (s *Store) GetAgent(ctx context.Context, id uuid.UUID) (types.Agent, error)
 	return ToDomainAgent(agent)
 }
 
-// ListAgents 查询指定工作区内所有 Agent 记录。
+// ListAgents queries all Agent records within the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []db.Agent: Agent 列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.Agent: the Agent list
+//   - error: error returned when the query fails
 func (s *Store) ListAgents(ctx context.Context, workspaceID uuid.UUID) ([]types.Agent, error) {
 	agents, err := s.q.ListAgents(ctx, workspaceID)
 	if err != nil {
@@ -115,15 +115,15 @@ func (s *Store) ListAgents(ctx context.Context, workspaceID uuid.UUID) ([]types.
 	return ToDomainAgentSlice(agents)
 }
 
-// UpdateAgent 更新 Agent 的基本信息（名称、指令、模型等）。
+// UpdateAgent updates the Agent's basic information (name, instructions, model, etc.).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含 Agent ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including the Agent ID and the fields to update
 //
-// 返回：
-//   - db.Agent: 更新后的 Agent 记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.Agent: the updated Agent record
+//   - error: error returned when the update fails
 func (s *Store) UpdateAgent(ctx context.Context, params types.UpdateAgentParams) (types.Agent, error) {
 	dbParams, err := FromDomainUpdateAgentParams(params)
 	if err != nil {
@@ -136,17 +136,17 @@ func (s *Store) UpdateAgent(ctx context.Context, params types.UpdateAgentParams)
 	return ToDomainAgent(agent)
 }
 
-// UpdateAgentStatus 更新 Agent 的运行状态（online/offline/busy/paused）。
+// UpdateAgentStatus updates the Agent's runtime status (online/offline/busy/paused).
 //
-// 状态流转必须符合 ValidStatusTransitions 定义的合法转换。
+// Status transitions must conform to the valid transitions defined by ValidStatusTransitions.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 状态更新参数，包含 Agent ID 和目标状态
+// Parameters:
+//   - ctx: request context
+//   - params: status update parameters, including the Agent ID and the target status
 //
-// 返回：
-//   - db.Agent: 更新后的 Agent 记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.Agent: the updated Agent record
+//   - error: error returned when the update fails
 func (s *Store) UpdateAgentStatus(ctx context.Context, params types.UpdateAgentStatusParams) (types.Agent, error) {
 	dbParams, err := FromDomainUpdateAgentStatusParams(params)
 	if err != nil {
@@ -159,20 +159,20 @@ func (s *Store) UpdateAgentStatus(ctx context.Context, params types.UpdateAgentS
 	return ToDomainAgent(agent)
 }
 
-// DeleteAgent 删除指定 Agent 及其关联数据（事务操作）。
+// DeleteAgent deletes the specified Agent and its associated data (transactional operation).
 //
-// 执行步骤：
-//  1. 清理 auth_tokens 表中的多态引用（owner_type='agent'）
-//  2. 删除 Agent 记录，触发 ON DELETE CASCADE 自动清理：
-//     - CASCADE 删除：runtimes、memories、project_members、agent_skills 等
-//     - SET NULL 保留：execution_sessions、task_nodes 中的引用
+// Steps:
+//  1. Clean up polymorphic references in the auth_tokens table (owner_type='agent')
+//  2. Delete the Agent record, triggering ON DELETE CASCADE to automatically clean up:
+//     - CASCADE deletes: runtimes, memories, project_members, agent_skills, etc.
+//     - SET NULL preserves: references in execution_sessions and task_nodes
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 要删除的 Agent UUID
+// Parameters:
+//   - ctx: request context
+//   - id: the UUID of the Agent to delete
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error returned when the deletion fails
 func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -180,14 +180,14 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	}
 	defer tx.Rollback()
 
-	// 清理 auth_tokens（owner_type/owner_id 多态，无外键约束）
+	// Clean up auth_tokens (owner_type/owner_id are polymorphic, with no foreign key constraint)
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM auth_tokens WHERE owner_type = 'agent' AND owner_id = $1`, id); err != nil {
 		return fmt.Errorf("cleanup auth_tokens: %w", err)
 	}
 
-	// 002_remove_fks 后以下列不再有外键，须显式置空（FK 策略：应用层保证完整性）：
-	//   workflow_template_nodes.assignee_id、task_nodes.assignee_id/reserved_for_agent_id/completed_by、
+	// After 002_remove_fks the following columns no longer have foreign keys and must be explicitly set to NULL (FK strategy: application layer guarantees integrity):
+	//   workflow_template_nodes.assignee_id, task_nodes.assignee_id/reserved_for_agent_id/completed_by,
 	//   execution_sessions.runtime_id/agent_id
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE workflow_template_nodes SET assignee_id = NULL WHERE assignee_id = $1`, id); err != nil {
@@ -204,9 +204,9 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("clear execution_sessions refs: %w", err)
 	}
 
-	// 删除 Agent 后剩余 CASCADE（保留级联清理）：runtimes、memories、project_members、
-	//   project_reviewers、agent_skills、agent_mcp_servers、agent_permissions、token_usage、
-	//   node_transitions（通过 task_nodes→tasks 级联删除）
+	// After deleting the Agent, remaining CASCADEs (cascading cleanup is preserved): runtimes, memories, project_members,
+	//   project_reviewers, agent_skills, agent_mcp_servers, agent_permissions, token_usage,
+	//   node_transitions (cascaded via task_nodes -> tasks)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("delete agent: %w", err)
 	}
@@ -214,15 +214,15 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return tx.Commit()
 }
 
-// AddAgentSkill 为 Agent 关联一个技能（插入 agent_skills 记录）。
+// AddAgentSkill associates a skill with an Agent (inserts an agent_skills record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 技能关联参数，包含 Agent ID 和 Skill ID
+// Parameters:
+//   - ctx: request context
+//   - params: skill association parameters, including the Agent ID and Skill ID
 //
-// 返回：
-//   - db.AgentSkill: 创建的关联记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - db.AgentSkill: the created association record
+//   - error: error returned when creation fails
 func (s *Store) AddAgentSkill(ctx context.Context, params types.AddAgentSkillParams) (types.AgentSkill, error) {
 	dbParams, err := FromDomainAddAgentSkillParams(params)
 	if err != nil {
@@ -235,15 +235,15 @@ func (s *Store) AddAgentSkill(ctx context.Context, params types.AddAgentSkillPar
 	return ToDomainAgentSkill(skill)
 }
 
-// ListAgentSkills 查询指定 Agent 关联的所有技能列表。
+// ListAgentSkills queries all skills associated with the specified Agent.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - []db.ListAgentSkillsRow: 技能列表（包含技能详情）
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.ListAgentSkillsRow: the skill list (includes skill details)
+//   - error: error returned when the query fails
 func (s *Store) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]types.ListAgentSkillsRow, error) {
 	skills, err := s.q.ListAgentSkills(ctx, agentID)
 	if err != nil {
@@ -252,14 +252,14 @@ func (s *Store) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]types
 	return ToDomainListAgentSkillsRowSlice(skills)
 }
 
-// RemoveAgentSkill 移除 Agent 与技能的关联关系。
+// RemoveAgentSkill removes the association between an Agent and a skill.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 移除参数，包含 Agent ID 和 Skill ID
+// Parameters:
+//   - ctx: request context
+//   - params: removal parameters, including the Agent ID and Skill ID
 //
-// 返回：
-//   - error: 移除失败时返回错误
+// Returns:
+//   - error: error returned when removal fails
 func (s *Store) RemoveAgentSkill(ctx context.Context, params types.RemoveAgentSkillParams) error {
 	dbParams, err := FromDomainRemoveAgentSkillParams(params)
 	if err != nil {
@@ -271,15 +271,15 @@ func (s *Store) RemoveAgentSkill(ctx context.Context, params types.RemoveAgentSk
 	return nil
 }
 
-// AddAgentMcpServer 为 Agent 关联一个 MCP 服务器（插入 agent_mcp_servers 记录）。
+// AddAgentMcpServer associates an MCP server with an Agent (inserts an agent_mcp_servers record).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: MCP 服务器关联参数，包含 Agent ID 和 McpServer ID
+// Parameters:
+//   - ctx: request context
+//   - params: MCP server association parameters, including the Agent ID and McpServer ID
 //
-// 返回：
-//   - db.AgentMcpServer: 创建的关联记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - db.AgentMcpServer: the created association record
+//   - error: error returned when creation fails
 func (s *Store) AddAgentMcpServer(ctx context.Context, params types.AddAgentMcpServerParams) (types.AgentMcpServer, error) {
 	dbParams, err := FromDomainAddAgentMcpServerParams(params)
 	if err != nil {
@@ -292,7 +292,7 @@ func (s *Store) AddAgentMcpServer(ctx context.Context, params types.AddAgentMcpS
 	return ToDomainAgentMcpServer(server)
 }
 
-// ListAgentMcpServers 列出 Agent 已关联的 MCP 服务器。
+// ListAgentMcpServers lists the MCP servers associated with an Agent.
 func (s *Store) ListAgentMcpServers(ctx context.Context, agentID uuid.UUID) ([]types.ListAgentMcpServersRow, error) {
 	servers, err := s.q.ListAgentMcpServers(ctx, agentID)
 	if err != nil {
@@ -301,14 +301,14 @@ func (s *Store) ListAgentMcpServers(ctx context.Context, agentID uuid.UUID) ([]t
 	return ToDomainListAgentMcpServersRowSlice(servers)
 }
 
-// RemoveAgentMcpServer 移除 Agent 与 MCP 服务器的关联关系。
+// RemoveAgentMcpServer removes the association between an Agent and an MCP server.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 移除参数，包含 Agent ID 和 McpServer ID
+// Parameters:
+//   - ctx: request context
+//   - params: removal parameters, including the Agent ID and McpServer ID
 //
-// 返回：
-//   - error: 移除失败时返回错误
+// Returns:
+//   - error: error returned when removal fails
 func (s *Store) RemoveAgentMcpServer(ctx context.Context, params types.RemoveAgentMcpServerParams) error {
 	dbParams, err := FromDomainRemoveAgentMcpServerParams(params)
 	if err != nil {
@@ -320,15 +320,15 @@ func (s *Store) RemoveAgentMcpServer(ctx context.Context, params types.RemoveAge
 	return nil
 }
 
-// UpdateMcpServer 更新 MCP 服务器的全部字段。
+// UpdateMcpServer updates all fields of an MCP server.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含 ID、名称、URL、类型、认证方式、环境变量、状态
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including ID, name, URL, type, authentication method, environment variables, status
 //
-// 返回：
-//   - db.McpServer: 更新后的 MCP 服务器记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.McpServer: the updated MCP server record
+//   - error: error returned when the update fails
 func (s *Store) UpdateMcpServer(ctx context.Context, params types.UpdateMcpServerParams) (types.McpServer, error) {
 	dbParams, err := FromDomainUpdateMcpServerParams(params)
 	if err != nil {
@@ -341,15 +341,15 @@ func (s *Store) UpdateMcpServer(ctx context.Context, params types.UpdateMcpServe
 	return ToDomainMcpServer(server)
 }
 
-// UpdateSkill 更新技能的全部字段。
+// UpdateSkill updates all fields of a skill.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含 ID、名称、描述、分类、提示模板
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including ID, name, description, category, prompt template
 //
-// 返回：
-//   - types.Skill: 更新后的技能记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - types.Skill: the updated skill record
+//   - error: error returned when the update fails
 func (s *Store) UpdateSkill(ctx context.Context, params types.UpdateSkillParams) (types.Skill, error) {
 	dbParams, err := FromDomainUpdateSkillParams(params)
 	if err != nil {
@@ -362,19 +362,19 @@ func (s *Store) UpdateSkill(ctx context.Context, params types.UpdateSkillParams)
 	return ToDomainSkill(skill)
 }
 
-// GenerateAgentToken 生成格式为 tm_{agent_id_short}_{40_random_hex} 的 API Token。
+// GenerateAgentToken generates an API Token with the format tm_{agent_id_short}_{40_random_hex}.
 //
-// Token 结构：
-//   - tm_: 固定前缀，标识 Teammate Token
-//   - agent_id_short: Agent ID 去除连字符后的前 8 位
-//   - 40_random_hex: 20 字节随机数的十六进制表示
+// Token structure:
+//   - tm_: fixed prefix identifying a Teammate Token
+//   - agent_id_short: the first 8 characters of the Agent ID after removing hyphens
+//   - 40_random_hex: the hexadecimal representation of 20 random bytes
 //
-// 参数：
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - string: 生成的 API Token 明文
-//   - error: 随机数生成失败时返回错误
+// Returns:
+//   - string: the generated API Token plaintext
+//   - error: error returned when random number generation fails
 func GenerateAgentToken(agentID uuid.UUID) (string, error) {
 	idShort := strings.ReplaceAll(agentID.String(), "-", "")[:8]
 	randomBytes := make([]byte, 20)
@@ -384,14 +384,14 @@ func GenerateAgentToken(agentID uuid.UUID) (string, error) {
 	return fmt.Sprintf("tm_%s_%s", idShort, hex.EncodeToString(randomBytes)), nil
 }
 
-// RevokeAgentTokens 撤销指定 Agent 的所有 API Token（删除 auth_tokens 表中的相关记录）。
+// RevokeAgentTokens revokes all API Tokens of the specified Agent (deletes the related records in the auth_tokens table).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - error: 撤销失败时返回错误
+// Returns:
+//   - error: error returned when revocation fails
 func (s *Store) RevokeAgentTokens(ctx context.Context, agentID uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM auth_tokens WHERE owner_type = 'agent' AND owner_id = $1`, agentID)
@@ -401,41 +401,41 @@ func (s *Store) RevokeAgentTokens(ctx context.Context, agentID uuid.UUID) error 
 	return nil
 }
 
-// RotateAgentToken 吊销所有旧 Token 并生成新 Token。
+// RotateAgentToken revokes all old Tokens and generates a new Token.
 //
-// 执行步骤：
-//  1. 调用 RevokeAgentTokens 删除所有现有 Token
-//  2. 生成新的 API Token
-//  3. 使用 bcrypt 哈希新 Token
-//  4. 计算 SHA-256 查找哈希
-//  5. 将新 Token 哈希存储到 auth_tokens 表，有效期 365 天
+// Steps:
+//  1. Call RevokeAgentTokens to delete all existing Tokens
+//  2. Generate a new API Token
+//  3. Hash the new Token with bcrypt
+//  4. Compute a SHA-256 lookup hash
+//  5. Store the new Token hash in the auth_tokens table, valid for 365 days
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: the Agent's UUID
 //
-// 返回：
-//   - string: 新生成的 API Token 明文
-//   - error: 轮换失败时返回错误
+// Returns:
+//   - string: the newly generated API Token plaintext
+//   - error: error returned when rotation fails
 func (s *Store) RotateAgentToken(ctx context.Context, agentID uuid.UUID) (string, error) {
-	// 撤销所有现有 Token
+	// Revoke all existing Tokens
 	if err := s.RevokeAgentTokens(ctx, agentID); err != nil {
 		return "", err
 	}
 
-	// 生成新的 API Token
+	// Generate a new API Token
 	apiToken, err := GenerateAgentToken(agentID)
 	if err != nil {
 		return "", fmt.Errorf("generate agent token: %w", err)
 	}
 
-	// 存储新 Token 的哈希（bcrypt）
+	// Store the new Token's hash (bcrypt)
 	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(apiToken), bcrypt.DefaultCost)
 	if err != nil {
 		return "", fmt.Errorf("hash agent token: %w", err)
 	}
 
-	// 计算 SHA-256 查找哈希以实现高效的数据库查询
+	// Compute a SHA-256 lookup hash for efficient database queries
 	shaHash := sha256.Sum256([]byte(apiToken))
 	lookupHash := hex.EncodeToString(shaHash[:])
 
@@ -450,13 +450,13 @@ func (s *Store) RotateAgentToken(ctx context.Context, agentID uuid.UUID) (string
 	return apiToken, nil
 }
 
-// ValidStatusTransitions 定义允许的 Agent 状态流转映射表。
+// ValidStatusTransitions defines the mapping of allowed Agent status transitions.
 //
-// 状态机：
-//   - offline → online
-//   - online → busy, offline, paused
-//   - busy → online, paused
-//   - paused → online, offline
+// State machine:
+//   - offline -> online
+//   - online -> busy, offline, paused
+//   - busy -> online, paused
+//   - paused -> online, offline
 var ValidStatusTransitions = map[string][]string{
 	types.AgentStatusOffline: {types.AgentStatusOnline},
 	types.AgentStatusOnline:  {types.AgentStatusBusy, types.AgentStatusOffline, types.AgentStatusPaused},
@@ -464,14 +464,14 @@ var ValidStatusTransitions = map[string][]string{
 	types.AgentStatusPaused:  {types.AgentStatusOnline, types.AgentStatusOffline},
 }
 
-// ValidateAgentStatusTransition 校验 Agent 状态流转是否合法。
+// ValidateAgentStatusTransition validates whether an Agent status transition is legal.
 //
-// 参数：
-//   - from: 当前状态
-//   - to: 目标状态
+// Parameters:
+//   - from: the current status
+//   - to: the target status
 //
-// 返回：
-//   - bool: 流转是否合法
+// Returns:
+//   - bool: whether the transition is legal
 func ValidateAgentStatusTransition(from, to string) bool {
 	allowed, ok := ValidStatusTransitions[from]
 	if !ok {
@@ -485,13 +485,13 @@ func ValidateAgentStatusTransition(from, to string) bool {
 	return false
 }
 
-// nullRawMessage 辅助函数，将原始 JSON 字节转换为 NullRawMessage 类型。
+// nullRawMessage is a helper function that converts raw JSON bytes to the NullRawMessage type.
 //
-// 参数：
-//   - data: JSON 字节数组
+// Parameters:
+//   - data: the JSON byte array
 //
-// 返回：
-//   - pqtype.NullRawMessage: 可空的 JSON 消息
+// Returns:
+//   - pqtype.NullRawMessage: a nullable JSON message
 func nullRawMessage(data []byte) pqtype.NullRawMessage {
 	if data == nil {
 		return pqtype.NullRawMessage{}
@@ -499,28 +499,28 @@ func nullRawMessage(data []byte) pqtype.NullRawMessage {
 	return pqtype.NullRawMessage{RawMessage: data, Valid: true}
 }
 
-// nullString 辅助函数，将字符串转换为 NullString 类型。
+// nullString is a helper function that converts a string to the NullString type.
 //
-// 空字符串转换为 Valid=false 的 NullString。
+// An empty string is converted to a NullString with Valid=false.
 //
-// 参数：
-//   - s: 输入字符串
+// Parameters:
+//   - s: the input string
 //
-// 返回：
-//   - sql.NullString: 可空字符串
+// Returns:
+//   - sql.NullString: a nullable string
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-// nullUUID 辅助函数，将 UUID 指针转换为 NullUUID 类型。
+// nullUUID is a helper function that converts a UUID pointer to the NullUUID type.
 //
-// nil 指针转换为 Valid=false 的 NullUUID。
+// A nil pointer is converted to a NullUUID with Valid=false.
 //
-// 参数：
-//   - id: UUID 指针
+// Parameters:
+//   - id: the UUID pointer
 //
-// 返回：
-//   - uuid.NullUUID: 可空 UUID
+// Returns:
+//   - uuid.NullUUID: a nullable UUID
 func nullUUID(id *uuid.UUID) uuid.NullUUID {
 	if id == nil {
 		return uuid.NullUUID{}

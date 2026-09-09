@@ -1,7 +1,7 @@
-// auth.go 提供用户认证相关的 HTTP API 端点，包括登录、注册、Token 交换、登出、密码修改/重置、工作区切换等。
+// auth.go provides HTTP API endpoints related to user authentication, including login, registration, token exchange, logout, password change/reset, workspace switching, etc.
 //
-// 公开端点（无需认证）：登录、注册、Token 交换、密码重置请求、密码重置、接受邀请。
-// 需认证端点：登出、当前用户信息、修改密码、切换工作区。
+// Public endpoints (no authentication required): login, registration, token exchange, password reset request, password reset, accept invitation.
+// Authenticated endpoints: logout, current user info, change password, switch workspace.
 
 package handler
 
@@ -21,18 +21,18 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// AuthHandler 处理用户认证相关的 HTTP 请求，包括登录、注册、Token 交换、登出、密码管理等。
+// AuthHandler handles HTTP requests related to user authentication, including login, registration, token exchange, logout, password management, etc.
 type AuthHandler struct {
 	Svc       *service.Service
-	JWTSecret string // JWT 签名密钥
+	JWTSecret string // JWT signing secret
 }
 
-// NewAuthHandler 创建 AuthHandler 实例。
+// NewAuthHandler creates an AuthHandler instance.
 func NewAuthHandler(svc *service.Service, jwtSecret string) *AuthHandler {
 	return &AuthHandler{Svc: svc, JWTSecret: jwtSecret}
 }
 
-// Routes 返回不需要认证的认证路由（登录、注册、Token 交换）。
+// Routes returns authentication routes that do not require authentication (login, registration, token exchange).
 func (h *AuthHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -43,41 +43,41 @@ func (h *AuthHandler) Routes() chi.Router {
 	return r
 }
 
-// loginRequest 登录请求体。
+// loginRequest login request body.
 type loginRequest struct {
-	Email    string `json:"email"`    // 用户邮箱
-	Password string `json:"password"` // 用户密码
+	Email    string `json:"email"`    // user email
+	Password string `json:"password"` // user password
 }
 
-// Login 处理 POST /login 端点，验证用户邮箱和密码，返回 JWT Token 和用户信息。
+// Login handles the POST /login endpoint, validates the user email and password, and returns a JWT Token and user info.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - email: string，用户邮箱（必填）
-//   - password: string，用户密码（必填）
+// Request body:
+//   - email: string, user email (required)
+//   - password: string, user password (required)
 //
-// 响应：
-//   - 200: 登录成功，返回 Token 和用户信息
-//   - 400: 参数错误（缺少邮箱或密码）
-//   - 401: 邮箱或密码错误
+// Response:
+//   - 200: login successful, returns Token and user info
+//   - 400: parameter error (missing email or password)
+//   - 401: incorrect email or password
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req loginRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// 验证必填字段
+	// validate required fields
 	if req.Email == "" || req.Password == "" {
 		response.BadRequest(w, "email and password are required")
 		return
 	}
 
-	// 调用认证服务执行登录
+	// call auth service to perform login
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	result, err := authSvc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
@@ -85,7 +85,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 返回认证结果
+	// return authentication result
 	response.JSON(w, r, authResponse{
 		Token:       result.Token,
 		ExpiresAt:   result.ExpiresAt,
@@ -95,49 +95,49 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// registerRequest 注册请求体。
+// registerRequest registration request body.
 type registerRequest struct {
-	Name     string `json:"name"`     // 用户名称
-	Email    string `json:"email"`    // 用户邮箱
-	Password string `json:"password"` // 用户密码
+	Name     string `json:"name"`     // user name
+	Email    string `json:"email"`    // user email
+	Password string `json:"password"` // user password
 }
 
-// Register 处理 POST /register 端点，注册新用户并创建默认工作区，返回 JWT Token。
+// Register handles the POST /register endpoint, registers a new user and creates a default workspace, returning a JWT Token.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - name: string，用户名称（必填）
-//   - email: string，用户邮箱（必填）
-//   - password: string，用户密码（必填，8-128 位，需包含大小写字母和数字）
+// Request body:
+//   - name: string, user name (required)
+//   - email: string, user email (required)
+//   - password: string, user password (required, 8-128 chars, must include upper/lowercase letters and digits)
 //
-// 响应：
-//   - 201: 注册成功，返回 Token 和用户信息
-//   - 400: 参数错误或密码不符合强度要求
-//   - 500: 服务器内部错误
+// Response:
+//   - 201: registration successful, returns Token and user info
+//   - 400: parameter error or password does not meet strength requirements
+//   - 500: internal server error
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req registerRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// 验证必填字段
+	// validate required fields
 	if req.Name == "" || req.Email == "" || req.Password == "" {
 		response.BadRequest(w, "name, email and password are required")
 		return
 	}
 
-	// 验证密码强度（与 service 层一致，纵深防御）
+	// validate password strength (consistent with the service layer, defense in depth)
 	if err := service.ValidatePassword(req.Password); err != nil {
 		response.BadRequest(w, err.Error())
 		return
 	}
 
-	// 调用认证服务执行注册
+	// call auth service to perform registration
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	result, err := authSvc.Register(r.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
@@ -149,7 +149,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 返回注册结果
+	// return registration result
 	w.WriteHeader(http.StatusCreated)
 	response.JSON(w, r, authResponse{
 		Token:       result.Token,
@@ -160,53 +160,53 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// --- Token 交换 ---
+// --- Token exchange ---
 
-// tokenExchangeRequest Token 交换请求体。
+// tokenExchangeRequest token exchange request body.
 type tokenExchangeRequest struct {
-	APIToken string `json:"api_token"` // API Token（tm_ 前缀）
+	APIToken string `json:"api_token"` // API Token (tm_ prefix)
 }
 
-// tokenExchangeResponse Token 交换响应体。
+// tokenExchangeResponse token exchange response body.
 type tokenExchangeResponse struct {
-	SessionToken string    `json:"session_token"` // 会话 Token（st_ 前缀）
-	ExpiresAt    time.Time `json:"expires_at"`    // 过期时间
+	SessionToken string    `json:"session_token"` // session Token (st_ prefix)
+	ExpiresAt    time.Time `json:"expires_at"`    // expiration time
 }
 
-// TokenExchange 处理 POST /token-exchange 端点，将 API Token 交换为会话 Token。
+// TokenExchange handles the POST /token-exchange endpoint, exchanging an API Token for a session Token.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - api_token: string，API Token（必填，tm_ 前缀）
+// Request body:
+//   - api_token: string, API Token (required, tm_ prefix)
 //
-// 响应：
-//   - 200: 交换成功，返回会话 Token
-//   - 400: 参数错误或 Token 格式无效
-//   - 401: Token 无效或已过期
+// Response:
+//   - 200: exchange successful, returns session Token
+//   - 400: parameter error or invalid Token format
+//   - 401: Token invalid or expired
 func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req tokenExchangeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// 验证必填字段
+	// validate required fields
 	if req.APIToken == "" {
 		response.BadRequest(w, "api_token is required")
 		return
 	}
 
-	// 验证 Token 格式
+	// validate Token format
 	if !strings.HasPrefix(req.APIToken, "tm_") {
 		response.BadRequest(w, "invalid api_token format")
 		return
 	}
 
-	// 调用认证服务执行 Token 交换
+	// call auth service to perform token exchange
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	result, err := authSvc.ExchangeAPITokenForSession(r.Context(), req.APIToken)
 	if err != nil {
@@ -214,7 +214,7 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 返回会话 Token
+	// return session Token
 	response.JSON(w, r, tokenExchangeResponse{
 		SessionToken: result.SessionToken,
 		ExpiresAt:    result.ExpiresAt,
@@ -223,24 +223,24 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 
 // --- Whoami ---
 
-// Whoami 处理 GET /whoami 端点，返回当前已认证用户的信息。
+// Whoami handles the GET /whoami endpoint, returning the current authenticated user's info.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回用户信息
-//   - 401: 未认证
+// Response:
+//   - 200: successfully returns user info
+//   - 401: not authenticated
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
-	// 从上下文获取认证信息
+	// get auth info from context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "not authenticated")
 		return
 	}
 
-	// 调用认证服务获取用户信息
+	// call auth service to get user info
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	info, err := authSvc.Whoami(r.Context(), claims.UserType, claims.UserID)
 	if err != nil {
@@ -251,74 +251,74 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, info)
 }
 
-// generateToken 生成 JWT Token 的内部方法。
+// generateToken internal method that generates a JWT Token.
 func (h *AuthHandler) generateToken(userID uuid.UUID, userType string, workspaceID uuid.UUID, role string) (string, time.Time, error) {
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	return authSvc.GenerateToken(userID, userType, workspaceID, role)
 }
 
-// --- 切换工作区 ---
+// --- Switch workspace ---
 
-// switchWorkspaceRequest 切换工作区请求体。
+// switchWorkspaceRequest switch workspace request body.
 type switchWorkspaceRequest struct {
-	WorkspaceID string `json:"workspace_id"` // 目标工作区 ID
+	WorkspaceID string `json:"workspace_id"` // target workspace ID
 }
 
-// switchWorkspaceResponse 切换工作区响应体。
+// switchWorkspaceResponse switch workspace response body.
 type switchWorkspaceResponse struct {
-	WorkspaceID string `json:"workspace_id"` // 目标工作区 ID
-	Role        string `json:"role"`         // 用户在目标工作区的角色
+	WorkspaceID string `json:"workspace_id"` // target workspace ID
+	Role        string `json:"role"`         // user's role in the target workspace
 }
 
-// SwitchWorkspace 处理 POST /switch-workspace 端点，生成面向目标工作区的新 JWT Token，仅允许人类用户切换。
+// SwitchWorkspace handles the POST /switch-workspace endpoint, generating a new JWT Token for the target workspace; only human users are allowed to switch.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - workspace_id: string，目标工作区 ID（必填）
+// Request body:
+//   - workspace_id: string, target workspace ID (required)
 //
-// 响应：
-//   - 200: 切换成功，返回新 Token 和角色信息
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: 非人类用户无法切换或不是目标工作区成员
+// Response:
+//   - 200: switch successful, returns new Token and role info
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: non-human user cannot switch or is not a member of the target workspace
 func (h *AuthHandler) SwitchWorkspace(w http.ResponseWriter, r *http.Request) {
-	// 从上下文获取认证信息
+	// get auth info from context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 仅人类用户可以切换工作区
+	// only human users can switch workspace
 	if claims.UserType != "member" {
 		response.Forbidden(w, "only members can switch workspace")
 		return
 	}
 
-	// 解析请求体
+	// parse request body
 	var req switchWorkspaceRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// 验证必填字段
+	// validate required fields
 	if req.WorkspaceID == "" {
 		response.BadRequest(w, "workspace_id is required")
 		return
 	}
 
-	// 解析目标工作区 ID
+	// parse target workspace ID
 	targetWorkspaceID, err := uuid.Parse(req.WorkspaceID)
 	if err != nil {
 		response.BadRequest(w, "invalid workspace_id format")
 		return
 	}
 
-	// 验证用户是目标工作区的成员
+	// verify the user is a member of the target workspace
 	wsSvc := service.NewWorkspaceService(h.Svc)
 	wm, err := wsSvc.GetMembership(r.Context(), targetWorkspaceID, claims.UserID)
 	if err != nil {
@@ -332,12 +332,12 @@ func (h *AuthHandler) SwitchWorkspace(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// isUniqueViolation 判断错误链里是否含 PostgreSQL 唯一约束冲突（SQLSTATE 23505）。
+// isUniqueViolation determines whether the error chain contains a PostgreSQL unique constraint violation (SQLSTATE 23505).
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return true
 	}
-	// 退化兜底：错误串含 SQLSTATE 23505（覆盖驱动错误类型被包装变化的情况）
+	// fallback: the error string contains SQLSTATE 23505 (covers cases where the driver error type is wrapped/changed)
 	return strings.Contains(err.Error(), "23505")
 }

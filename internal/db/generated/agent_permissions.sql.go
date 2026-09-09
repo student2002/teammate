@@ -26,7 +26,7 @@ type CreateAgentPermissionParams struct {
 	GrantedBy    uuid.NullUUID `db:"granted_by" json:"granted_by"`
 }
 
-// Agent 权限
+// Agent permissions
 func (q *Queries) CreateAgentPermission(ctx context.Context, arg CreateAgentPermissionParams) (AgentPermission, error) {
 	row := q.db.QueryRowContext(ctx, createAgentPermission,
 		arg.AgentID,
@@ -106,8 +106,8 @@ type HasAgentPermissionParams struct {
 	ResourceID   uuid.NullUUID `db:"resource_id" json:"resource_id"`
 }
 
-// 检查 Agent 是否拥有对某个资源的特定权限。
-// 匹配以下两种情况之一：精确匹配（resource_type + resource_id）或通配符匹配（resource_type = '*' 且 resource_id IS NULL）。
+// Checks whether an Agent has a specific permission on a resource.
+// Matches either of two cases: exact match (resource_type + resource_id) or wildcard match (resource_type = '*' AND resource_id IS NULL).
 func (q *Queries) HasAgentPermission(ctx context.Context, arg HasAgentPermissionParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, hasAgentPermission,
 		arg.AgentID,

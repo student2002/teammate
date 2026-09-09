@@ -1,4 +1,4 @@
--- 通知查询
+-- Notification queries
 
 -- name: ListManualInterventionNodes :many
 SELECT tn.id, tn.task_id, tn.name, tn.status, tn.created_at, t.title AS task_title

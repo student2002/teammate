@@ -1,7 +1,7 @@
-// project.go 实现项目管理的业务逻辑，包括项目 CRUD、成员管理、
-// 审查者管理，以及代理和成员的项目访问权限检查。
-// 项目支持多级权限模型：工作区 owner/admin 自动拥有所有项目权限，
-// 其他成员需要显式的项目成员关系。
+// project.go implements the business logic for project management, including project CRUD,
+// member management, reviewer management, and project access checks for agents and members.
+// Projects support a multi-level permission model: workspace owner/admin automatically
+// have all project permissions; other members require explicit project membership.
 package service
 
 import (
@@ -13,66 +13,66 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ProjectService 提供项目管理相关的业务逻辑。
+// ProjectService provides the business logic for project management.
 type ProjectService struct {
 	svc *Service
 }
 
-// NewProjectService 创建一个新的 ProjectService 实例。
+// NewProjectService creates a new ProjectService instance.
 func NewProjectService(svc *Service) *ProjectService {
 	return &ProjectService{svc: svc}
 }
 
-// Create 创建一个新的项目。
+// Create creates a new project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 创建项目的参数，包含工作区 ID、名称、描述、Git 仓库地址等
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for creating the project, including workspace ID, name, description, Git repository URL, etc.
 //
-// 返回：
-//   - types.Project: 创建的项目信息
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.Project: the created project information
+//   - error: possible error (database write failure)
 func (s *ProjectService) Create(ctx context.Context, params types.CreateProjectParams) (types.Project, error) {
 	return s.svc.Store.CreateProject(ctx, params)
 }
 
-// Get 根据 ID 获取项目信息。
+// Get retrieves project information by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - id: project ID
 //
-// 返回：
-//   - types.Project: 项目信息
-//   - error: 可能的错误（项目不存在）
+// Returns:
+//   - types.Project: project information
+//   - error: possible error (project does not exist)
 func (s *ProjectService) Get(ctx context.Context, id uuid.UUID) (types.Project, error) {
 	return s.svc.Store.GetProject(ctx, id)
 }
 
-// List 列出指定工作区的所有项目。
+// List lists all projects in the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
 //
-// 返回：
-//   - []types.Project: 项目列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Project: list of projects
+//   - error: possible error (database query failure)
 func (s *ProjectService) List(ctx context.Context, workspaceID uuid.UUID) ([]types.Project, error) {
 	return s.svc.Store.ListProjects(ctx, workspaceID)
 }
 
-// ListByAgentMembership 仅返回指定代理作为成员的项目。
-// 用于 Agentd 守护进程获取可操作的项目列表。
+// ListByAgentMembership returns only the projects in which the specified agent is a member.
+// Used by the Agentd daemon to retrieve the list of actionable projects.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - agentID: 代理 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - agentID: agent ID
 //
-// 返回：
-//   - []types.Project: 代理作为成员的项目列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Project: list of projects in which the agent is a member
+//   - error: possible error (database query failure)
 func (s *ProjectService) ListByAgentMembership(ctx context.Context, workspaceID, agentID uuid.UUID) ([]types.Project, error) {
 	return s.svc.Store.ListProjectsByAgentMembership(ctx, types.ListProjectsByAgentMembershipParams{
 		WorkspaceID: workspaceID.String(),
@@ -80,148 +80,148 @@ func (s *ProjectService) ListByAgentMembership(ctx context.Context, workspaceID,
 	})
 }
 
-// strPtr 返回字符串指针的辅助函数。
+// strPtr is a helper function that returns a pointer to the given string.
 func strPtr(s string) *string {
 	return &s
 }
 
-// Update 更新项目信息。
+// Update updates project information.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新项目的参数，包含 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for updating the project, including the ID and the fields to update
 //
-// 返回：
-//   - types.Project: 更新后的项目信息
-//   - error: 可能的错误（项目不存在、数据库更新失败）
+// Returns:
+//   - types.Project: the updated project information
+//   - error: possible error (project does not exist, database update failure)
 func (s *ProjectService) Update(ctx context.Context, params types.UpdateProjectParams) (types.Project, error) {
 	return s.svc.Store.UpdateProject(ctx, params)
 }
 
-// Delete 删除一个项目。
+// Delete deletes a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - id: project ID
 //
-// 返回：
-//   - error: 可能的错误（项目不存在、数据库删除失败）
+// Returns:
+//   - error: possible error (project does not exist, database delete failure)
 func (s *ProjectService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.svc.Store.DeleteProject(ctx, id)
 }
 
-// GetProjectMember 根据 ID 获取项目成员记录。
+// GetProjectMember retrieves a project member record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 项目成员记录 ID
+// Parameters:
+//   - ctx: request context
+//   - memberID: project member record ID
 //
-// 返回：
-//   - types.ProjectMember: 项目成员记录
-//   - error: 可能的错误（记录不存在）
+// Returns:
+//   - types.ProjectMember: project member record
+//   - error: possible error (record does not exist)
 func (s *ProjectService) GetProjectMember(ctx context.Context, memberID uuid.UUID) (types.ProjectMember, error) {
 	return s.svc.Store.GetProjectMember(ctx, memberID)
 }
 
-// AddMember 将代理添加为项目成员。
+// AddMember adds an agent as a project member.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 添加项目成员的参数，包含项目 ID、代理 ID 和项目角色
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for adding a project member, including project ID, agent ID, and project role
 //
-// 返回：
-//   - types.ProjectMember: 创建的项目成员记录
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.ProjectMember: the created project member record
+//   - error: possible error (database write failure)
 func (s *ProjectService) AddMember(ctx context.Context, params types.CreateProjectMemberParams) (types.ProjectMember, error) {
 	return s.svc.Store.CreateProjectMember(ctx, params)
 }
 
-// ListMembers 列出项目的所有成员（代理）。
+// ListMembers lists all members (agents) of a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - []types.ProjectMember: 项目成员列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.ProjectMember: list of project members
+//   - error: possible error (database query failure)
 func (s *ProjectService) ListMembers(ctx context.Context, projectID uuid.UUID) ([]types.ProjectMember, error) {
 	return s.svc.Store.ListProjectMembers(ctx, projectID)
 }
 
-// RemoveMember 从项目中移除一个成员。
+// RemoveMember removes a member from a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 项目成员记录 ID
+// Parameters:
+//   - ctx: request context
+//   - memberID: project member record ID
 //
-// 返回：
-//   - error: 可能的错误（记录不存在、数据库删除失败）
+// Returns:
+//   - error: possible error (record does not exist, database delete failure)
 func (s *ProjectService) RemoveMember(ctx context.Context, memberID uuid.UUID) error {
 	return s.svc.Store.DeleteProjectMember(ctx, memberID)
 }
 
-// AddReviewer 为项目添加审查者。审查者可以审查项目中的 review 类型节点。
+// AddReviewer adds a reviewer to a project. Reviewers can review review-type nodes within the project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 添加审查者的参数，包含项目 ID 和代理 ID
+// Parameters:
+//   - ctx: request context
+//   - params: parameters for adding a reviewer, including project ID and agent ID
 //
-// 返回：
-//   - types.ProjectReviewer: 创建的项目审查者记录
-//   - error: 可能的错误（数据库写入失败）
+// Returns:
+//   - types.ProjectReviewer: the created project reviewer record
+//   - error: possible error (database write failure)
 func (s *ProjectService) AddReviewer(ctx context.Context, params types.CreateProjectReviewerParams) (types.ProjectReviewer, error) {
 	return s.svc.Store.CreateProjectReviewer(ctx, params)
 }
 
-// ListReviewers 列出项目的所有审查者。
+// ListReviewers lists all reviewers of a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
 //
-// 返回：
-//   - []types.ProjectReviewer: 项目审查者列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.ProjectReviewer: list of project reviewers
+//   - error: possible error (database query failure)
 func (s *ProjectService) ListReviewers(ctx context.Context, projectID uuid.UUID) ([]types.ProjectReviewer, error) {
 	return s.svc.Store.ListProjectReviewers(ctx, projectID)
 }
 
-// RemoveReviewer 从项目中移除一个审查者。
+// RemoveReviewer removes a reviewer from a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - reviewerID: 项目审查者记录 ID
+// Parameters:
+//   - ctx: request context
+//   - reviewerID: project reviewer record ID
 //
-// 返回：
-//   - error: 可能的错误（记录不存在、数据库删除失败）
+// Returns:
+//   - error: possible error (record does not exist, database delete failure)
 func (s *ProjectService) RemoveReviewer(ctx context.Context, reviewerID uuid.UUID) error {
 	return s.svc.Store.DeleteProjectReviewer(ctx, reviewerID)
 }
 
-// IsAgentMember 检查代理是否是项目的成员。
+// IsAgentMember checks whether an agent is a member of a project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 检查参数，包含项目 ID 和代理 ID
+// Parameters:
+//   - ctx: request context
+//   - params: check parameters, including project ID and agent ID
 //
-// 返回：
-//   - bool: 代理是否为项目成员
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - bool: whether the agent is a project member
+//   - error: possible error (database query failure)
 func (s *ProjectService) IsAgentMember(ctx context.Context, params types.IsAgentProjectMemberParams) (bool, error) {
 	return s.svc.Store.IsAgentProjectMember(ctx, params)
 }
 
-// CheckAgentProjectAccess 检查代理是否有权访问指定项目。
-// 如果代理不是项目成员，返回错误。
+// CheckAgentProjectAccess checks whether an agent has permission to access the specified project.
+// If the agent is not a project member, returns an error.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: 代理 ID
-//   - projectID: 项目 ID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent ID
+//   - projectID: project ID
 //
-// 返回：
-//   - error: 代理无权访问时返回错误
+// Returns:
+//   - error: returns an error when the agent has no access permission
 func (s *ProjectService) CheckAgentProjectAccess(ctx context.Context, agentID, projectID uuid.UUID) error {
 	isMember, err := s.svc.Store.IsAgentProjectMember(ctx, types.IsAgentProjectMemberParams{
 		ProjectID: projectID.String(),
@@ -236,16 +236,16 @@ func (s *ProjectService) CheckAgentProjectAccess(ctx context.Context, agentID, p
 	return nil
 }
 
-// GetProjectReviewerByReviewerID 根据审查者记录 ID 查询项目审查者信息。
-// 用于验证审查者记录是否存在以及是否属于指定项目。
+// GetProjectReviewerByReviewerID retrieves project reviewer information by reviewer record ID.
+// Used to verify whether a reviewer record exists and belongs to the specified project.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - reviewerID: 审查者记录 ID
+// Parameters:
+//   - ctx: request context
+//   - reviewerID: reviewer record ID
 //
-// 返回：
-//   - types.ProjectReviewer: 审查者记录（包含 project_id）
-//   - error: 可能的错误（记录不存在）
+// Returns:
+//   - types.ProjectReviewer: reviewer record (including project_id)
+//   - error: possible error (record does not exist)
 func (s *ProjectService) GetProjectReviewerByReviewerID(ctx context.Context, reviewerID uuid.UUID) (types.ProjectReviewer, error) {
 	reviewer, err := s.svc.Store.GetProjectReviewerByID(ctx, reviewerID)
 	if err != nil {
@@ -254,24 +254,24 @@ func (s *ProjectService) GetProjectReviewerByReviewerID(ctx context.Context, rev
 	return reviewer, nil
 }
 
-// CheckMemberProjectAccess 检查成员是否有权访问指定项目。
-// 继承规则：
-//  1. 工作区 owner/admin 自动拥有其工作区内所有项目的完全访问权限
-//  2. 工作区 member 需要显式的项目成员关系
-//  3. 工作区 viewer 即使被添加为项目成员也只能查看
+// CheckMemberProjectAccess checks whether a member has permission to access the specified project.
+// Inheritance rules:
+//  1. Workspace owner/admin automatically has full access to all projects within their workspace
+//  2. Workspace member requires explicit project membership
+//  3. Workspace viewer can only view, even if added as a project member
 //
-// 如果指定了 requiredRole，成员的项目角色必须达到或超过该级别（lead > developer > reviewer）。
-// 工作区 owner/admin 会跳过角色级别检查。
+// If requiredRole is specified, the member's project role must meet or exceed that level (lead > developer > reviewer).
+// Workspace owner/admin skip the role level check.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 ID
-//   - projectID: 项目 ID
-//   - workspaceRole: 成员在工作区中的角色
-//   - requiredRole: 可选，要求的最低项目角色级别
+// Parameters:
+//   - ctx: request context
+//   - memberID: member ID
+//   - projectID: project ID
+//   - workspaceRole: the member's role in the workspace
+//   - requiredRole: optional, the minimum project role level required
 //
-// 返回：
-//   - error: 成员无权访问时返回错误
+// Returns:
+//   - error: returns an error when the member has no access permission
 func (s *ProjectService) CheckMemberProjectAccess(ctx context.Context, memberID, projectID uuid.UUID, workspaceRole string, requiredRole ...string) error {
 	project, err := s.svc.Store.GetProject(ctx, projectID)
 	if err != nil {

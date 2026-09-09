@@ -1,4 +1,4 @@
-// workflow.go 实现工作流模板子命令，管理工作流模板。
+// workflow.go implements the workflow template subcommand, managing workflow templates.
 package main
 
 import (
@@ -66,8 +66,8 @@ Nodes are specified as a JSON array via --nodes. Each node object supports:
 
 Example:
   teammate workflow create --workspace WS_ID --name "My Flow" --nodes '[
-    {"name":"需求分析","sort_order":1,"node_type":"standard","timeout_minutes":30},
-    {"name":"代码审查","sort_order":2,"node_type":"review","timeout_minutes":30}
+    {"name":"Requirement Analysis","sort_order":1,"node_type":"standard","timeout_minutes":30},
+    {"name":"Code Review","sort_order":2,"node_type":"review","timeout_minutes":30}
   ]'`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wsID, _ := cmd.Flags().GetString("workspace")

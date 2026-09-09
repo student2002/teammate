@@ -1,4 +1,4 @@
-// task_test.go 覆盖任务数据访问的测试。
+// task_test.go covers task data access tests.
 package store_test
 
 import (
@@ -11,9 +11,9 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestCreateTask_GeneratesNodes 测试创建任务时是否自动生成工作流节点。
-// 验证任务 ID 非零、序号与 ID 一致、生成的节点数量正确，
-// 且第一个节点（any_agent）初始状态为待处理（pending）。
+// TestCreateTask_GeneratesNodes tests whether workflow nodes are automatically generated when creating a task.
+// It verifies that the task ID is non-zero, the sequence matches the ID, the generated node count is correct,
+// and the first node (any_agent) has an initial status of pending.
 func TestCreateTask_GeneratesNodes(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -48,7 +48,7 @@ func TestCreateTask_GeneratesNodes(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(createdNodes))
 	}
 
-	// 验证节点状态
+	// Verify node status
 	nodes, err := s.ListTaskNodes(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("ListTaskNodes: %v", err)
@@ -57,14 +57,14 @@ func TestCreateTask_GeneratesNodes(t *testing.T) {
 		t.Fatalf("expected 3 nodes from ListTaskNodes, got %d", len(nodes))
 	}
 
-	// 第一个节点（any_agent）应为待处理状态
+	// First node (any_agent) should be in pending status
 	if nodes[0].Status != "pending" {
 		t.Fatalf("node 0: expected pending, got %s", nodes[0].Status)
 	}
 }
 
-// TestCreateTask_CopiesDirectoryPermissions 验证模板节点的目录权限字段
-// （readonly_dirs / full_control_dirs）在任务实例化时被复制到任务节点。
+// TestCreateTask_CopiesDirectoryPermissions verifies that template node directory permission fields
+// (readonly_dirs / full_control_dirs) are copied to task nodes when a task is instantiated.
 func TestCreateTask_CopiesDirectoryPermissions(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -73,7 +73,7 @@ func TestCreateTask_CopiesDirectoryPermissions(t *testing.T) {
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 为模板节点设置目录权限
+	// Set directory permissions for template nodes
 	tplNodes[0].ReadonlyDirs = json.RawMessage(`["/docs","/README.md"]`)
 	tplNodes[0].FullControlDirs = json.RawMessage(`["/src"]`)
 	tplNodes[1].ReadonlyDirs = json.RawMessage(`[]`)
@@ -97,7 +97,7 @@ func TestCreateTask_CopiesDirectoryPermissions(t *testing.T) {
 	if len(createdNodes) != 2 {
 		t.Fatalf("expected 2 nodes, got %d", len(createdNodes))
 	}
-	// jsonb 列由 PostgreSQL 规范化格式（如加空格），用 JSON 数组语义比较而非字符串比较
+	// jsonb columns are normalized by PostgreSQL (e.g., adding spaces), so compare JSON array semantics instead of string comparison
 	assertDirsEqual(t, createdNodes[0].ReadonlyDirs, `["/docs","/README.md"]`)
 	assertDirsEqual(t, createdNodes[0].FullControlDirs, `["/src"]`)
 	assertDirsEqual(t, createdNodes[1].ReadonlyDirs, `[]`)
@@ -105,7 +105,7 @@ func TestCreateTask_CopiesDirectoryPermissions(t *testing.T) {
 		t.Errorf("node 1 FullControlDirs = %s, want empty (not configured)", createdNodes[1].FullControlDirs)
 	}
 
-	// 从数据库重新读取验证持久化
+	// Re-read from database to verify persistence
 	nodes, err := s.ListTaskNodes(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("ListTaskNodes: %v", err)
@@ -114,7 +114,7 @@ func TestCreateTask_CopiesDirectoryPermissions(t *testing.T) {
 	assertDirsEqual(t, nodes[0].FullControlDirs, `["/src"]`)
 }
 
-// assertDirsEqual 断言 json.RawMessage 解析后与期望 JSON 数组的元素一致（忽略格式/顺序差异）。
+// assertDirsEqual asserts that the elements of a parsed json.RawMessage match the expected JSON array (ignoring format/order differences).
 func assertDirsEqual(t *testing.T, got json.RawMessage, want string) {
 	t.Helper()
 	var gotDirs, wantDirs []string
@@ -136,8 +136,8 @@ func assertDirsEqual(t *testing.T, got json.RawMessage, want string) {
 	}
 }
 
-// TestCreateTask_AutoStartSpecificAgent 测试当工作流节点指定了特定代理人（SpecificAgent）时，
-// 创建任务后该节点是否自动进入进行中（in_progress）状态。
+// TestCreateTask_AutoStartSpecificAgent tests whether a workflow node with a specific agent (SpecificAgent)
+// automatically enters in_progress status after task creation.
 func TestCreateTask_AutoStartSpecificAgent(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -177,8 +177,8 @@ func TestCreateTask_AutoStartSpecificAgent(t *testing.T) {
 	}
 }
 
-// TestDeleteTask_SoftDelete 测试删除任务时的软删除行为。
-// 验证删除后任务状态变为已取消（cancelled），而非从数据库中物理删除。
+// TestDeleteTask_SoftDelete tests the soft delete behavior when deleting a task.
+// It verifies that the task status changes to cancelled after deletion, rather than being physically removed from the database.
 func TestDeleteTask_SoftDelete(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -205,7 +205,7 @@ func TestDeleteTask_SoftDelete(t *testing.T) {
 		t.Fatalf("DeleteTask: %v", err)
 	}
 
-	// 验证任务状态已取消
+	// Verify task status is cancelled
 	updated, err := s.GetTask(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
@@ -215,9 +215,9 @@ func TestDeleteTask_SoftDelete(t *testing.T) {
 	}
 }
 
-// TestCancelTaskNodes 测试取消任务节点功能。
-// 先手动将第二个节点标记为进行中（in_progress），
-// 然后调用 CancelTaskNodes，验证所有节点恢复为待处理（pending）状态。
+// TestCancelTaskNodes tests the cancel task nodes functionality.
+// It first manually marks the second node as in_progress,
+// then calls CancelTaskNodes and verifies all nodes are reset to pending status.
 func TestCancelTaskNodes(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -239,7 +239,7 @@ func TestCancelTaskNodes(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// 手动将第二个节点标记为进行中
+	// Manually mark the second node as in_progress
 	nodes, _ := s.ListTaskNodes(ctx, task.ID)
 	_, err = s.UpdateTaskNodeStatus(ctx, types.UpdateTaskNodeStatusParams{
 		ID:          nodes[1].ID,
@@ -260,7 +260,7 @@ func TestCancelTaskNodes(t *testing.T) {
 		t.Fatalf("CancelTaskNodes: %v", err)
 	}
 
-	// 验证进行中的节点已重置为待处理状态
+	// Verify in_progress nodes have been reset to pending status
 	nodes, _ = s.ListTaskNodes(ctx, task.ID)
 	for _, n := range nodes {
 		if n.Status == "in_progress" {

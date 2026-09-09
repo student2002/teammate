@@ -1,7 +1,7 @@
-// runtime.go 提供 Agent 守护进程运行时的注册、心跳、同步及公钥上传等 HTTP API 端点。
+// runtime.go provides HTTP API endpoints for Agent daemon runtime registration, heartbeat, sync, and public key upload.
 //
-// 运行时（Runtime）是 Agent 守护进程的实例，通过心跳维持在线状态。
-// Agent 只能操作自己的运行时，人类用户可操作工作区内所有运行时。
+// A runtime is an instance of an Agent daemon that stays online via heartbeats.
+// An Agent can only operate its own runtime; human users can operate all runtimes in the workspace.
 
 package handler
 
@@ -21,17 +21,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// RuntimeHandler 处理 Agent 守护进程运行时管理的 HTTP 请求，包括注册、心跳、同步和公钥上传。
+// RuntimeHandler handles HTTP requests for Agent daemon runtime management, including registration, heartbeat, sync, and public key upload.
 type RuntimeHandler struct {
 	Svc *service.Service
 }
 
-// NewRuntimeHandler 创建 RuntimeHandler 实例。
+// NewRuntimeHandler creates a RuntimeHandler instance.
 func NewRuntimeHandler(svc *service.Service) *RuntimeHandler {
 	return &RuntimeHandler{Svc: svc}
 }
 
-// Routes 返回运行时的完整路由表（包含读写操作）。
+// Routes returns the complete route table for runtimes (including read and write operations).
 func (h *RuntimeHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -41,14 +41,14 @@ func (h *RuntimeHandler) Routes() chi.Router {
 	return r
 }
 
-// ReadRoutes 返回运行时只读路由（viewer+ 可访问）。
+// ReadRoutes returns the read-only routes for runtimes (accessible to viewer+).
 func (h *RuntimeHandler) ReadRoutes() chi.Router {
 	r := chi.NewRouter()
 
 	return r
 }
 
-// WriteRoutes 返回运行时写入路由（member+ 或 Agent 自身可访问）。
+// WriteRoutes returns the write routes for runtimes (accessible to member+ or the Agent itself).
 func (h *RuntimeHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -59,59 +59,59 @@ func (h *RuntimeHandler) WriteRoutes() chi.Router {
 }
 
 
-// RegisterRuntime 处理 POST /workspaces/{workspaceId}/runtimes 端点，注册 Agent 守护进程运行时实例。
+// RegisterRuntime handles the POST /workspaces/{workspaceId}/runtimes endpoint, registering an Agent daemon runtime instance.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 请求体：
-//   - agent_id: string，Agent ID（必填）
-//   - daemon_id: string，守护进程 ID
-//   - provider: string，Agent 提供者
-//   - version: string，守护进程版本
-//   - status: string，初始状态，默认 "online"
-//   - session_token_hash: string，会话 Token 哈希
-//   - session_expires_at: string，会话过期时间
-//   - public_key: string，RSA 公钥
+// Request body:
+//   - agent_id: string, Agent ID (required)
+//   - daemon_id: string, daemon ID
+//   - provider: string, Agent provider
+//   - version: string, daemon version
+//   - status: string, initial status, default "online"
+//   - session_token_hash: string, session token hash
+//   - session_expires_at: string, session expiration time
+//   - public_key: string, RSA public key
 //
-// 响应：
-//   - 201: 成功注册运行时
-//   - 400: 参数错误
-//   - 401: 未认证
-//   - 403: Agent 只能注册自己的运行时，人类需要 admin+ 角色
+// Response:
+//   - 201: runtime registered successfully
+//   - 400: parameter error
+//   - 401: not authenticated
+//   - 403: Agents can only register their own runtime; humans need admin+ role
 func (h *RuntimeHandler) RegisterRuntime(w http.ResponseWriter, r *http.Request) {
-	// 解析请求体
+	// parse request body
 	var req registerRuntimeRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// Agent ID 已是 uuid.UUID（registerRuntimeRequest.AgentID 字段类型）
+	// agent_id is already a uuid.UUID (the registerRuntimeRequest.AgentID field type)
 	agentID := req.AgentID
 	if agentID == uuid.Nil {
 		response.BadRequest(w, "invalid agent_id: must be a valid UUID")
 		return
 	}
 
-	// 验证 Agent 属于 URL 中的工作区
+	// verify the Agent belongs to the workspace in the URL
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return
 	}
 
-	// 权限检查
+	// permission check
 	if claims.UserType == "agent" {
-		// Agent 只能为自己注册运行时
+		// Agents can only register runtimes for themselves
 		if claims.UserID != agentID {
 			response.Forbidden(w, "agents can only register runtimes for themselves")
 			return
@@ -119,27 +119,27 @@ func (h *RuntimeHandler) RegisterRuntime(w http.ResponseWriter, r *http.Request)
 	}
 
 	if claims.UserType == "member" {
-		// 仅 admin+ 角色可代 Agent 注册运行时
+		// only admin+ role can register runtimes on behalf of an Agent
 		if types.MemberRoleLevel(claims.Role) < 3 {
 			response.Forbidden(w, "only admins can register runtimes on behalf of agents")
 			return
 		}
 	}
 
-	// 验证 Agent 存在且属于工作区
+	// verify the Agent exists and belongs to the workspace
 	agent, err := service.NewAgentService(h.Svc).Get(r.Context(), agentID)
 	if err != nil || agent.WorkspaceID != workspaceID.String() {
 		response.NotFound(w, "agent not found")
 		return
 	}
 
-	// 设置默认状态
+	// set default status
 	status := req.Status
 	if status == "" {
 		status = RuntimeStatusOnline
 	}
 
-	// 调用 service 注册运行时
+	// call service to register the runtime
 	rtSvc := service.NewRuntimeService(h.Svc)
 	runtime, err := rtSvc.Register(r.Context(), buildCreateRuntimeParams(
 		agentID, req.DaemonID, req.Provider, req.Version, status, req.SessionTokenHash, req.SessionExpiresAt, req.PublicKey,
@@ -157,32 +157,32 @@ func (h *RuntimeHandler) RegisterRuntime(w http.ResponseWriter, r *http.Request)
 	response.JSON(w, r, runtime)
 }
 
-// Heartbeat 处理 POST /workspaces/{workspaceId}/runtimes/{id}/heartbeat 端点，Agent 定期发送心跳维持在线状态。
+// Heartbeat handles the POST /workspaces/{workspaceId}/runtimes/{id}/heartbeat endpoint; an Agent periodically sends heartbeats to stay online.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request
 //
-// 响应：
-//   - 200: 成功返回运行时信息
-//   - 400: 运行时 ID 无效
-//   - 401: 未认证
-//   - 403: Agent 只能操作自己的运行时
-//   - 404: 运行时不存在
+// Response:
+//   - 200: successfully returns the runtime info
+//   - 400: invalid runtime ID
+//   - 401: not authenticated
+//   - 403: Agents can only operate their own runtime
+//   - 404: runtime does not exist
 func (h *RuntimeHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
-	// 解析运行时 ID
+	// parse runtime ID
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		response.BadRequest(w, "invalid runtime id")
 		return
 	}
 
-	// 验证运行时归属（Agent 只能操作自己的运行时）
+	// verify runtime ownership (Agents can only operate their own runtime)
 	if h.checkRuntimeOwnership(w, r, id) == nil {
 		return
 	}
 
-	// 调用 service 发送心跳
+	// call service to send the heartbeat
 	rtSvc := service.NewRuntimeService(h.Svc)
 	runtime, err := rtSvc.Heartbeat(r.Context(), id)
 	if err != nil {
@@ -197,16 +197,16 @@ func (h *RuntimeHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, runtime)
 }
 
-// --- 公钥上传 ---
+// --- public key upload ---
 func (h *RuntimeHandler) checkRuntimeWorkspace(w http.ResponseWriter, r *http.Request, runtimeID uuid.UUID) bool {
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return false
 	}
 
-	// 查询运行时
+	// query the runtime
 	runtime, err := service.NewRuntimeService(h.Svc).GetRuntimeByID(r.Context(), runtimeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -217,7 +217,7 @@ func (h *RuntimeHandler) checkRuntimeWorkspace(w http.ResponseWriter, r *http.Re
 		return false
 	}
 
-	// 验证 Agent 属于工作区
+	// verify the Agent belongs to the workspace
 	rtAgentID, _ := uuid.Parse(runtime.AgentID)
 	agent, err := service.NewAgentService(h.Svc).Get(r.Context(), rtAgentID)
 	if err != nil || agent.WorkspaceID != workspaceID.String() {
@@ -228,25 +228,25 @@ func (h *RuntimeHandler) checkRuntimeWorkspace(w http.ResponseWriter, r *http.Re
 	return true
 }
 
-// checkRuntimeOwnership 验证运行时是否属于当前认证 Agent 的自有运行时。
-// 对于 Agent：运行时必须属于认证的 Agent（防止跨 Agent 干扰）。
-// 对于人类用户：运行时的 Agent 必须属于 URL 工作区。
+// checkRuntimeOwnership verifies that the runtime belongs to the currently authenticated Agent's own runtime.
+// For Agents: the runtime must belong to the authenticated Agent (to prevent cross-Agent interference).
+// For human users: the runtime's Agent must belong to the URL workspace.
 func (h *RuntimeHandler) checkRuntimeOwnership(w http.ResponseWriter, r *http.Request, runtimeID uuid.UUID) *Runtime {
-	// 解析工作区 ID
+	// parse workspace ID
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
 		response.BadRequest(w, "invalid workspace id")
 		return nil
 	}
 
-	// 获取认证信息
+	// get auth info
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "authentication required")
 		return nil
 	}
 
-	// 查询运行时
+	// query the runtime
 	runtime, err := service.NewRuntimeService(h.Svc).GetRuntimeByID(r.Context(), runtimeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -257,7 +257,7 @@ func (h *RuntimeHandler) checkRuntimeOwnership(w http.ResponseWriter, r *http.Re
 		return nil
 	}
 
-	// 验证 Agent 属于工作区
+	// verify the Agent belongs to the workspace
 	rAgentID, _ := uuid.Parse(runtime.AgentID)
 	agent, err := service.NewAgentService(h.Svc).Get(r.Context(), rAgentID)
 	if err != nil || agent.WorkspaceID != workspaceID.String() {
@@ -265,7 +265,7 @@ func (h *RuntimeHandler) checkRuntimeOwnership(w http.ResponseWriter, r *http.Re
 		return nil
 	}
 
-	// Agent 只能操作自己的运行时
+	// Agents can only operate their own runtime
 	if claims.UserType == "agent" && rAgentID != claims.UserID {
 		response.Forbidden(w, "agents can only operate on their own runtimes")
 		return nil

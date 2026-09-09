@@ -1,4 +1,4 @@
-// task.go 实现任务子命令，管理任务的增删改查和状态流转。
+// task.go implements the task subcommand, managing task CRUD operations and status transitions.
 package main
 
 import (
@@ -169,8 +169,8 @@ var taskInterruptCmd = &cobra.Command{
 			body["comment"] = comment
 		}
 
-		// interrupt 是 task 级别操作，handler 从 {taskId} 获取 taskID，
-		// {id} 段仅用于路由匹配，handler 内部不读取该值。
+		// interrupt is a task-level operation; the handler obtains the taskID from {taskId},
+		// the {id} segment is used only for route matching and the handler does not read its value.
 		client := newAPIClient()
 		var result interface{}
 		if err := client.Post(fmt.Sprintf("/api/tasks/%s/nodes/_/interrupt", args[0]),

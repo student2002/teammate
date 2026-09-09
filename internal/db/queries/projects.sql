@@ -1,4 +1,4 @@
--- 项目查询
+-- Project queries
 
 -- name: CreateProject :one
 INSERT INTO projects (workspace_id, name, description, icon, status, repo_url, context)

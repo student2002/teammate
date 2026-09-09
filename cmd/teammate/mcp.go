@@ -1,4 +1,4 @@
-// mcp.go 实现 MCP 服务器子命令，管理 MCP 服务器的增删改查。
+// mcp.go implements the MCP server subcommand, managing CRUD operations for MCP servers.
 package main
 
 import (

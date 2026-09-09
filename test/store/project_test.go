@@ -1,4 +1,4 @@
-// project_test.go 覆盖项目数据访问的测试。
+// project_test.go covers project data access tests.
 package store_test
 
 import (
@@ -10,10 +10,10 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestProjectCRUD 测试项目的增删改查（CRUD）操作：
-// 1. 创建项目后通过 GetProject 查询，验证名称一致
-// 2. 通过 ListProjects 列出工作区下的所有项目
-// 3. 通过 UpdateProject 更新项目名称并验证
+// TestProjectCRUD tests project CRUD operations:
+// 1. Create a project, then query via GetProject and verify the name matches
+// 2. List all projects under the workspace via ListProjects
+// 3. Update the project name via UpdateProject and verify
 func TestProjectCRUD(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -51,11 +51,11 @@ func TestProjectCRUD(t *testing.T) {
 	}
 }
 
-// TestProjectMemberCRUD 测试项目成员的增删改查（CRUD）操作：
-// 1. 创建项目成员（agent 类型），验证成员关联到正确的项目
-// 2. 通过 ListProjectMembers 列出项目成员，验证数量
-// 3. 通过 IsAgentProjectMember 验证 agent 是否为项目成员
-// 4. 通过 DeleteProjectMember 删除成员并验证
+// TestProjectMemberCRUD tests project member CRUD operations:
+// 1. Create a project member (agent type) and verify the member is associated with the correct project
+// 2. List project members via ListProjectMembers and verify the count
+// 3. Verify whether an agent is a project member via IsAgentProjectMember
+// 4. Delete the member via DeleteProjectMember and verify
 func TestProjectMemberCRUD(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -99,10 +99,10 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 }
 
-// TestProjectReviewerCRUD 测试项目审核者的增删改查（CRUD）操作：
-// 1. 创建项目审核者（member 类型），验证创建成功
-// 2. 通过 ListProjectReviewers 列出项目审核者，验证数量
-// 3. 通过 DeleteProjectReviewer 删除审核者并验证
+// TestProjectReviewerCRUD tests project reviewer CRUD operations:
+// 1. Create a project reviewer (member type) and verify creation succeeds
+// 2. List project reviewers via ListProjectReviewers and verify the count
+// 3. Delete the reviewer via DeleteProjectReviewer and verify
 func TestProjectReviewerCRUD(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()

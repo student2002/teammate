@@ -1,4 +1,4 @@
-// token_usage.go 提供 Token 用量记录的数据访问操作。
+// token_usage.go provides data access operations for Token usage records.
 package store
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// toInt64 将 sqlc 生成的 interface{}（来自 COALESCE SUM）安全转换为 int64。
+// toInt64 safely converts the sqlc-generated interface{} (from COALESCE SUM) to int64.
 func toInt64(v interface{}) int64 {
 	switch n := v.(type) {
 	case int64:
@@ -24,15 +24,15 @@ func toInt64(v interface{}) int64 {
 	}
 }
 
-// CreateTokenUsage 创建一条 Token 用量记录。
+// CreateTokenUsage creates a Token usage record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: Token 用量参数（含 task_node_id、agent_id、各类 token 数、费用估算）
+// Parameters:
+//   - ctx: request context
+//   - params: Token usage parameters (including task_node_id, agent_id, various token counts, cost estimate)
 //
-// 返回：
-//   - types.TokenUsage: 创建的用量记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.TokenUsage: the created usage record
+//   - error: error if creation fails
 func (s *Store) CreateTokenUsage(ctx context.Context, params types.CreateTokenUsageParams) (types.TokenUsage, error) {
 	dbParams, err := FromDomainCreateTokenUsageParams(params)
 	if err != nil {
@@ -45,15 +45,15 @@ func (s *Store) CreateTokenUsage(ctx context.Context, params types.CreateTokenUs
 	return ToDomainTokenUsage(usage)
 }
 
-// GetTokenUsageByTask 获取指定任务的 Token 用量汇总。
+// GetTokenUsageByTask fetches the Token usage summary for the specified task.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - taskID: 任务 ID
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
 //
-// 返回：
-//   - types.GetTokenUsageByTaskRow: 用量汇总（input/output/total tokens + 费用估算）
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.GetTokenUsageByTaskRow: usage summary (input/output/total tokens + cost estimate)
+//   - error: error if the query fails
 func (s *Store) GetTokenUsageByTask(ctx context.Context, taskID int32) (types.GetTokenUsageByTaskRow, error) {
 	usage, err := s.q.GetTokenUsageByTask(ctx, taskID)
 	if err != nil {
@@ -71,15 +71,15 @@ func (s *Store) GetTokenUsageByTask(ctx context.Context, taskID int32) (types.Ge
 	}, nil
 }
 
-// GetTokenUsageByAgent 获取单个 Agent 的 Token 用量汇总（从 token_usage 表实时聚合）。
+// GetTokenUsageByAgent fetches the Token usage summary for a single Agent (aggregated in real time from the token_usage table).
 //
-// 参数：
-//   - ctx: 请求上下文
+// Parameters:
+//   - ctx: request context
 //   - agentID: Agent UUID
 //
-// 返回：
-//   - types.GetTokenUsageByAgentRow: 用量汇总
-//   - error: 查询失败时返回错误
+// Returns:
+//   - types.GetTokenUsageByAgentRow: usage summary
+//   - error: error if the query fails
 func (s *Store) GetTokenUsageByAgent(ctx context.Context, agentID uuid.UUID) (types.GetTokenUsageByAgentRow, error) {
 	row, err := s.q.GetTokenUsageByAgent(ctx, agentID)
 	if err != nil {
@@ -92,15 +92,15 @@ func (s *Store) GetTokenUsageByAgent(ctx context.Context, agentID uuid.UUID) (ty
 	}, nil
 }
 
-// GetTokenUsageByAgents 批量获取多个 Agent 的 Token 用量汇总（一次查询，按 agent_id 分组）。
+// GetTokenUsageByAgents batch-fetches the Token usage summary for multiple Agents (a single query, grouped by agent_id).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentIDs: Agent UUID 列表
+// Parameters:
+//   - ctx: request context
+//   - agentIDs: list of Agent UUIDs
 //
-// 返回：
-//   - map[uuid.UUID]types.GetTokenUsageByAgentsRow: 按 Agent UUID 分组的用量汇总
-//   - error: 查询失败时返回错误
+// Returns:
+//   - map[uuid.UUID]types.GetTokenUsageByAgentsRow: usage summary grouped by Agent UUID
+//   - error: error if the query fails
 func (s *Store) GetTokenUsageByAgents(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID]types.GetTokenUsageByAgentsRow, error) {
 	if len(agentIDs) == 0 {
 		return nil, nil
@@ -121,15 +121,15 @@ func (s *Store) GetTokenUsageByAgents(ctx context.Context, agentIDs []uuid.UUID)
 	return result, nil
 }
 
-// GetTokenUsageByTaskNodes 批量获取多个节点的 Token 用量汇总（一次查询，按 task_node_id 分组）。
+// GetTokenUsageByTaskNodes batch-fetches the Token usage summary for multiple nodes (a single query, grouped by task_node_id).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - nodeIDs: 节点 UUID 列表
+// Parameters:
+//   - ctx: request context
+//   - nodeIDs: list of node UUIDs
 //
-// 返回：
-//   - map[uuid.UUID]types.GetTokenUsageByTaskNodesRow: 按节点 UUID 分组的用量汇总
-//   - error: 查询失败时返回错误
+// Returns:
+//   - map[uuid.UUID]types.GetTokenUsageByTaskNodesRow: usage summary grouped by node UUID
+//   - error: error if the query fails
 func (s *Store) GetTokenUsageByTaskNodes(ctx context.Context, nodeIDs []uuid.UUID) (map[uuid.UUID]types.GetTokenUsageByTaskNodesRow, error) {
 	if len(nodeIDs) == 0 {
 		return nil, nil

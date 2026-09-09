@@ -1,4 +1,4 @@
--- Agent 权限
+-- Agent permissions
 
 -- name: CreateAgentPermission :one
 INSERT INTO agent_permissions (agent_id, permission, resource_type, resource_id, granted_by)
@@ -19,8 +19,8 @@ DELETE FROM agent_permissions
 WHERE id = $1;
 
 -- name: HasAgentPermission :one
--- 检查 Agent 是否拥有对某个资源的特定权限。
--- 匹配以下两种情况之一：精确匹配（resource_type + resource_id）或通配符匹配（resource_type = '*' 且 resource_id IS NULL）。
+-- Checks whether an Agent has a specific permission on a resource.
+-- Matches either of two cases: exact match (resource_type + resource_id) or wildcard match (resource_type = '*' AND resource_id IS NULL).
 SELECT EXISTS(
     SELECT 1 FROM agent_permissions
     WHERE agent_id = $1 AND permission = $2

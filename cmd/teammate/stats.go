@@ -1,4 +1,4 @@
-// stats.go 实现统计子命令，查看项目和代理的统计数据。
+// stats.go implements the statistics subcommand, viewing statistics for projects and agents.
 package main
 
 import (

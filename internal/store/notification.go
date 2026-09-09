@@ -1,4 +1,4 @@
-// notification.go 提供通知相关的数据访问操作。
+// notification.go provides data access operations for notifications.
 package store
 
 import (
@@ -11,15 +11,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ListManualInterventionNodes 列出工作区中需要人工介入的节点。
+// ListManualInterventionNodes lists nodes in the workspace that require manual intervention.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []types.ListManualInterventionNodesRow: 待人工介入节点列表（含任务标题）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.ListManualInterventionNodesRow: list of nodes pending manual intervention (including task title)
+//   - error: possible error (database query failure)
 func (s *Store) ListManualInterventionNodes(ctx context.Context, workspaceID uuid.UUID) ([]types.ListManualInterventionNodesRow, error) {
 	rows, err := s.q.ListManualInterventionNodes(ctx, workspaceID)
 	if err != nil {
@@ -39,16 +39,16 @@ func (s *Store) ListManualInterventionNodes(ctx context.Context, workspaceID uui
 	return out, nil
 }
 
-// ListMentionComments 列出包含 @提及 的评论。
+// ListMentionComments lists comments containing @mentions.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - memberID: 被提及的成员 ID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - memberID: ID of the mentioned member
 //
-// 返回：
-//   - []types.ListMentionCommentsRow: 提及评论列表（含任务标题）
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.ListMentionCommentsRow: list of mention comments (including task title)
+//   - error: possible error (database query failure)
 func (s *Store) ListMentionComments(ctx context.Context, workspaceID, memberID uuid.UUID) ([]types.ListMentionCommentsRow, error) {
 	rows, err := s.q.ListMentionComments(ctx, db.ListMentionCommentsParams{
 		WorkspaceID: workspaceID,

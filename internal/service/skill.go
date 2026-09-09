@@ -1,5 +1,5 @@
-// skill.go 提供技能管理的业务逻辑。
-// 技能是可复用的知识片段，分配给 Agent 后会影响其执行行为。
+// skill.go provides the business logic for skill management.
+// Skills are reusable knowledge fragments; assigning a skill to an agent affects its execution behavior.
 package service
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// SkillService 提供技能管理相关的业务逻辑。
+// SkillService provides the business logic for skill management.
 type SkillService struct {
 	svc *Service
 }
@@ -20,27 +20,27 @@ func NewSkillService(svc *Service) *SkillService {
 	return &SkillService{svc: svc}
 }
 
-// Get 根据 ID 获取单个技能。
+// Get retrieves a single skill by ID.
 func (s *SkillService) Get(ctx context.Context, id uuid.UUID) (types.Skill, error) {
 	return s.svc.Store.GetSkill(ctx, id)
 }
 
-// Create 创建一个新的技能。
+// Create creates a new skill.
 func (s *SkillService) Create(ctx context.Context, params types.CreateSkillParams) (types.Skill, error) {
 	return s.svc.Store.CreateSkill(ctx, params)
 }
 
-// List 列出指定工作区的所有技能。
+// List lists all skills in the specified workspace.
 func (s *SkillService) List(ctx context.Context, workspaceID uuid.UUID) ([]types.Skill, error) {
 	return s.svc.Store.ListSkills(ctx, workspaceID)
 }
 
-// Delete 删除一个技能。
+// Delete deletes a skill.
 func (s *SkillService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.svc.Store.DeleteSkill(ctx, id)
 }
 
-// Update 更新技能字段。nil 字段保持现有值，非 nil 字段替换现有值。
+// Update updates skill fields. nil fields keep the existing value; non-nil fields replace the existing value.
 func (s *SkillService) Update(ctx context.Context, id uuid.UUID, name, description, category, promptTemplate *string) (types.Skill, error) {
 	current, err := s.svc.Store.GetSkill(ctx, id)
 	if err != nil {

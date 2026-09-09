@@ -1,32 +1,32 @@
-// comment.go 定义评论相关的类型常量。
+// comment.go defines the type constants for comments.
 //
-// 本文件包含：
-//   - CommentType：评论类型枚举，用于区分不同用途的评论
-//   - 预定义常量：text、code_review、suggestion、question 四种类型
+// This file contains:
+//   - CommentType: the comment-type enum, used to distinguish comments by purpose
+//   - Predefined constants: text, code_review, suggestion, question
 //
-// 评论类型说明：
-//   - text：普通文本评论，用于一般性讨论和说明
-//   - code_review：代码审查评论，用于 Pull Request 或代码审查场景
-//   - suggestion：代码建议评论，用于提出改进方案和优化建议
-//   - question：问题咨询评论，用于提出需要解答的问题
+// Comment-type descriptions:
+//   - text: a plain-text comment for general discussion and notes
+//   - code_review: a code-review comment for pull requests or code-review scenarios
+//   - suggestion: a code-suggestion comment for proposing improvements and optimizations
+//   - question: a question comment for raising issues that need an answer
 package types
 
-// CommentType 表示评论的类型，区分普通文本评论、代码审查意见、建议和问题。
+// CommentType represents the type of a comment, distinguishing plain-text comments, code-review opinions, suggestions, and questions.
 type CommentType string
 
 const (
-	// CommentTypeText 表示普通文本评论，用于一般性讨论和说明。
+	// CommentTypeText is a plain-text comment for general discussion and notes.
 	CommentTypeText CommentType = "text"
-	// CommentTypeCodeReview 表示代码审查评论，用于 Pull Request 或代码审查场景。
+	// CommentTypeCodeReview is a code-review comment for pull requests or code-review scenarios.
 	CommentTypeCodeReview CommentType = "code_review"
-	// CommentTypeSuggestion 表示代码建议评论，用于提出改进方案和优化建议。
+	// CommentTypeSuggestion is a code-suggestion comment for proposing improvements and optimizations.
 	CommentTypeSuggestion CommentType = "suggestion"
-	// CommentTypeQuestion 表示问题咨询评论，用于提出需要解答的问题。
+	// CommentTypeQuestion is a question comment for raising issues that need an answer.
 	CommentTypeQuestion CommentType = "question"
-	// CommentTypeHandoff 表示节点间交接评论，写入下游节点评论区。
+	// CommentTypeHandoff is a handoff comment between nodes, written to the downstream node's comment area.
 	CommentTypeHandoff CommentType = "handoff"
-	// CommentTypeDecision 表示人工或审查决策评论。
+	// CommentTypeDecision is a manual or review decision comment.
 	CommentTypeDecision CommentType = "decision"
-	// CommentTypeExecutionSummary 表示节点执行摘要评论。
+	// CommentTypeExecutionSummary is a node execution-summary comment.
 	CommentTypeExecutionSummary CommentType = "execution_summary"
 )

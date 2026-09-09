@@ -1,4 +1,4 @@
-// cleanup.go 提供测试数据库清理辅助函数。
+// cleanup.go provides test database cleanup helper functions.
 package testdb
 
 import (
@@ -12,9 +12,9 @@ import (
 
 const testDBName = "teammate_test"
 
-// GetTestDSN 返回测试数据库的连接字符串。
-// 它使用独立的 "teammate_test" 数据库，避免污染开发数据。
-// 设置 TEAMS_TEST_DATABASE_URL 可覆盖默认连接配置。
+// GetTestDSN returns the connection string for the test database.
+// It uses a dedicated "teammate_test" database to avoid polluting development data.
+// Set TEAMS_TEST_DATABASE_URL to override the default connection configuration.
 func GetTestDSN() string {
 	if dsn := os.Getenv("TEAMS_TEST_DATABASE_URL"); dsn != "" {
 		return dsn
@@ -22,7 +22,7 @@ func GetTestDSN() string {
 	return fmt.Sprintf("postgres://postgres:teammate@localhost:15432/%s?sslmode=disable", testDBName)
 }
 
-// getAdminDSN 返回管理员数据库的连接字符串（用于创建/删除测试数据库）。
+// getAdminDSN returns the admin database connection string (used to create/drop the test database).
 func getAdminDSN() string {
 	if dsn := os.Getenv("TEAMS_DATABASE_URL"); dsn != "" {
 		return dsn
@@ -30,17 +30,17 @@ func getAdminDSN() string {
 	return "postgres://postgres:teammate@localhost:15432/teammate?sslmode=disable"
 }
 
-// SetupTestDB 确保 teammate_test 数据库存在并运行迁移。
-// 返回测试数据库的连接。完成后调用 CleanupTestDB 清理。
+// SetupTestDB ensures the teammate_test database exists and runs migrations.
+// Returns a connection to the test database. Call CleanupTestDB to clean up when done.
 func SetupTestDB() (*sql.DB, error) {
-	// 连接到管理员数据库以确保测试数据库存在
+	// Connect to the admin database to ensure the test database exists
 	adminDB, err := sql.Open("pgx", getAdminDSN())
 	if err != nil {
 		return nil, fmt.Errorf("connect admin db: %w", err)
 	}
 	defer adminDB.Close()
 
-	// 如果测试数据库不存在则创建（若已存在则忽略错误）
+	// Create the test database if it does not exist (ignore error if it already exists)
 	var exists bool
 	err = adminDB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", testDBName).Scan(&exists)
 	if err != nil {
@@ -52,7 +52,7 @@ func SetupTestDB() (*sql.DB, error) {
 		}
 	}
 
-	// 连接到测试数据库
+	// Connect to the test database
 	testDB, err := sql.Open("pgx", GetTestDSN())
 	if err != nil {
 		return nil, fmt.Errorf("connect test db: %w", err)
@@ -62,7 +62,7 @@ func SetupTestDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("ping test db: %w", err)
 	}
 
-	// 如果架构不存在则运行迁移
+	// Run migrations if the schema does not exist
 	var tableExists bool
 	err = testDB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'workspaces')").Scan(&tableExists)
 	if err != nil {
@@ -78,8 +78,8 @@ func SetupTestDB() (*sql.DB, error) {
 				return nil, fmt.Errorf("read migration file: %w", err)
 			}
 			if _, err := testDB.Exec(string(sqlBytes)); err != nil {
-				// 并发测试包可能已运行过迁移；
-				// 再次检查后确认失败
+				// A concurrent test package may have already run the migration;
+				// re-check before confirming failure
 				var existsNow bool
 				if checkErr := testDB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'workspaces')").Scan(&existsNow); checkErr == nil && existsNow {
 					return testDB, nil
@@ -155,9 +155,9 @@ func ensureSchemaCompatibility(db *sql.DB) error {
 	return nil
 }
 
-// findMigrationPath 定位相对于测试二进制文件的初始化迁移文件。
+// findMigrationPath locates the initial migration file relative to the test binary.
 func findMigrationPath() string {
-	// 从工作目录尝试常见的相对路径
+	// Try common relative paths from the working directory
 	candidates := []string{
 		"internal/db/migrations/001_init.up.sql",
 		"../internal/db/migrations/001_init.up.sql",
@@ -169,7 +169,7 @@ func findMigrationPath() string {
 			return abs
 		}
 	}
-	// 回退：如果可用则使用模块根目录
+	// Fallback: use the module root directory if available
 	if root := findModuleRoot(); root != "" {
 		p := filepath.Join(root, "internal/db/migrations/001_init.up.sql")
 		if _, err := os.Stat(p); err == nil {
@@ -179,7 +179,7 @@ func findMigrationPath() string {
 	return ""
 }
 
-// findModuleRoot 从当前目录向上查找 go.mod 文件。
+// findModuleRoot searches upward from the current directory for a go.mod file.
 func findModuleRoot() string {
 	dir, _ := os.Getwd()
 	for i := 0; i < 10; i++ {
@@ -195,9 +195,9 @@ func findModuleRoot() string {
 	return ""
 }
 
-// TruncateAll 删除测试数据库中所有业务表的数据，
-// 保留表结构。按依赖顺序截断表。
-// 仅在 TestMain 中用于最终的安全网清理。
+// TruncateAll deletes all data from business tables in the test database,
+// preserving table structure. Tables are truncated in dependency order.
+// Only used in TestMain as a final safety-net cleanup.
 func TruncateAll(db *sql.DB) error {
 	tables := []string{
 		"token_usage",
@@ -241,18 +241,18 @@ func TruncateAll(db *sql.DB) error {
 	return nil
 }
 
-// DeleteWorkspace 根据 ID 删除工作空间。所有相关数据由 PostgreSQL 外键约束级联删除
-// （项目、智能体、任务、记忆等）。
-// 此操作绕过业务逻辑（如 is_default 检查）以进行测试清理。
+// DeleteWorkspace deletes a workspace by ID. All related data is cascade-deleted
+// by PostgreSQL foreign key constraints (projects, agents, tasks, memories, etc.).
+// This bypasses business logic (such as is_default checks) for test cleanup.
 func DeleteWorkspace(db *sql.DB, workspaceID string) error {
 	_, err := db.Exec("DELETE FROM workspaces WHERE id = $1", workspaceID)
 	return err
 }
 
-// DeleteMember 根据 ID 删除成员。相关的 workspace_members 和 project_members
-// 被级联删除。该成员拥有的认证令牌也会被删除。
+// DeleteMember deletes a member by ID. Related workspace_members and project_members
+// are cascade-deleted. Auth tokens owned by the member are also deleted.
 func DeleteMember(db *sql.DB, memberID string) error {
-	// 认证令牌引用 owner_id 但没有外键约束，需要手动清理
+	// Auth tokens reference owner_id without a foreign key constraint, so manual cleanup is required
 	_, _ = db.Exec("DELETE FROM auth_tokens WHERE owner_type = 'member' AND owner_id = $1", memberID)
 	_, err := db.Exec("DELETE FROM members WHERE id = $1", memberID)
 	return err

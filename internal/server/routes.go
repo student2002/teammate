@@ -1,5 +1,5 @@
-// routes.go 定义路由注册器和路由注册所需的共享依赖。
-// setupRoutes 将路由注册委托给各 routes_*.go 文件中的方法。
+// routes.go defines the route registrar and the shared dependencies required for route registration.
+// setupRoutes delegates route registration to the methods in each routes_*.go file.
 package server
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// routeRegistrar 持有路由注册所需的共享依赖。
+// routeRegistrar holds the shared dependencies required for route registration.
 type routeRegistrar struct {
 	server     *Server
 	svc        *service.Service
@@ -28,7 +28,7 @@ type routeRegistrar struct {
 	nodeChk    func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
 }
 
-// newRouteRegistrar 创建路由注册器，初始化所有共享的权限检查函数。
+// newRouteRegistrar creates the route registrar, initializing all shared permission-check functions.
 func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 	agentPermSvc := service.NewAgentPermissionService(svc)
 	authSvc := service.NewAuthService(svc, s.Config.JWTSecret)
@@ -70,7 +70,7 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 			return "", fmt.Errorf("unknown user type")
 		}
 	}
-	// checker 通过 registrar 注入到 handler 和中间件，不再设置全局变量
+	// The checkers are injected into handlers and middleware via the registrar, no longer set as global variables
 
 	projectAccessChecker := func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (svcmw.WorkspaceContext, error) {
 		project, err := projSvc.Get(ctx, projectID)
@@ -139,18 +139,18 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 	}
 }
 
-// setupRoutes 配置所有 HTTP 路由和中间件（使用默认服务）。
+// setupRoutes configures all HTTP routes and middleware (using the default service).
 func (s *Server) setupRoutes() chi.Router {
 	svc := service.New(s.DB, s.Hub, s.Redis)
 	return s.buildRouter(svc)
 }
 
-// buildRouter 使用给定的 service 配置所有 HTTP 路由和中间件。
-// 此方法是路由配置的核心实现，供 setupRoutes 和 NewRouter 共用。
+// buildRouter configures all HTTP routes and middleware with the given service.
+// This method is the core implementation of route configuration, shared by setupRoutes and NewRouter.
 func (s *Server) buildRouter(svc *service.Service) chi.Router {
 	r := chi.NewRouter()
 
-	// 全局中间件
+	// Global middleware
 	r.Use(svcmw.RequestID())
 	r.Use(svcmw.Recovery())
 	r.Use(svcmw.Logger())
@@ -159,25 +159,25 @@ func (s *Server) buildRouter(svc *service.Service) chi.Router {
 
 	reg := newRouteRegistrar(s, svc)
 
-	// 公开路由（健康检查、SSE、WebSocket）
+	// Public routes (health check, SSE, WebSocket)
 	reg.registerPublicRoutes(r)
 
-	// API 路由（带 Timeout 中间件）
+	// API routes (with Timeout middleware)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(chimw.Timeout(60 * time.Second))
 
-		// 认证路由（无需认证）
+		// Authentication routes (no auth required)
 		reg.registerAuthRoutes(r)
 
-		// 需要认证的路由组
+		// Authenticated route group
 		r.Group(func(r chi.Router) {
 			r.Use(svcmw.AuthMiddleware(s.Config.JWTSecret, reg.apiKeyAuth, s.Redis))
 			r.Use(svcmw.RateLimitMiddleware(s.Redis, svcmw.APIRateLimit, svcmw.UserKeyFunc))
 
-			// 需要认证的认证路由
+			// Authenticated auth routes
 			reg.registerAuthProtectedRoutes(r)
 
-			// 搜索、工作区、项目、任务、Agent、记忆、模板、社区等
+			// Search, workspaces, projects, tasks, Agents, memories, templates, community, etc.
 			reg.registerWorkspaceRoutes(r)
 			reg.registerProjectRoutes(r)
 			reg.registerTaskRoutes(r)
@@ -188,7 +188,7 @@ func (s *Server) buildRouter(svc *service.Service) chi.Router {
 	return r
 }
 
-// redisAddr 从 Redis URL 中提取主机地址。
+// redisAddr extracts the host address from a Redis URL.
 func redisAddr(rawURL string) string {
 	opts, err := redis.ParseURL(rawURL)
 	if err != nil {

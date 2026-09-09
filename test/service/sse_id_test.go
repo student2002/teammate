@@ -1,4 +1,4 @@
-// sse_id_test.go 覆盖 SSE 会话 ID 生成的测试。
+// sse_id_test.go covers tests for SSE session ID generation.
 package service_test
 
 import (
@@ -7,8 +7,8 @@ import (
 )
 
 func TestSSEEventIDUniqueness(t *testing.T) {
-	// TestSSEEventIDUniqueness 验证并发调用生成 SSE 事件 ID 是否产生唯一值。
-	// 我们无法直接测试 nextSSEEventID（未导出），但可以测试其使用的模式。
+	// TestSSEEventIDUniqueness verifies that concurrent calls to generate SSE event IDs produce unique values.
+	// We cannot directly test nextSSEEventID (unexported), but we can test the pattern it uses.
 
 	const goroutines = 100
 	const idsPerGoroutine = 100
@@ -21,16 +21,16 @@ func TestSSEEventIDUniqueness(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < idsPerGoroutine; j++ {
-				// 模拟相同的模式：nanotime + 原子计数器
-				// 我们无法直接调用 nextSSEEventID，但可以验证服务编译通过且函数存在。
-				// 实际的唯一性由原子计数器保证。
+				// Simulate the same pattern: nanotime + atomic counter
+				// We cannot call nextSSEEventID directly, but we can verify the service compiles and the function exists.
+				// Actual uniqueness is guaranteed by the atomic counter.
 			}
 		}()
 	}
 	wg.Wait()
 
 	_ = seen
-	// 如果测试没有死锁或 panic，则测试通过。
-	// 实际的 ID 唯一性通过集成测试验证。
+	// If the test did not deadlock or panic, it passes.
+	// Actual ID uniqueness is verified through integration tests.
 	t.Log("SSE event ID generation pattern verified")
 }

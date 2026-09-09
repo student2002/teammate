@@ -1,10 +1,12 @@
-// auth.go 提供 HTTP 请求的身份认证与授权中间件，支持 JWT Bearer Token 和 API Key 两种认证方式。
-// 包含工作区隔离检查、项目级访问控制、Agent 权限验证等功能。
-// 安全特性：
-//   - JWT jti 吊销检查（通过 Redis 验证令牌是否已失效）
-//   - API Key 使用 bcrypt 慢哈希验证，SHA-256 仅用于高效索引查询
-//   - 会话令牌（st_ 前缀）优先匹配，降级查找 API 令牌（tm_ 前缀）
-//   - 工作区隔离：用户只能访问所属工作区的资源，防止跨工作区数据泄露
+// auth.go provides HTTP request authentication and authorization middleware,
+// supporting both JWT Bearer Token and API Key authentication.
+// It includes workspace isolation checks, project-level access control, and agent permission verification.
+//
+// Security features:
+//   - JWT jti revocation check (verifies whether the token has been revoked via Redis)
+//   - API Key verified with bcrypt slow hashing; SHA-256 used only for efficient index lookups
+//   - Session tokens (st_ prefix) are matched first, falling back to API tokens (tm_ prefix)
+//   - Workspace isolation: users can only access resources within their workspace, preventing cross-workspace data leakage
 package middleware
 
 import (
@@ -24,58 +26,61 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// contextKey 是本包内部使用的上下文键类型，采用自定义类型避免与其他包的字符串键冲突。
+// contextKey is the context key type used internally by this package.
+// A custom type is used to avoid collisions with string keys from other packages.
 type contextKey int
 
 const (
-	// authContextKey 用于在请求上下文中存储已认证的身份信息（AuthClaims）。
+	// authContextKey stores the authenticated identity (AuthClaims) in the request context.
 	authContextKey contextKey = iota
-	// workspaceContextKey 用于在请求上下文中存储当前资源所属工作区下的授权上下文。
+	// workspaceContextKey stores the authorization context under the current resource's workspace in the request context.
 	workspaceContextKey
-	// taskContextKey 用于在请求上下文中存储任务访问中间件注入的任务对象。
+	// taskContextKey stores the task object injected by the task access middleware in the request context.
 	taskContextKey
-	// nodeContextKey 用于在请求上下文中存储节点访问中间件注入的节点对象。
+	// nodeContextKey stores the node object injected by the node access middleware in the request context.
 	nodeContextKey
 )
 
-// AuthClaims 保存从 JWT 或 API Key 中提取的已认证身份信息。
-// 该结构体在认证中间件成功后被注入到请求上下文中，供后续中间件和 handler 使用。
+// AuthClaims holds the authenticated identity extracted from a JWT or API Key.
+// After the authentication middleware succeeds, this struct is injected into the request context
+// for use by subsequent middleware and handlers.
 type AuthClaims struct {
-	// UserID 是用户（人类成员或 AI 代理）的唯一标识符。
+	// UserID is the unique identifier of the user (a human member or an AI agent).
 	UserID uuid.UUID
-	// UserType 标识用户类型："member"（人类成员）或 "agent"（AI 代理）。
-	UserType string // "member" 或 "agent"
-	// WorkspaceID 和 Role 只能由资源作用域中间件基于数据库状态派生。
-	// JWT/API key 解析阶段不得填充这两个字段。
+	// UserType identifies the user type: "member" (human member) or "agent" (AI agent).
+	UserType string // "member" or "agent"
+	// WorkspaceID and Role can only be derived by the resource-scoped middleware based on database state.
+	// The JWT/API key parsing phase must NOT populate these two fields.
 	WorkspaceID uuid.UUID
 	Role        string
 }
 
-// APIKeyAuthenticator 验证 API key 或 session token，并返回已认证的身份。
-// server 层注入该函数，使中间件不依赖数据库访问。
+// APIKeyAuthenticator validates an API key or session token and returns the authenticated identity.
+// The server layer injects this function so the middleware does not depend on database access.
 type APIKeyAuthenticator func(ctx context.Context, apiKey string) (AuthClaims, error)
 
-// WorkspaceContext 保存已认证身份对当前资源工作区的实时授权信息。
-// 它只能由工作区/项目/任务/节点访问中间件根据数据库状态注入，不能来自 JWT。
+// WorkspaceContext holds the real-time authorization information of the authenticated identity
+// for the current resource's workspace. It can only be injected by the workspace/project/task/node
+// access middleware based on database state, never from the JWT.
 type WorkspaceContext struct {
 	WorkspaceID uuid.UUID
 	Role        string
 }
 
-// GetAuthFromContext 从请求上下文中获取已认证的身份信息。
+// GetAuthFromContext retrieves the authenticated identity from the request context.
 //
-// 参数：
-//   - ctx: 请求上下文，由认证中间件注入 AuthClaims
+// Parameters:
+//   - ctx: request context, into which the authentication middleware injects AuthClaims
 //
-// 返回：
-//   - AuthClaims: 已认证的身份信息
-//   - bool: 是否存在有效的身份信息
+// Returns:
+//   - AuthClaims: the authenticated identity
+//   - bool: whether valid identity information exists
 func GetAuthFromContext(ctx context.Context) (AuthClaims, bool) {
 	claims, ok := ctx.Value(authContextKey).(AuthClaims)
 	return claims, ok
 }
 
-// GetWorkspaceFromContext 从请求上下文中获取当前资源工作区的授权上下文。
+// GetWorkspaceFromContext retrieves the authorization context for the current resource's workspace from the request context.
 func GetWorkspaceFromContext(ctx context.Context) (WorkspaceContext, bool) {
 	ws, ok := ctx.Value(workspaceContextKey).(WorkspaceContext)
 	return ws, ok
@@ -91,26 +96,27 @@ func withWorkspaceContext(ctx context.Context, ws WorkspaceContext) context.Cont
 	return ctx
 }
 
-// AuthMiddleware 返回一个 chi 兼容的认证中间件，支持 JWT Bearer Token 和 X-API-Key 两种认证方式。
-// 认证成功后将身份信息（AuthClaims）存入请求上下文，供后续中间件和 handler 使用。
+// AuthMiddleware returns a chi-compatible authentication middleware supporting
+// both JWT Bearer Token and X-API-Key authentication.
+// On success it stores the identity (AuthClaims) in the request context for subsequent middleware and handlers.
 //
-// 认证流程：
-//  1. 优先检查 X-API-Key 头，使用 API Key 认证
-//  2. 若无 API Key，降级检查 Authorization 头中的 Bearer Token
-//  3. 对于 member 类型的 JWT，额外检查 Redis 中的 jti 是否已吊销（登录/登出机制）
-//  4. 认证失败返回 401 Unauthorized
+// Authentication flow:
+//  1. Check the X-API-Key header first and authenticate with the API Key
+//  2. If no API Key, fall back to the Bearer Token in the Authorization header
+//  3. For member-type JWTs, additionally check whether the jti has been revoked in Redis (login/logout mechanism)
+//  4. On authentication failure return 401 Unauthorized
 //
-// 安全说明：
-//   - Redis 吊销检查失败时放行请求，避免 Redis 故障导致所有认证不可用
-//   - API Key 使用 SHA-256 哈希索引 + bcrypt 慢哈希验证双重机制
+// Security notes:
+//   - When the Redis revocation check fails the request is allowed through, so a Redis outage does not disable all authentication
+//   - API Key uses a dual mechanism: SHA-256 hash index + bcrypt slow-hash verification
 //
-// 参数：
-//   - jwtSecret: JWT 签名密钥，用于验证 Bearer Token 的签名
-//   - db: 数据库连接，用于 API Key 查找和验证
-//   - rdb: Redis 客户端，用于 JWT jti 吊销检查（可为 nil，此时跳过吊销检查）
+// Parameters:
+//   - jwtSecret: JWT signing secret, used to verify the Bearer Token signature
+//   - authenticateAPIKey: API Key lookup and verification function
+//   - rdb: Redis client for JWT jti revocation checks (may be nil, in which case revocation checks are skipped)
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rdb *redis.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +124,7 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 			var jti string
 			var err error
 
-			// 优先尝试 API Key 认证（X-API-Key 头）
+			// Try API Key authentication first (X-API-Key header)
 			if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
 				if authenticateAPIKey == nil {
 					response.Unauthorized(w, "invalid or expired token")
@@ -126,7 +132,7 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 				}
 				claims, err = authenticateAPIKey(r.Context(), apiKey)
 			} else {
-				// 降级到 JWT Bearer Token 认证
+				// Fall back to JWT Bearer Token authentication
 				claims, jti, err = authenticateJWT(r, jwtSecret)
 			}
 
@@ -135,13 +141,14 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 				return
 			}
 
-			// 对于 member 类型的 JWT，检查 jti 是否在 Redis 中存在（吊销检查）
-			// 安全说明：登录失败锁定、密码修改、用户禁用等操作会将 jti 写入 Redis 过期键，
-			// 从而使当前令牌失效。Redis 故障时放行请求以保证可用性。
+			// For member-type JWTs, check whether the jti exists in Redis (revocation check).
+			// Security note: login-failure lockout, password change, user disable, and similar operations
+			// write the jti to a Redis expiring key, thereby invalidating the current token.
+			// When Redis fails the request is allowed through to preserve availability.
 			if claims.UserType == "member" && jti != "" && rdb != nil {
 				exists, err := rdb.Exists(r.Context(), "jwt:"+jti).Result()
 				if err != nil {
-					// Redis 故障时放行请求，避免 Redis 问题阻塞所有认证
+					// Allow the request through when Redis fails, so a Redis issue does not block all authentication
 					slog.Warn("redis JWT revocation check failed, allowing request", "jti", jti, "err", err)
 				} else if exists == 0 {
 					response.Unauthorized(w, "token revoked or invalidated")
@@ -155,22 +162,22 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 	}
 }
 
-// RequireRole 返回一个中间件，检查当前用户是否拥有指定的角色之一。
-// 该中间件仅适用于人类用户（member 类型），Agent 必须使用 RequireAgentPermission 进行权限检查。
+// RequireRole returns a middleware that checks whether the current user has one of the specified roles.
+// This middleware applies only to human users (member type); agents must use RequireAgentPermission for permission checks.
 //
-// 角色层级（从高到低）：owner > admin > member > viewer
-// 只要用户角色等于或高于允许列表中的最低角色要求，即视为通过。
+// Role hierarchy (high to low): owner > admin > member > viewer.
+// As long as the user's role is equal to or higher than the lowest required role in the allowed list, it passes.
 //
-// 失败处理：
-//   - 未认证：返回 403 Forbidden
-//   - Agent 用户：返回 403（Agent 必须使用基于权限的访问控制）
-//   - 角色不足：返回 403 Forbidden
+// Failure handling:
+//   - Not authenticated: returns 403 Forbidden
+//   - Agent user: returns 403 (agents must use permission-based access control)
+//   - Insufficient role: returns 403 Forbidden
 //
-// 参数：
-//   - allowedRoles: 允许访问的角色列表，如 []string{"owner", "admin"}
+// Parameters:
+//   - allowedRoles: list of allowed roles, e.g. []string{"owner", "admin"}
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 	minLevel := 999
 	for _, r := range allowedRoles {
@@ -187,7 +194,7 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Agent 必须使用基于权限的访问控制，不能使用角色检查
+			// Agents must use permission-based access control, not role checks
 			if claims.UserType == "agent" {
 				response.Forbidden(w, "agents must use permission-based access control")
 				return
@@ -210,19 +217,20 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 	}
 }
 
-// AgentPermissionCheckerFunc 是检查 Agent 权限的函数签名。
-// 该函数通过数据库查询验证指定 Agent 是否拥有特定权限。
+// AgentPermissionCheckerFunc is the signature of a function that checks agent permissions.
+// It verifies, via a database query, whether the specified agent has a particular permission.
 type AgentPermissionCheckerFunc func(ctx context.Context, agentID uuid.UUID, permission string) (bool, error)
 
-// RequireAgentPermissionWithChecker 返回一个中间件，使用提供的检查器函数验证 Agent 是否拥有指定权限。
-// 对于人类用户（member 类型），该中间件直接放行，由路由级别的 RequireRole 负责权限检查。
+// RequireAgentPermissionWithChecker returns a middleware that uses the provided checker function
+// to verify whether the agent has the specified permission.
+// For human users (member type) it passes through directly; permission checks for them are handled by the route-level RequireRole.
 //
-// 参数：
-//   - permission: 所需的 Agent 权限标识符，如 "task:approve"、"git:push"
-//   - checker: 权限检查函数，用于查询 Agent 是否拥有指定权限
+// Parameters:
+//   - permission: the required agent permission identifier, e.g. "task:approve", "git:push"
+//   - checker: permission-check function, used to query whether the agent has the specified permission
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func RequireAgentPermissionWithChecker(permission string, checker AgentPermissionCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -232,13 +240,13 @@ func RequireAgentPermissionWithChecker(permission string, checker AgentPermissio
 				return
 			}
 
-			// 人类用户直接放行，由路由级别的 RequireRole 检查
+			// Human users pass through directly; checked by route-level RequireRole
 			if claims.UserType != "agent" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			// 检查 Agent 权限
+			// Check the agent permission
 			if checker == nil {
 				response.InternalServerError(w, fmt.Errorf("permission checker not configured"))
 				return
@@ -260,22 +268,24 @@ func RequireAgentPermissionWithChecker(permission string, checker AgentPermissio
 	}
 }
 
-// RequireAccessWithChecker 是统一的授权中间件，在一次检查中同时处理人类角色验证和 Agent 权限验证。
+// RequireAccessWithChecker is the unified authorization middleware that handles both human role verification
+// and agent permission verification in a single check.
 //
-// 授权逻辑：
-//   - 人类用户：根据角色层级检查是否在允许的角色列表中（owner > admin > member > viewer）
-//   - Agent：通过检查器验证是否拥有指定权限（细粒度权限表）
-//   - 如果 agentPermission 为空字符串，则拒绝所有 Agent 访问（仅限人类用户的路由）
+// Authorization logic:
+//   - Human users: check whether the role is in the allowed list according to the role hierarchy (owner > admin > member > viewer)
+//   - Agents: verify via the checker whether the specified permission is held (fine-grained permission table)
+//   - If agentPermission is an empty string, all agent access is denied (routes restricted to human users only)
 //
-// 安全说明：该中间件是推荐的统一授权入口，避免在路由中混用 RequireRole 和 RequireAgentPermission。
+// Security note: this middleware is the recommended unified authorization entry point,
+// to avoid mixing RequireRole and RequireAgentPermission in routes.
 //
-// 参数：
-//   - allowedRoles: 人类用户允许的角色列表
-//   - agentPermission: Agent 所需的权限标识符，为空则拒绝所有 Agent
-//   - checker: Agent 权限检查函数
+// Parameters:
+//   - allowedRoles: list of allowed roles for human users
+//   - agentPermission: the permission identifier required for agents; empty denies all agents
+//   - checker: agent permission-check function
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func RequireAccessWithChecker(allowedRoles []string, agentPermission string, checker AgentPermissionCheckerFunc) func(http.Handler) http.Handler {
 	minLevel := 999
 	for _, r := range allowedRoles {
@@ -293,7 +303,7 @@ func RequireAccessWithChecker(allowedRoles []string, agentPermission string, che
 			}
 
 			if claims.UserType == "agent" {
-				// Agent 路径：检查权限
+				// Agent path: check permission
 				if agentPermission == "" {
 					response.Forbidden(w, "agents cannot access this resource")
 					return
@@ -312,7 +322,7 @@ func RequireAccessWithChecker(allowedRoles []string, agentPermission string, che
 					return
 				}
 			} else {
-				// 人类用户路径：检查当前工作区内的实时角色层级
+				// Human user path: check the real-time role hierarchy within the current workspace
 				ws, ok := GetWorkspaceFromContext(r.Context())
 				if !ok {
 					response.Forbidden(w, "workspace context required")
@@ -330,23 +340,24 @@ func RequireAccessWithChecker(allowedRoles []string, agentPermission string, che
 	}
 }
 
-// authenticateJWT 从 Authorization 头中提取并验证 Bearer Token。
-// 解析 JWT 签名、过期时间、用户身份等声明，并提取 jti 用于 Redis 吊销检查。
+// authenticateJWT extracts and validates the Bearer Token from the Authorization header.
+// It parses the JWT signature, expiration, user identity and other claims,
+// and extracts the jti for Redis revocation checks.
 //
-// 验证流程：
-//  1. 检查 Authorization 头格式是否为 "Bearer <token>"
-//  2. 使用 HMAC-SHA256 算法验证 JWT 签名
-//  3. 提取 user_id、user_type、jti 等身份声明
-//  4. 验证 user_type 是否为合法值（"member" 或 "agent"）
+// Verification flow:
+//  1. Check whether the Authorization header has the format "Bearer <token>"
+//  2. Verify the JWT signature using the HMAC-SHA256 algorithm
+//  3. Extract identity claims such as user_id, user_type, and jti
+//  4. Verify that user_type is a legal value ("member" or "agent")
 //
-// 参数：
-//   - r: HTTP 请求对象
-//   - secret: JWT 签名密钥
+// Parameters:
+//   - r: HTTP request object
+//   - secret: JWT signing secret
 //
-// 返回：
-//   - AuthClaims: 解析后的身份信息
-//   - string: JWT 的 jti（JWT ID），用于吊销检查
-//   - error: 解析或验证失败时返回错误
+// Returns:
+//   - AuthClaims: the parsed identity
+//   - string: the JWT jti (JWT ID), used for revocation checks
+//   - error: returned when parsing or verification fails
 func authenticateJWT(r *http.Request, secret string) (AuthClaims, string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -402,12 +413,13 @@ func authenticateJWT(r *http.Request, secret string) (AuthClaims, string, error)
 	}, jti, nil
 }
 
-// WorkspaceAccessCheckerFunc 根据具体工作区解析已认证身份。
-// 它必须查询持久化的服务端状态；JWT 声明绝不能作为工作区授权的依据。
+// WorkspaceAccessCheckerFunc resolves the authenticated identity for a specific workspace.
+// It must query persisted server-side state; JWT claims must never be used as the basis for workspace authorization.
 type WorkspaceAccessCheckerFunc func(ctx context.Context, userID uuid.UUID, userType string, workspaceID uuid.UUID) (string, error)
 
-// WorkspaceAuthMiddlewareWithChecker 确保已认证用户属于 URL 参数 {workspaceId} 指定的工作区。
-// 通过参数注入 checker，所有工作区授权均来自持久化服务端状态。
+// WorkspaceAuthMiddlewareWithChecker ensures the authenticated user belongs to the workspace
+// specified by the URL parameter {workspaceId}. The checker is injected via a parameter,
+// so all workspace authorization comes from persisted server-side state.
 func WorkspaceAuthMiddlewareWithChecker(checker WorkspaceAccessCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -445,10 +457,11 @@ func WorkspaceAuthMiddlewareWithChecker(checker WorkspaceAccessCheckerFunc) func
 	}
 }
 
-// ProjectAccessCheckerFunc 验证项目级访问权限并返回解析后的工作区上下文。
+// ProjectAccessCheckerFunc verifies project-level access and returns the resolved workspace context.
 type ProjectAccessCheckerFunc func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (WorkspaceContext, error)
 
-// ProjectMemberMiddlewareWithChecker 检查已认证用户是否可以访问 URL 参数 {projectId} 指定的项目。
+// ProjectMemberMiddlewareWithChecker checks whether the authenticated user can access the project
+// specified by the URL parameter {projectId}.
 func ProjectMemberMiddlewareWithChecker(checker ProjectAccessCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -487,31 +500,31 @@ func ProjectMemberMiddlewareWithChecker(checker ProjectAccessCheckerFunc) func(h
 	}
 }
 
-// --- 任务访问中间件 ---
+// --- Task access middleware ---
 
-// TaskWorkspaceCheckerFunc 验证任务存在并返回任务对象及其所属工作区。
+// TaskWorkspaceCheckerFunc verifies that a task exists and returns the task object and its workspace.
 type TaskWorkspaceCheckerFunc func(ctx context.Context, taskID int32) (interface{}, uuid.UUID, error)
 
-// GetTaskFromContext 从请求上下文中获取任务对象（由 TaskAccessMiddleware 注入）。
+// GetTaskFromContext retrieves the task object from the request context (injected by TaskAccessMiddleware).
 //
-// 返回：
-//   - interface{}: 任务对象
-//   - bool: 是否存在有效的任务对象
+// Returns:
+//   - interface{}: the task object
+//   - bool: whether a valid task object exists
 func GetTaskFromContext(ctx context.Context) (interface{}, bool) {
 	task := ctx.Value(taskContextKey)
 	return task, task != nil
 }
 
-// TaskAccessMiddlewareWithChecker 验证 URL 参数 {taskId} 中的任务是否属于已认证用户的工作区。
-// 验证通过后将任务注入上下文，可通过 GetTaskFromContext 获取。
-// 该中间件防止用户通过 URL 篡改访问其他工作区的任务。
+// TaskAccessMiddlewareWithChecker verifies that the task in URL parameter {taskId} belongs to the authenticated user's workspace.
+// On success it injects the task into the context, retrievable via GetTaskFromContext.
+// This middleware prevents users from accessing tasks of other workspaces by tampering with the URL.
 //
-// 参数：
-//   - checker: 任务工作区验证函数，验证任务归属并返回任务对象
-//   - workspaceChecker: 工作区访问检查函数，验证当前身份是否可访问任务所属工作区
+// Parameters:
+//   - checker: task workspace verification function, verifies task ownership and returns the task object
+//   - workspaceChecker: workspace access check function, verifies the current identity can access the task's workspace
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func TaskAccessMiddlewareWithChecker(checker TaskWorkspaceCheckerFunc, workspaceChecker WorkspaceAccessCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -561,31 +574,31 @@ func TaskAccessMiddlewareWithChecker(checker TaskWorkspaceCheckerFunc, workspace
 	}
 }
 
-// --- 节点访问中间件 ---
+// --- Node access middleware ---
 
-// NodeWorkspaceCheckerFunc 验证节点存在并返回节点对象及其所属工作区。
+// NodeWorkspaceCheckerFunc verifies that a node exists and returns the node object and its workspace.
 type NodeWorkspaceCheckerFunc func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
 
-// GetNodeFromContext 从请求上下文中获取节点对象（由 NodeAccessMiddleware 注入）。
+// GetNodeFromContext retrieves the node object from the request context (injected by NodeAccessMiddleware).
 //
-// 返回：
-//   - interface{}: 节点对象
-//   - bool: 是否存在有效的节点对象
+// Returns:
+//   - interface{}: the node object
+//   - bool: whether a valid node object exists
 func GetNodeFromContext(ctx context.Context) (interface{}, bool) {
 	node := ctx.Value(nodeContextKey)
 	return node, node != nil
 }
 
-// NodeAccessMiddlewareWithChecker 验证 URL 参数 {id} 中的节点是否属于已认证用户的工作区。
-// 验证通过后将节点注入上下文，可通过 GetNodeFromContext 获取。
-// 该中间件防止用户通过 URL 篡改访问其他工作区的任务节点。
+// NodeAccessMiddlewareWithChecker verifies that the node in URL parameter {id} belongs to the authenticated user's workspace.
+// On success it injects the node into the context, retrievable via GetNodeFromContext.
+// This middleware prevents users from accessing task nodes of other workspaces by tampering with the URL.
 //
-// 参数：
-//   - checker: 节点工作区验证函数，验证节点归属并返回节点对象
-//   - workspaceChecker: 工作区访问检查函数，验证当前身份是否可访问节点所属工作区
+// Parameters:
+//   - checker: node workspace verification function, verifies node ownership and returns the node object
+//   - workspaceChecker: workspace access check function, verifies the current identity can access the node's workspace
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func NodeAccessMiddlewareWithChecker(checker NodeWorkspaceCheckerFunc, workspaceChecker WorkspaceAccessCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -603,8 +616,8 @@ func NodeAccessMiddlewareWithChecker(checker NodeWorkspaceCheckerFunc, workspace
 
 			nodeID, err := uuid.Parse(nodeIDStr)
 			if err != nil {
-				// 父级测试路由在节点子路由匹配前，可能使用 {id} 作为任务 ID。
-				// 节点处理器仍会在具体的节点路由上校验格式错误的节点 ID。
+				// The parent test route may use {id} as a task ID before the node subroutes match.
+				// The node handler will still validate a malformed node ID on the concrete node route.
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -637,22 +650,22 @@ func NodeAccessMiddlewareWithChecker(checker NodeWorkspaceCheckerFunc, workspace
 	}
 }
 
-// --- 项目角色中间件 ---
+// --- Project role middleware ---
 
-// ProjectRoleCheckerFunc 检查成员是否拥有指定的项目级角色。
-// 项目角色层级（从高到低）：lead > developer > reviewer
+// ProjectRoleCheckerFunc checks whether a member holds the specified project-level role.
+// Project role hierarchy (high to low): lead > developer > reviewer.
 type ProjectRoleCheckerFunc func(ctx context.Context, userID uuid.UUID, userType string, workspaceRole string, projectID uuid.UUID, requiredRole string) error
 
-// RequireProjectRoleWithChecker 返回一个中间件，检查已认证用户是否拥有指定的项目级角色。
-// 工作区 owner/admin 始终绕过项目角色检查（拥有工作区级别的完全权限）。
-// Agent 被拒绝（项目角色仅限人类用户）。
+// RequireProjectRoleWithChecker returns a middleware that checks whether the authenticated user has the specified project-level role.
+// Workspace owner/admin always bypass the project role check (they have full workspace-level permissions).
+// Agents are denied (project roles are restricted to human users).
 //
-// 参数：
-//   - requiredRole: 所需的项目角色，如 "lead"、"developer"、"reviewer"
-//   - checker: 项目角色检查函数
+// Parameters:
+//   - requiredRole: the required project role, e.g. "lead", "developer", "reviewer"
+//   - checker: project role check function
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func RequireProjectRoleWithChecker(requiredRole string, checker ProjectRoleCheckerFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

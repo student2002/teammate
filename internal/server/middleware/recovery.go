@@ -1,20 +1,20 @@
-// recovery.go 提供 panic 恢复中间件，捕获处理函数中的 panic 并返回 500 错误响应。
+// recovery.go provides a panic-recovery middleware that catches panics in handler functions and returns a 500 error response.
 //
-// 本文件包含：
-//   - Recovery：chi 兼容的 panic 恢复中间件，通过 defer+recover 机制实现
+// This file contains:
+//   - Recovery: a chi-compatible panic-recovery middleware, implemented via the defer+recover mechanism
 //
-// 安全特性：
-//   - 防止单个请求的 panic 导致整个 HTTP 服务器崩溃，提高系统稳定性
-//   - 捕获 panic 后服务器继续运行，不影响其他并发请求
-//   - 堆栈跟踪信息仅记录到服务器日志，不返回给客户端，避免信息泄露
-//   - 客户端仅收到通用的 500 错误消息，不暴露内部实现细节
+// Security features:
+//   - Prevents a panic in a single request from crashing the entire HTTP server, improving system stability
+//   - After catching a panic the server keeps running, without affecting other concurrent requests
+//   - Stack trace information is logged only to the server log and not returned to the client, avoiding information leakage
+//   - The client receives only a generic 500 error message, without exposing internal implementation details
 //
-// 日志输出：
-//   - error: 捕获的 panic 值
-//   - method: 请求的 HTTP 方法
-//   - path: 请求路径
-//   - remote_addr: 客户端 IP 地址
-//   - stack: 完整的堆栈跟踪信息
+// Log output:
+//   - error: the caught panic value
+//   - method: the request's HTTP method
+//   - path: the request path
+//   - remote_addr: the client IP address
+//   - stack: the full stack trace
 package middleware
 
 import (
@@ -23,17 +23,18 @@ import (
 	"runtime/debug"
 )
 
-// Recovery 返回一个 chi 兼容的 panic 恢复中间件。
-// 通过 defer + recover 机制捕获下游处理函数中的 panic，记录错误日志和堆栈跟踪，
-// 然后返回 500 Internal Server Error JSON 响应，防止服务器进程崩溃。
+// Recovery returns a chi-compatible panic-recovery middleware.
+// Via the defer + recover mechanism it catches panics in downstream handler functions,
+// logs the error and stack trace, then returns a 500 Internal Server Error JSON response,
+// preventing the server process from crashing.
 //
-// 安全说明：
-//   - 捕获 panic 后服务器继续运行，不影响其他请求
-//   - 堆栈跟踪信息仅记录到服务器日志，不返回给客户端
-//   - 客户端仅收到通用的错误消息，不暴露内部实现细节
+// Security notes:
+//   - After catching a panic the server keeps running, without affecting other requests
+//   - Stack trace information is logged only to the server log and not returned to the client
+//   - The client receives only a generic error message, without exposing internal implementation details
 //
-// 返回：
-//   - func(http.Handler) http.Handler: chi 中间件函数
+// Returns:
+//   - func(http.Handler) http.Handler: chi middleware function
 func Recovery() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

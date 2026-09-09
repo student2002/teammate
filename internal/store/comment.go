@@ -1,7 +1,7 @@
-// comment.go 提供任务评论的数据访问操作。
+// comment.go provides data access operations for task comments.
 //
-// 评论支持多种类型：文本评论、代码审查意见、建议和问题。
-// 评论支持提及（mentions）功能，可通知其他成员或 Agent。
+// Comments support multiple types: text comments, code review opinions, suggestions, and questions.
+// Comments support the mentions feature, which can notify other members or Agents.
 package store
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateComment 为任务创建一条评论记录。
+// CreateComment creates a comment record for a task.
 func (s *Store) CreateComment(ctx context.Context, params types.CreateCommentParams) (types.Comment, error) {
 	dbParams, err := FromDomainCreateCommentParams(params)
 	if err != nil {
@@ -27,7 +27,7 @@ func (s *Store) CreateComment(ctx context.Context, params types.CreateCommentPar
 	return ToDomainComment(comment)
 }
 
-// ListComments 查询指定任务的所有评论列表。
+// ListComments queries all comments for the specified task.
 func (s *Store) ListComments(ctx context.Context, taskID int32) ([]types.Comment, error) {
 	comments, err := s.q.ListComments(ctx, taskID)
 	if err != nil {
@@ -36,7 +36,7 @@ func (s *Store) ListComments(ctx context.Context, taskID int32) ([]types.Comment
 	return ToDomainCommentSlice(comments)
 }
 
-// ListTaskLevelComments 查询指定任务的任务级评论列表。
+// ListTaskLevelComments queries the task-level comments for the specified task.
 func (s *Store) ListTaskLevelComments(ctx context.Context, taskID int32) ([]types.Comment, error) {
 	comments, err := s.q.ListTaskLevelComments(ctx, taskID)
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *Store) ListTaskLevelComments(ctx context.Context, taskID int32) ([]type
 	return ToDomainCommentSlice(comments)
 }
 
-// ListNodeComments 查询指定节点评论区的评论列表。
+// ListNodeComments queries the comments in the specified node comment section.
 func (s *Store) ListNodeComments(ctx context.Context, taskID int32, nodeID uuid.UUID) ([]types.Comment, error) {
 	comments, err := s.q.ListNodeComments(ctx, db.ListNodeCommentsParams{
 		TaskID: taskID,
@@ -57,7 +57,7 @@ func (s *Store) ListNodeComments(ctx context.Context, taskID int32, nodeID uuid.
 	return ToDomainCommentSlice(comments)
 }
 
-// ListExecutionContextComments 查询执行当前节点时应注入的评论上下文。
+// ListExecutionContextComments queries the comment context to inject when executing the current node.
 func (s *Store) ListExecutionContextComments(ctx context.Context, taskID int32, nodeID uuid.UUID, mentionID uuid.UUID) ([]types.Comment, error) {
 	comments, err := s.q.ListExecutionContextComments(ctx, db.ListExecutionContextCommentsParams{
 		TaskID:    taskID,
@@ -70,7 +70,7 @@ func (s *Store) ListExecutionContextComments(ctx context.Context, taskID int32, 
 	return ToDomainCommentSlice(comments)
 }
 
-// GetComment 根据 ID 查询单条评论记录。
+// GetComment queries a single comment record by ID.
 func (s *Store) GetComment(ctx context.Context, id uuid.UUID) (types.Comment, error) {
 	comment, err := s.q.GetComment(ctx, id)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *Store) GetComment(ctx context.Context, id uuid.UUID) (types.Comment, er
 	return ToDomainComment(comment)
 }
 
-// UpdateComment 更新评论的内容和提及列表。
+// UpdateComment updates the content and mentions list of a comment.
 func (s *Store) UpdateComment(ctx context.Context, id uuid.UUID, content string, mentions []uuid.UUID) (types.Comment, error) {
 	comment, err := s.q.UpdateComment(ctx, db.UpdateCommentParams{
 		ID:       id,

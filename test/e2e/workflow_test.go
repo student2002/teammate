@@ -1,5 +1,5 @@
-// Package test 包含覆盖完整 agent 守护进程生命周期的端到端测试：
-// agent 注册、认证流程、会话令牌交换以及从开始到完成的工作流执行。
+// Package test contains end-to-end tests covering the full agent daemon lifecycle:
+// agent registration, authentication flow, session token exchange, and workflow execution from start to finish.
 package test
 
 import (
@@ -27,12 +27,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// getTestDSN 返回测试数据库连接字符串。
+// getTestDSN returns the test database connection string.
 func getTestDSN() string {
 	return testdb.GetTestDSN()
 }
 
-// connectTestDB 打开测试数据库连接。
+// connectTestDB opens a test database connection.
 func connectTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	pgDB, err := sql.Open("pgx", getTestDSN())
@@ -47,30 +47,30 @@ func connectTestDB(t *testing.T) *sql.DB {
 	return pgDB
 }
 
-// TestWorkflowSmoke 测试完整的端到端工作流周期：
-// 1. 创建工作空间
-// 2. 创建项目
-// 3. 创建包含 [implement → review] 节点的工作流模板
-// 4. 从模板创建任务
-// 5. 验证任务节点以 pending 状态创建
-// 6. 创建 agent 并注册为项目成员
-// 7. Agent 认领节点
-// 8. 验证节点转换为 in_progress
-// 9. 完成节点
-// 10. 验证节点转换为 completed
-// 11. 验证下一个节点变为可用（带延续邀请的 pending 状态）
-// 12. 将审查节点拒绝回第一个节点
-// 13. 验证回滚：第一个节点回到 pending，审查节点变为 rejected
-// 14. 解决 manual_intervention 节点
+// TestWorkflowSmoke tests the full end-to-end workflow cycle:
+// 1. Create workspace
+// 2. Create project
+// 3. Create workflow template with [implement → review] nodes
+// 4. Create task from template
+// 5. Verify task nodes are created in pending status
+// 6. Create agent and register as project member
+// 7. Agent claims node
+// 8. Verify node transitions to in_progress
+// 9. Complete node
+// 10. Verify node transitions to completed
+// 11. Verify next node becomes available (pending with continuation invite)
+// 12. Reject review node back to first node
+// 13. Verify rollback: first node back to pending, review node becomes rejected
+// 14. Resolve manual_intervention node
 func TestWorkflowSmoke(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
 
 	s := store.New(pgDB)
-	svc := service.New(pgDB, nil, nil) // Hub 传 nil 没问题 — SSE 是无操作的
+	svc := service.New(pgDB, nil, nil) // passing nil for Hub is fine — SSE is a no-op
 	ctx := context.Background()
 
-	// 步骤 1：创建工作空间
+	// Step 1: Create workspace
 	desc1 := "e2e smoke test"
 	ws, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
 		Name:        "e2e-smoke-" + uuid.New().String()[:8],
@@ -83,7 +83,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	t.Logf("step 1: workspace created id=%s", ws.ID)
 	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, ws.ID) })
 
-	// 步骤 2：创建项目
+	// Step 2: Create project
 	desc2 := "e2e smoke project"
 	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
 		WorkspaceID: ws.ID,
@@ -96,7 +96,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 2: project created id=%s", proj.ID)
 
-	// 第 3 步：创建包含 [implement → review] 节点的工作流模板
+	// Step 3: Create workflow template with [implement → review] nodes
 	desc3 := "implement then review"
 	desc4 := "implement the feature"
 	desc5 := "review the implementation"
@@ -131,8 +131,8 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 3: workflow template created id=%s with %d nodes", tpl.ID, len(tplNodes))
 
-	// 创建一个人工成员用于授予权限（granted_by 外键约束）
-	// 以及将该成员用作 task 的 author_id（NOT NULL）
+	// Create a human member for granting permissions (granted_by foreign key constraint)
+	// and to use as the task's author_id (NOT NULL)
 	member, err := s.CreateMember(ctx, types.CreateMemberParams{
 		Email: "e2e-test@example.com",
 		Name:  "E2E Tester",
@@ -142,7 +142,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = testdb.DeleteMember(pgDB, member.ID) })
 
-	// 以 admin 角色将成员添加到工作区
+	// Add member to workspace as admin
 	_, err = s.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
 		WorkspaceID: ws.ID,
 		MemberID:    member.ID,
@@ -152,7 +152,7 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 5b - create workspace member: %v", err)
 	}
 
-	// 第 4 步：根据模板创建任务
+	// Step 4: Create task from template
 	taskSvc := service.NewTaskService(svc)
 	desc6 := "end-to-end workflow smoke test"
 	taskResult, err := taskSvc.Create(ctx, uuid.MustParse(proj.ID), types.CreateTaskParams{
@@ -173,7 +173,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	nodes := taskResult.Nodes
 	t.Logf("step 4: task created id=%d with %d nodes", task.ID, len(nodes))
 
-	// 第 5 步：验证任务节点以 pending 状态创建
+	// Step 5: Verify task nodes are created in pending status
 	if len(nodes) != 2 {
 		t.Fatalf("step 5 - expected 2 task nodes, got %d", len(nodes))
 	}
@@ -187,7 +187,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 5: both nodes in pending state")
 
-	// 第 6 步：创建两个 Agent 并将它们注册为项目成员
+	// Step 6: Create two Agents and register them as project members
 	model1 := "claude-3.5-sonnet"
 	gitName1 := "e2e-implementer"
 	gitEmail1 := "e2e-implementer@teammate.local"
@@ -222,7 +222,7 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 6 - create agent2: %v", err)
 	}
 
-	// 将两个 Agent 添加到项目
+	// Add both Agents to the project
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
 		ProjectID:  proj.ID,
 		MemberType: "agent",
@@ -242,7 +242,7 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 6 - add agent2 to project: %v", err)
 	}
 
-	// 向两个 Agent 授予默认权限
+	// Grant default permissions to both Agents
 	agent1ID := uuid.MustParse(agent1.ID)
 	agent2ID := uuid.MustParse(agent2.ID)
 	memberID := uuid.MustParse(member.ID)
@@ -252,7 +252,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	if err := s.GrantDefaultPermissions(ctx, agent2ID, memberID); err != nil {
 		t.Fatalf("step 6 - grant default permissions to agent2: %v", err)
 	}
-	// 为 review Agent 授予额外权限（task:approve、task:reject 等）
+	// Grant additional permissions to review Agent (task:approve, task:reject, etc.)
 	for _, perm := range types.DeniedByDefaultAgentPermissions {
 		_, _ = s.GrantAgentPermission(ctx, agent1ID, perm, "*", nil, memberID)
 		_, _ = s.GrantAgentPermission(ctx, agent2ID, perm, "*", nil, memberID)
@@ -260,7 +260,7 @@ func TestWorkflowSmoke(t *testing.T) {
 
 	t.Logf("step 6: agents created and added to project (agent1=%s, agent2=%s)", agent1.ID, agent2.ID)
 
-	// 第 7 步：Agent1 认领 implement 节点
+	// Step 7: Agent1 claims implement node
 	nodeSvc := service.NewNodeService(svc)
 	node1ID := uuid.MustParse(node1.ID)
 	node2ID := uuid.MustParse(node2.ID)
@@ -270,7 +270,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 7: agent1 claimed node1 (implement)")
 
-	// 第 8 步：验证节点流转为 in_progress
+	// Step 8: Verify node transitions to in_progress
 	claimedNode1, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 8 - get node1: %v", err)
@@ -282,16 +282,16 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 8 - expected assignee_id=%s, got %v", agent1.ID, claimedNode1.AssigneeID)
 	}
 	t.Logf("step 8: node1 is in_progress, assigned to agent1")
-	_ = claimResult // 抑制未使用警告
+	_ = claimResult // suppress unused warning
 
-	// 第 9 步：完成 implement 节点
+	// Step 9: Complete implement node
 	approveResult, err := nodeSvc.CompleteStandardNode(ctx, node1ID, agent1ID, "agent", "implementation done")
 	if err != nil {
 		t.Fatalf("step 9 - complete node1: %v", err)
 	}
 	t.Logf("step 9: node1 (implement) completed")
 
-	// 第 10 步：验证 node1 流转为 completed
+	// Step 10: Verify node1 transitions to completed
 	completedNode1, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 10 - get node1: %v", err)
@@ -301,7 +301,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 10: node1 is completed")
 
-	// 第 11 步：验证下一个节点（review）变为可用（pending 并带续行邀请）
+	// Step 11: Verify the next node (review) becomes available (pending with continuation invite)
 	reviewNode, err := s.GetTaskNode(ctx, node2ID)
 	if err != nil {
 		t.Fatalf("step 11 - get node2: %v", err)
@@ -309,21 +309,21 @@ func TestWorkflowSmoke(t *testing.T) {
 	if reviewNode.Status != "pending" {
 		t.Fatalf("step 11 - expected review node to be pending, got %s", reviewNode.Status)
 	}
-	// review 节点应为完成 node1 的 Agent 保留续行权
-	// 然而，不允许自我审查，因此续行权不应被设置
-	// 因为 node1 是 standard 而 node2 是 review——代码会跳过
-	// standard→review 的续行权
+	// The review node should reserve continuation rights for the Agent that completed node1
+	// However, self-review is not allowed, so the continuation right should not be set
+	// because node1 is standard and node2 is review — the code skips
+	// standard→review continuation rights
 	t.Logf("step 11: node2 (review) is pending, reserved_for_agent_id=%v", reviewNode.ReservedForAgentID)
 	_ = approveResult
 
-	// 第 12 步：Agent2 认领 review 节点并拒绝使其退回 implement 节点
+	// Step 12: Agent2 claims review node and rejects it back to implement node
 	claimResult2, err := nodeSvc.Claim(ctx, node2ID, agent2ID, "agent")
 	if err != nil {
 		t.Fatalf("step 12 - agent2 claim node2: %v", err)
 	}
 	_ = claimResult2
 
-	// 验证 node2 现在为 in_progress
+	// Verify node2 is now in_progress
 	reviewInProgress, err := s.GetTaskNode(ctx, node2ID)
 	if err != nil {
 		t.Fatalf("step 12 - get node2 after claim: %v", err)
@@ -332,21 +332,21 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 12 - expected node2 in_progress after claim, got %s", reviewInProgress.Status)
 	}
 
-	// 拒绝 node2 并指向 node1
+	// Reject node2 targeting node1
 	rejectResult, err := nodeSvc.Reject(ctx, node2ID, agent2ID, "agent", &node1ID, "needs rework")
 	if err != nil {
 		t.Fatalf("step 12 - reject node2: %v", err)
 	}
 	t.Logf("step 12: node2 (review) rejected back to node1 (implement)")
 
-	// 第 13 步：验证回滚
-	// node2 应被拒绝
+	// Step 13: Verify rollback
+	// node2 should be rejected
 	if rejectResult.Node.Status != "rejected" {
 		t.Fatalf("step 13 - expected node2 status rejected, got %s", rejectResult.Node.Status)
 	}
 	t.Logf("step 13a: node2 is rejected")
 
-	// node1 应回到 pending（需要重新认领）
+	// node1 should return to pending (needs re-claim)
 	rolledBackNode1, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 13 - get node1 after reject: %v", err)
@@ -354,13 +354,13 @@ func TestWorkflowSmoke(t *testing.T) {
 	if rolledBackNode1.Status != "pending" {
 		t.Fatalf("step 13 - expected node1 status pending after rollback, got %s", rolledBackNode1.Status)
 	}
-	// node1 的 reject_count 应已递增
+	// node1's reject_count should have been incremented
 	if rolledBackNode1.RejectCount < 1 {
 		t.Fatalf("step 13 - expected node1 reject_count >= 1, got %d", rolledBackNode1.RejectCount)
 	}
 	t.Logf("step 13b: node1 is back to pending with reject_count=%d", rolledBackNode1.RejectCount)
 
-	// 验证状态流转已被记录
+	// Verify state transitions have been recorded
 	transitions1, err := s.ListNodeTransitions(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 13 - list node1 transitions: %v", err)
@@ -377,14 +377,14 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 13c: transitions recorded (node1=%d, node2=%d)", len(transitions1), len(transitions2))
 
-	// 第 14 步：解决 manual_intervention 节点
-	// 首先，通过超过最大拒绝周期将 node1 设置为 manual_intervention。
-	// 我们需要将拒绝次数提升到 max_reject_cycles。
-	// node1 当前的 max_reject_cycles 来自项目（默认 3）。
-	// node1 在之前的拒绝中已有 reject_count=1。
-	// 我们再多执行几次拒绝周期以触发 manual_intervention。
+	// Step 14: Resolve manual_intervention node
+	// First, set node1 to manual_intervention by exceeding the max reject cycles.
+	// We need to raise the reject count to max_reject_cycles.
+	// node1's current max_reject_cycles comes from the project (default 3).
+	// node1 already has reject_count=1 from the previous rejection.
+	// We perform a few more reject cycles to trigger manual_intervention.
 
-	// 重新认领 node1 并再次完成它
+	// Re-claim node1 and complete it again
 	_, err = nodeSvc.Claim(ctx, node1ID, agent1ID, "agent")
 	if err != nil {
 		t.Fatalf("step 14 - re-claim node1: %v", err)
@@ -394,19 +394,19 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 14 - complete node1 (2nd time): %v", err)
 	}
 
-	// Agent2 再次认领 review 节点
+	// Agent2 re-claims the review node
 	_, err = nodeSvc.Claim(ctx, node2ID, agent2ID, "agent")
 	if err != nil {
 		t.Fatalf("step 14 - agent2 re-claim node2: %v", err)
 	}
 
-	// 再次拒绝（第 2 个拒绝周期）
+	// Reject again (2nd reject cycle)
 	_, err = nodeSvc.Reject(ctx, node2ID, agent2ID, "agent", &node1ID, "still needs work")
 	if err != nil {
 		t.Fatalf("step 14 - reject node2 (2nd time): %v", err)
 	}
 
-	// 重复：认领 → 完成 → 认领 review → 拒绝（第 3 次）
+	// Repeat: claim → complete → claim review → reject (3rd time)
 	_, err = nodeSvc.Claim(ctx, node1ID, agent1ID, "agent")
 	if err != nil {
 		t.Fatalf("step 14 - re-claim node1 (3rd time): %v", err)
@@ -421,14 +421,14 @@ func TestWorkflowSmoke(t *testing.T) {
 		t.Fatalf("step 14 - agent2 re-claim node2 (3rd time): %v", err)
 	}
 
-	// 第 3 次拒绝——这应触发 node1 上的 manual_intervention
-	// （reject_count 将达到 max_reject_cycles=3）
+	// 3rd reject — this should trigger manual_intervention on node1
+	// (reject_count will reach max_reject_cycles=3)
 	_, err = nodeSvc.Reject(ctx, node2ID, agent2ID, "agent", &node1ID, "still not good enough")
 	if err != nil {
 		t.Fatalf("step 14 - reject node2 (3rd time): %v", err)
 	}
 
-	// 验证 node1 现在处于 manual_intervention
+	// Verify node1 is now in manual_intervention
 	manualNode1, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 14 - get node1 after 3rd reject: %v", err)
@@ -438,7 +438,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 14a: node1 is now in manual_intervention after %d reject cycles", manualNode1.RejectCount)
 
-	// 解决 manual_intervention 节点——将其重新分配给 agent1
+	// Resolve the manual_intervention node — reassign it to agent1
 	resolvedNode, err := nodeSvc.Resolve(ctx, node1ID, memberID, "member", "human resolved, reassigning to agent1", &agent1ID, service.ResolveActionReExecute)
 	if err != nil {
 		t.Fatalf("step 14 - resolve node1: %v", err)
@@ -451,21 +451,21 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 14b: node1 resolved back to pending, assigned to agent1")
 
-	// 验证完整生命周期：所有状态变更都有对应的流转记录
+	// Verify the complete lifecycle: all state transitions have corresponding transition records
 	allTransitions, err := s.ListNodeTransitions(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("step 14 - list all node1 transitions: %v", err)
 	}
-	// node1 的预期状态流转：
-	// 1. pending → in_progress（认领）
-	// 2. in_progress → completed（批准）
-	// 3.（来自拒绝）completed → pending（拒绝路由）
-	// 4. pending → in_progress（重新认领）
-	// 5. in_progress → completed（批准）
-	// 6.（来自拒绝）completed → pending（拒绝路由）
-	// 7. pending → in_progress（重新认领）
-	// 8. in_progress → completed（批准）
-	// 9.（来自拒绝）completed → manual_intervention（拒绝路由，超过最大周期）
+	// Expected state transitions for node1:
+	// 1. pending → in_progress (claim)
+	// 2. in_progress → completed (approve)
+	// 3. (from reject) completed → pending (reject routing)
+	// 4. pending → in_progress (re-claim)
+	// 5. in_progress → completed (approve)
+	// 6. (from reject) completed → pending (reject routing)
+	// 7. pending → in_progress (re-claim)
+	// 8. in_progress → completed (approve)
+	// 9. (from reject) completed → manual_intervention (reject routing, exceeded max cycles)
 	// 10. manual_intervention → in_progress (resolve)
 	if len(allTransitions) < 8 {
 		t.Fatalf("step 14 - expected at least 8 transitions for node1, got %d", len(allTransitions))
@@ -475,7 +475,7 @@ func TestWorkflowSmoke(t *testing.T) {
 	t.Log("E2E workflow smoke test PASSED: complete lifecycle verified")
 }
 
-// TestWorkflowSelfReviewPrevention 验证完成工作流第一个（实现）节点的代理不能认领第二个（审核）节点来审核自己的工作。
+// TestWorkflowSelfReviewPrevention verifies that the agent who completed the first (implement) node cannot claim the second (review) node to review its own work.
 func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
@@ -484,7 +484,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	svc := service.New(pgDB, nil, nil)
 	ctx := context.Background()
 
-	// 准备：工作区、项目、包含 [implement → review] 的工作流
+	// Setup: workspace, project, workflow with [implement → review]
 	desc1 := "self-review prevention test"
 	ws, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
 		Name:        "self-review-test-" + uuid.New().String()[:8],
@@ -535,7 +535,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	// 创建一个人工成员用于授予权限
+	// Create a human member for granting permissions
 	member, err := s.CreateMember(ctx, types.CreateMemberParams{
 		Email: "self-review-test@example.com",
 		Name:  "Self-Review Tester",
@@ -545,7 +545,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = testdb.DeleteMember(pgDB, member.ID) })
 
-	// 以 admin 角色将成员添加到工作区
+	// Add member to workspace as admin
 	_, err = s.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
 		WorkspaceID: ws.ID,
 		MemberID:    member.ID,
@@ -555,7 +555,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 		t.Fatalf("create workspace member: %v", err)
 	}
 
-	// 创建单个 Agent
+	// Create a single Agent
 	model1 := "claude-3.5-sonnet"
 	gitName1 := "self-review-agent"
 	gitEmail1 := "self-review-agent@teammate.local"
@@ -592,7 +592,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 		_, _ = s.GrantAgentPermission(ctx, agent1ID, perm, "*", nil, memberID)
 	}
 
-	// 创建任务
+	// Create task
 	taskSvc := service.NewTaskService(svc)
 	desc6 := "test"
 	taskResult, err := taskSvc.Create(ctx, uuid.MustParse(proj.ID), types.CreateTaskParams{
@@ -613,7 +613,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	node1 := taskResult.Nodes[0]
 	node2 := taskResult.Nodes[1]
 
-	// Agent1 认领并完成 implement 节点
+	// Agent1 claims and completes the implement node
 	nodeSvc := service.NewNodeService(svc)
 	node1ID := uuid.MustParse(node1.ID)
 	_, err = nodeSvc.Claim(ctx, node1ID, agent1ID, "agent")
@@ -625,7 +625,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 		t.Fatalf("complete node1: %v", err)
 	}
 
-	// Agent1 尝试认领 review 节点——应被拒绝（自我审查）
+	// Agent1 attempts to claim the review node — should be rejected (self-review)
 	node2ID := uuid.MustParse(node2.ID)
 	_, err = nodeSvc.Claim(ctx, node2ID, agent1ID, "agent")
 	if err == nil {
@@ -634,8 +634,8 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	t.Logf("self-review correctly prevented: %v", err)
 }
 
-// TestWorkflowInterruptAndManualIntervention 验证终端流程：任务可以被终端，将所有 in_progress 节点设为 manual_intervention，
-// 并且节点可以后续解决回 in_progress 继续工作。
+// TestWorkflowInterruptAndManualIntervention verifies the interrupt flow: a task can be interrupted, setting all in_progress nodes to manual_intervention,
+// and nodes can subsequently be resolved back to in_progress to continue working.
 func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
@@ -644,7 +644,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 	svc := service.New(pgDB, nil, nil)
 	ctx := context.Background()
 
-	// 准备
+	// Setup
 	desc1 := "interrupt test"
 	ws, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
 		Name:        "interrupt-test-" + uuid.New().String()[:8],
@@ -695,7 +695,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	// 创建一个人工成员用于授予权限
+	// Create a human member for granting permissions
 	member, err := s.CreateMember(ctx, types.CreateMemberParams{
 		Email: "interrupt-test@example.com",
 		Name:  "Interrupt Tester",
@@ -705,7 +705,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = testdb.DeleteMember(pgDB, member.ID) })
 
-	// 以 admin 角色将成员添加到工作区
+	// Add member to workspace as admin
 	_, err = s.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
 		WorkspaceID: ws.ID,
 		MemberID:    member.ID,
@@ -770,7 +770,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 
 	node1 := taskResult.Nodes[0]
 
-	// Agent 认领 node1
+	// Agent claims node1
 	nodeSvc := service.NewNodeService(svc)
 	node1ID := uuid.MustParse(node1.ID)
 	_, err = nodeSvc.Claim(ctx, node1ID, agent1ID, "agent")
@@ -778,7 +778,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("claim node1: %v", err)
 	}
 
-	// 验证 node1 为 in_progress
+	// Verify node1 is in_progress
 	inProgressNode, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("get node1: %v", err)
@@ -787,7 +787,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("expected in_progress, got %s", inProgressNode.Status)
 	}
 
-	// 中断任务
+	// Interrupt task
 	interruptResult, err := nodeSvc.InterruptTask(ctx, taskResult.Task.ID, memberID, "member", "human interrupted")
 	if err != nil {
 		t.Fatalf("interrupt task: %v", err)
@@ -797,7 +797,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 	}
 	t.Logf("task interrupted: %d nodes set to manual_intervention", interruptResult.InterruptedNodes)
 
-	// 验证 node1 现在为 manual_intervention
+	// Verify node1 is now in manual_intervention
 	manualNode, err := s.GetTaskNode(ctx, node1ID)
 	if err != nil {
 		t.Fatalf("get node1 after interrupt: %v", err)
@@ -806,7 +806,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("expected manual_intervention after interrupt, got %s", manualNode.Status)
 	}
 
-	// 解决 manual_intervention 节点
+	// Resolve the manual_intervention node
 	resolvedNode, err := nodeSvc.Resolve(ctx, node1ID, memberID, "member", "resolved, reassigning", &agent1ID, service.ResolveActionReExecute)
 	if err != nil {
 		t.Fatalf("resolve node1: %v", err)

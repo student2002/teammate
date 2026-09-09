@@ -1,4 +1,4 @@
-// search.go 实现搜索子命令，搜索任务和代理。
+// search.go implements the search subcommand, searching for tasks and agents.
 package main
 
 import (
@@ -22,7 +22,7 @@ var searchCmd = &cobra.Command{
 
 		client := newAPIClient()
 
-		// 搜索任务
+		// Search tasks
 		path := fmt.Sprintf("/api/workspaces/%s/search/tasks?q=%s", url.PathEscape(wsID), url.QueryEscape(keyword))
 		if projectID != "" {
 			path += "&projectId=" + url.QueryEscape(projectID)
@@ -32,7 +32,7 @@ var searchCmd = &cobra.Command{
 			return err
 		}
 
-		// 搜索 Agent
+		// Search agents
 		agentPath := fmt.Sprintf("/api/workspaces/%s/search/agents?q=%s", url.PathEscape(wsID), url.QueryEscape(keyword))
 		var agents interface{}
 		if err := client.Get(agentPath, &agents); err != nil {

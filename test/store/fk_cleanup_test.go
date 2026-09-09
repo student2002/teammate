@@ -1,6 +1,6 @@
-// fk_cleanup_test.go 覆盖 002_remove_fks 后 store 删除事务的显式置空行为
-// （FK 策略：外键移除后由应用层保证完整性，见 docs/数据存储设计.md 与
-// docs/实现与设计偏差记录.md #4）。
+// fk_cleanup_test.go tests the explicit null-setting behavior of store delete transactions after 002_remove_fks
+// (FK strategy: after foreign keys are removed, the application layer ensures integrity; see docs/数据存储设计.md and
+// docs/实现与设计偏差记录.md #4).
 package store_test
 
 import (
@@ -15,8 +15,8 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow 验证删除模板时
-// projects.default_workflow_id 被显式置空——否则外键（NO ACTION）会阻止删除。
+// TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow verifies that when a template is deleted,
+// projects.default_workflow_id is explicitly set to NULL — otherwise the foreign key (NO ACTION) would prevent deletion.
 func TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow(t *testing.T) {
 	s, db := setupTestStore(t)
 	ctx := context.Background()
@@ -25,7 +25,7 @@ func TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow(t *testing.T) {
 	tpl, _ := createTestWorkflowTemplate(t, s, ws.ID, 1)
 	proj := createTestProject(t, s, ws.ID)
 
-	// 将项目默认模板指向将被删除的模板
+	// Point the project's default template to the template about to be deleted
 	if _, err := db.Exec(
 		`UPDATE projects SET default_workflow_id = $1 WHERE id = $2`, tpl.ID, proj.ID); err != nil {
 		t.Fatalf("set default_workflow_id: %v", err)
@@ -44,7 +44,7 @@ func TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow(t *testing.T) {
 	}
 }
 
-// TestDeleteAgent_ClearsNodeRefs 验证删除 Agent 时 task_nodes.assignee_id 被显式置空。
+// TestDeleteAgent_ClearsNodeRefs verifies that task_nodes.assignee_id is explicitly set to NULL when an Agent is deleted.
 func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 	s, db := setupTestStore(t)
 	ctx := context.Background()
@@ -70,7 +70,7 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// 将节点 assignee 指向将被删除的 Agent
+	// Point the node assignee to the Agent about to be deleted
 	if _, err := db.Exec(
 		`UPDATE task_nodes SET assignee_id = $1 WHERE id = $2`, agent.ID, createdNodes[0].ID); err != nil {
 		t.Fatalf("set node assignee: %v", err)
@@ -88,7 +88,7 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 		t.Fatalf("expected task_nodes.assignee_id to be NULL, got %q", assignee.String)
 	}
 
-	// 任务本身仍应存在（节点保留、仅置空引用）
+	// The task itself should still exist (nodes preserved, only references cleared)
 	nodes, err := s.ListTaskNodes(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("ListTaskNodes after DeleteAgent: %v", err)
@@ -98,7 +98,7 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 	}
 }
 
-// TestDeleteProject_ClearsMemorySourceTask 验证删除项目时 memories.source_task_id 被显式置空。
+// TestDeleteProject_ClearsMemorySourceTask verifies that memories.source_task_id is explicitly set to NULL when a project is deleted.
 func TestDeleteProject_ClearsMemorySourceTask(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -149,8 +149,8 @@ func TestDeleteProject_ClearsMemorySourceTask(t *testing.T) {
 	}
 }
 
-// TestDeleteMember_ClearsGitCredentialCreatedBy 验证删除成员时
-// git_credentials.created_by 被显式置空。
+// TestDeleteMember_ClearsGitCredentialCreatedBy verifies that
+// git_credentials.created_by is explicitly set to NULL when a member is deleted.
 func TestDeleteMember_ClearsGitCredentialCreatedBy(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -183,7 +183,7 @@ func TestDeleteMember_ClearsGitCredentialCreatedBy(t *testing.T) {
 	}
 }
 
-// TestDeleteMember_ClearsInvitationsInvitedBy 验证删除成员时 invitations.invited_by 被显式置空。
+// TestDeleteMember_ClearsInvitationsInvitedBy verifies that invitations.invited_by is explicitly set to NULL when a member is deleted.
 func TestDeleteMember_ClearsInvitationsInvitedBy(t *testing.T) {
 	s, db := setupTestStore(t)
 	ctx := context.Background()
@@ -218,4 +218,4 @@ func TestDeleteMember_ClearsInvitationsInvitedBy(t *testing.T) {
 	}
 }
 
-var _ = store.New // 保持 import 引用（与 helpers 中 setupTestStore 一致）
+var _ = store.New // Keep import reference (consistent with setupTestStore in helpers)

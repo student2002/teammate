@@ -1,4 +1,4 @@
--- 工作流模板查询
+-- Workflow template queries
 
 -- name: CreateWorkflowTemplate :one
 INSERT INTO workflow_templates (

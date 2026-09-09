@@ -1,14 +1,14 @@
-// workspace.go 提供工作区和成员管理的数据访问操作。
+// workspace.go provides data access operations for workspace and member management.
 //
-// 工作区（Workspace）是团队的顶级组织单元，包含项目、Agent、成员。
-// 每个成员在工作区中有角色（owner/admin/member/viewer）。
+// A Workspace is the top-level organizational unit of a team, containing projects, Agents, and members.
+// Each member has a role within the workspace (owner/admin/member/viewer).
 //
-// 新工作区创建时自动种子里建 5 个内置工作流模板：
-//   - 标准开发流程（7 节点）
-//   - 快速修复流程（3 节点）
-//   - 纯审查流程（1 节点）
-//   - 文档编写流程（3 节点）
-//   - 数据处理流程（4 节点）
+// When a new workspace is created, 5 built-in workflow templates are seeded:
+//   - Standard development flow (7 nodes)
+//   - Quick fix flow (3 nodes)
+//   - Review-only flow (1 node)
+//   - Documentation writing flow (3 nodes)
+//   - Data processing flow (4 nodes)
 package store
 
 import (
@@ -24,15 +24,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateWorkspace 创建工作区并种子里建的 5 个内置工作流模板。
+// CreateWorkspace creates a workspace and seeds the 5 built-in workflow templates.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 工作区创建参数，包含名称、描述、Issue 前缀等
+// Parameters:
+//   - ctx: request context
+//   - params: workspace creation parameters, including name, description, Issue prefix, etc.
 //
-// 返回：
-//   - types.Workspace: 创建的工作区记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.Workspace: the created workspace record
+//   - error: error if creation fails
 func (s *Store) CreateWorkspace(ctx context.Context, params types.CreateWorkspaceParams) (types.Workspace, error) {
 	dbParams, err := FromDomainCreateWorkspaceParams(params)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, params types.CreateWorkspac
 	return ToDomainWorkspace(ws)
 }
 
-// CreateWorkspaceForMember 创建工作区并在同一事务内把创建者加入为 owner。
+// CreateWorkspaceForMember creates a workspace and adds the creator as owner within the same transaction.
 func (s *Store) CreateWorkspaceForMember(ctx context.Context, memberID uuid.UUID, params types.CreateWorkspaceParams) (types.Workspace, error) {
 	dbParams, err := FromDomainCreateWorkspaceParams(params)
 	if err != nil {
@@ -82,9 +82,9 @@ func (s *Store) CreateWorkspaceForMember(ctx context.Context, memberID uuid.UUID
 	return ToDomainWorkspace(ws)
 }
 
-// CreateWorkspaceWithOwnerInTx 在单个事务中创建工作区并将指定成员添加为 owner。
-// 与 CreateWorkspaceForMember 的区别：不种子内置模板（由调用方控制），
-// 用于 OAuth 流程中需要自定义种子行为的场景。
+// CreateWorkspaceWithOwnerInTx creates a workspace within a single transaction and adds the specified member as owner.
+// Difference from CreateWorkspaceForMember: it does not seed built-in templates (controlled by the caller),
+// used in OAuth flows that require custom seeding behavior.
 func (s *Store) CreateWorkspaceWithOwnerInTx(ctx context.Context, memberID uuid.UUID, params types.CreateWorkspaceParams) (types.Workspace, error) {
 	dbParams, err := FromDomainCreateWorkspaceParams(params)
 	if err != nil {
@@ -114,15 +114,15 @@ func (s *Store) CreateWorkspaceWithOwnerInTx(ctx context.Context, memberID uuid.
 	return ToDomainWorkspace(ws)
 }
 
-// GetWorkspace 根据 ID 查询单个工作区记录。
+// GetWorkspace queries a single workspace record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 工作区的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: UUID of the workspace
 //
-// 返回：
-//   - db.Workspace: 工作区记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.Workspace: the workspace record
+//   - error: error if the query fails
 func (s *Store) GetWorkspace(ctx context.Context, id uuid.UUID) (types.Workspace, error) {
 	ws, err := s.q.GetWorkspace(ctx, id)
 	if err != nil {
@@ -131,14 +131,14 @@ func (s *Store) GetWorkspace(ctx context.Context, id uuid.UUID) (types.Workspace
 	return ToDomainWorkspace(ws)
 }
 
-// ListWorkspaces 查询所有工作区记录。
+// ListWorkspaces queries all workspace records.
 //
-// 参数：
-//   - ctx: 请求上下文
+// Parameters:
+//   - ctx: request context
 //
-// 返回：
-//   - []db.Workspace: 工作区列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.Workspace: list of workspaces
+//   - error: error if the query fails
 func (s *Store) ListWorkspaces(ctx context.Context) ([]types.Workspace, error) {
 	wss, err := s.q.ListWorkspaces(ctx)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *Store) ListWorkspaces(ctx context.Context) ([]types.Workspace, error) {
 	return ToDomainWorkspaceSlice(wss)
 }
 
-// ListWorkspacesByMemberID 查询成员所属的工作区列表。
+// ListWorkspacesByMemberID queries the list of workspaces a member belongs to.
 func (s *Store) ListWorkspacesByMemberID(ctx context.Context, memberID uuid.UUID) ([]types.Workspace, error) {
 	wss, err := s.q.ListWorkspacesByMemberID(ctx, memberID)
 	if err != nil {
@@ -156,15 +156,15 @@ func (s *Store) ListWorkspacesByMemberID(ctx context.Context, memberID uuid.UUID
 	return ToDomainWorkspaceSlice(wss)
 }
 
-// UpdateWorkspace 更新工作区的基本信息。
+// UpdateWorkspace updates the basic information of a workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含工作区 ID 和要更新的字段
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including the workspace ID and fields to update
 //
-// 返回：
-//   - db.Workspace: 更新后的工作区记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.Workspace: the updated workspace record
+//   - error: error if the update fails
 func (s *Store) UpdateWorkspace(ctx context.Context, params types.UpdateWorkspaceParams) (types.Workspace, error) {
 	dbParams, err := FromDomainUpdateWorkspaceParams(params)
 	if err != nil {
@@ -177,14 +177,14 @@ func (s *Store) UpdateWorkspace(ctx context.Context, params types.UpdateWorkspac
 	return ToDomainWorkspace(ws)
 }
 
-// DeleteWorkspace 根据 ID 删除工作区记录。
+// DeleteWorkspace deletes a workspace record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 工作区的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: UUID of the workspace
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error if deletion fails
 func (s *Store) DeleteWorkspace(ctx context.Context, id uuid.UUID) error {
 	if err := s.q.DeleteWorkspace(ctx, id); err != nil {
 		return fmt.Errorf("delete workspace: %w", err)
@@ -192,15 +192,15 @@ func (s *Store) DeleteWorkspace(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// CreateMember 创建一个新成员记录。
+// CreateMember creates a new member record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 成员创建参数，包含名称、邮箱等
+// Parameters:
+//   - ctx: request context
+//   - params: member creation parameters, including name, email, etc.
 //
-// 返回：
-//   - db.Member: 创建的成员记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - db.Member: the created member record
+//   - error: error if creation fails
 func (s *Store) CreateMember(ctx context.Context, params types.CreateMemberParams) (types.Member, error) {
 	dbParams, err := FromDomainCreateMemberParams(params)
 	if err != nil {
@@ -213,15 +213,15 @@ func (s *Store) CreateMember(ctx context.Context, params types.CreateMemberParam
 	return ToDomainMember(m)
 }
 
-// ListMembersByWorkspace 查询指定工作区内的所有成员（含角色信息）。
+// ListMembersByWorkspace queries all members within the specified workspace (including role info).
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []db.ListMembersByWorkspaceRow: 成员列表（包含角色）
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.ListMembersByWorkspaceRow: list of members (including roles)
+//   - error: error if the query fails
 func (s *Store) ListMembersByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]types.ListMembersByWorkspaceRow, error) {
 	members, err := s.q.ListMembersByWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -230,15 +230,15 @@ func (s *Store) ListMembersByWorkspace(ctx context.Context, workspaceID uuid.UUI
 	return ToDomainListMembersByWorkspaceRowSlice(members)
 }
 
-// GetMemberByEmail 通过邮箱查询成员记录。
+// GetMemberByEmail queries a member record by email.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - email: 成员邮箱
+// Parameters:
+//   - ctx: request context
+//   - email: member email
 //
-// 返回：
-//   - db.Member: 成员记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.Member: the member record
+//   - error: error if the query fails
 func (s *Store) GetMemberByEmail(ctx context.Context, email string) (types.Member, error) {
 	m, err := s.q.GetMemberByEmail(ctx, email)
 	if err != nil {
@@ -247,16 +247,16 @@ func (s *Store) GetMemberByEmail(ctx context.Context, email string) (types.Membe
 	return ToDomainMember(m)
 }
 
-// GetFirstWorkspaceForMember 获取成员所属的第一个工作区成员关系（按创建时间排序）。
-// 用于 OAuth 登录时查找成员已有工作区。
+// GetFirstWorkspaceForMember fetches the first workspace membership of a member (ordered by creation time).
+// Used during OAuth login to look up a member's existing workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - memberID: 成员 ID
+// Parameters:
+//   - ctx: request context
+//   - memberID: member ID
 //
-// 返回：
-//   - db.WorkspaceMember: 工作区成员关系记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.WorkspaceMember: the workspace membership record
+//   - error: error if the query fails
 func (s *Store) GetFirstWorkspaceForMember(ctx context.Context, memberID uuid.UUID) (types.WorkspaceMember, error) {
 	wm, err := s.q.GetFirstWorkspaceForMember(ctx, memberID)
 	if err != nil {
@@ -265,14 +265,14 @@ func (s *Store) GetFirstWorkspaceForMember(ctx context.Context, memberID uuid.UU
 	return ToDomainWorkspaceMember(wm)
 }
 
-// UpdateMemberPasswordHash 更新成员的密码哈希。
+// UpdateMemberPasswordHash updates a member's password hash.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含成员 ID 和新的密码哈希
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including member ID and the new password hash
 //
-// 返回：
-//   - error: 更新失败时返回错误
+// Returns:
+//   - error: error if the update fails
 func (s *Store) UpdateMemberPasswordHash(ctx context.Context, params types.UpdateMemberPasswordHashParams) error {
 	id, err := stringToUUID(params.ID)
 	if err != nil {
@@ -287,15 +287,15 @@ func (s *Store) UpdateMemberPasswordHash(ctx context.Context, params types.Updat
 	return nil
 }
 
-// UpdateMemberRole 更新成员在工作区中的角色。
+// UpdateMemberRole updates a member's role within a workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 更新参数，包含工作区 ID、成员 ID 和新角色
+// Parameters:
+//   - ctx: request context
+//   - params: update parameters, including workspace ID, member ID and the new role
 //
-// 返回：
-//   - db.WorkspaceMember: 更新后的工作区成员记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.WorkspaceMember: the updated workspace member record
+//   - error: error if the update fails
 func (s *Store) UpdateMemberRole(ctx context.Context, params types.UpdateMemberRoleParams) (types.WorkspaceMember, error) {
 	dbParams, err := FromDomainUpdateMemberRoleParams(params)
 	if err != nil {
@@ -308,14 +308,14 @@ func (s *Store) UpdateMemberRole(ctx context.Context, params types.UpdateMemberR
 	return ToDomainWorkspaceMember(wm)
 }
 
-// DeleteMember 根据 ID 删除成员记录。
+// DeleteMember deletes a member record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 成员的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: UUID of the member
 //
-// 返回：
-//   - error: 删除失败时返回错误
+// Returns:
+//   - error: error if deletion fails
 func (s *Store) DeleteMember(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -323,8 +323,8 @@ func (s *Store) DeleteMember(ctx context.Context, id uuid.UUID) error {
 	}
 	defer tx.Rollback()
 
-	// 002_remove_fks 后以下列不再有外键，须显式置空（FK 策略：应用层保证完整性）：
-	//   git_credentials.created_by、agent_permissions.granted_by、invitations.invited_by
+	// After 002_remove_fks, the following columns no longer have foreign keys; they must be explicitly set to NULL (FK strategy: integrity guaranteed at the application layer):
+	//   git_credentials.created_by, agent_permissions.granted_by, invitations.invited_by
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE git_credentials SET created_by = NULL WHERE created_by = $1`, id); err != nil {
 		return fmt.Errorf("clear git_credentials.created_by: %w", err)
@@ -345,15 +345,15 @@ func (s *Store) DeleteMember(ctx context.Context, id uuid.UUID) error {
 	return tx.Commit()
 }
 
-// GetMember 根据 ID 查询单个成员记录。
+// GetMember queries a single member record by ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: 成员的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: UUID of the member
 //
-// 返回：
-//   - db.Member: 成员记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.Member: the member record
+//   - error: error if the query fails
 func (s *Store) GetMember(ctx context.Context, id uuid.UUID) (types.Member, error) {
 	m, err := s.q.GetMember(ctx, id)
 	if err != nil {
@@ -362,17 +362,17 @@ func (s *Store) GetMember(ctx context.Context, id uuid.UUID) (types.Member, erro
 	return ToDomainMember(m)
 }
 
-// GetWorkspaceOwner 查询指定工作区的 owner 成员。
+// GetWorkspaceOwner queries the owner member of the specified workspace.
 //
-// 遍历所有成员，返回角色为 "owner" 的成员。
+// It iterates over all members and returns the member whose role is "owner".
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - db.ListMembersByWorkspaceRow: owner 成员记录
-//   - error: 查询失败或无 owner 时返回错误
+// Returns:
+//   - db.ListMembersByWorkspaceRow: the owner member record
+//   - error: error if the query fails or there is no owner
 func (s *Store) GetWorkspaceOwner(ctx context.Context, workspaceID uuid.UUID) (types.ListMembersByWorkspaceRow, error) {
 	members, err := s.q.ListMembersByWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -386,23 +386,23 @@ func (s *Store) GetWorkspaceOwner(ctx context.Context, workspaceID uuid.UUID) (t
 	return types.ListMembersByWorkspaceRow{}, fmt.Errorf("no owner found for workspace %s", workspaceID)
 }
 
-// SeedBuiltinTemplates 为新工作区创建 5 个内置工作流模板。
+// SeedBuiltinTemplates creates 5 built-in workflow templates for a new workspace.
 //
-// 每个模板使用独立事务创建以避免并发死锁，单个模板/节点失败不影响后续模板创建。
+// Each template is created within its own transaction to avoid concurrent deadlocks; a single template/node failure does not affect subsequent template creation.
 //
-// 内置模板：
-//  1. 标准开发流程（7 节点）：需求分析 → 技术设计 → 编码实现 → 自测验证 → 代码审查 → 集成测试 → 部署上线
-//  2. 快速修复流程（3 节点）：问题定位 → 修复编码 → 代码审查
-//  3. 纯审查流程（1 节点）：代码审查
-//  4. 文档编写流程（3 节点）：资料收集 → 文档撰写 → 文档审校
-//  5. 数据处理流程（4 节点）：数据采集 → 数据清洗 → 数据分析 → 结果验证
+// Built-in templates:
+//  1. Standard development flow (7 nodes): requirements analysis → technical design → coding → self-test verification → code review → integration test → deployment
+//  2. Quick fix flow (3 nodes): problem triage → fix coding → code review
+//  3. Review-only flow (1 node): code review
+//  4. Documentation writing flow (3 nodes): material collection → document drafting → document proofreading
+//  5. Data processing flow (4 nodes): data collection → data cleaning → data analysis → result verification
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - error: 所有模板创建失败时返回聚合错误
+// Returns:
+//   - error: aggregated error returned when all template creations fail
 func (s *Store) SeedBuiltinTemplates(ctx context.Context, workspaceID uuid.UUID) error {
 	type nodeDef struct {
 		Name         string
@@ -421,58 +421,58 @@ func (s *Store) SeedBuiltinTemplates(ctx context.Context, workspaceID uuid.UUID)
 
 	templates := []templateDef{
 		{
-			Name:        "标准开发流程",
-			Description: "完整的标准开发流程，包含从需求分析到部署上线的7个执行节点",
+			Name:        "Standard Development Workflow",
+			Description: "Complete standard development workflow with 7 execution nodes from requirements analysis to deployment",
 			Nodes: []nodeDef{
-				{Name: "需求分析", Description: "分析需求文档，明确功能范围和验收标准", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "技术设计", Description: "设计技术方案，确定架构和接口", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "编码实现", Description: "按照设计方案编写代码", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "自测验证", Description: "编写并运行单元测试，验证基本功能", SortOrder: 4, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "代码审查", Description: "审查代码质量、规范性和潜在问题", SortOrder: 5, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "集成测试", Description: "运行集成测试，验证模块间协作", SortOrder: 6, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "部署上线", Description: "将代码部署到生产环境", SortOrder: 7, NodeType: db.NodeTypeManual, AssigneeType: db.AssigneeTypeHuman, Timeout: 0},
+				{Name: "Requirement Analysis", Description: "Analyze requirement documents, clarify functional scope and acceptance criteria", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Technical Design", Description: "Design technical solution, define architecture and interfaces", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Implementation", Description: "Write code according to the design", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
+				{Name: "Unit Testing", Description: "Write and run unit tests to verify basic functionality", SortOrder: 4, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Code Review", Description: "Review code quality, standards compliance, and potential issues", SortOrder: 5, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Integration Testing", Description: "Run integration tests to verify cross-module collaboration", SortOrder: 6, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Deployment", Description: "Deploy code to the production environment", SortOrder: 7, NodeType: db.NodeTypeManual, AssigneeType: db.AssigneeTypeHuman, Timeout: 0},
 			},
 		},
 		{
-			Name:        "快速修复流程",
-			Description: "适用于Bug修复的精简流程，3个执行节点快速闭环",
+			Name:        "Quick Fix Workflow",
+			Description: "Streamlined workflow for bug fixes with 3 execution nodes for rapid turnaround",
 			Nodes: []nodeDef{
-				{Name: "问题定位", Description: "复现并定位问题根因", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
-				{Name: "修复编码", Description: "编写修复代码", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "代码审查", Description: "审查修复代码的正确性", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
+				{Name: "Issue Triage", Description: "Reproduce and identify the root cause", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
+				{Name: "Fix Implementation", Description: "Write the fix code", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Code Review", Description: "Review the correctness of the fix", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
 			},
 		},
 		{
-			Name:        "纯审查流程",
-			Description: "仅包含代码审查节点的轻量流程",
+			Name:        "Review-Only Workflow",
+			Description: "Lightweight workflow containing only a code review node",
 			Nodes: []nodeDef{
-				{Name: "代码审查", Description: "审查代码质量、规范性和潜在问题", SortOrder: 1, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Code Review", Description: "Review code quality, standards compliance, and potential issues", SortOrder: 1, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
 			},
 		},
 		{
-			Name:        "文档编写流程",
-			Description: "适用于文档类任务的3个执行节点流程",
+			Name:        "Documentation Workflow",
+			Description: "3-execution-node workflow for documentation tasks",
 			Nodes: []nodeDef{
-				{Name: "资料收集", Description: "收集和整理相关资料与信息", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "文档撰写", Description: "撰写文档内容", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "文档审校", Description: "审校文档的准确性和完整性", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
+				{Name: "Research", Description: "Collect and organize relevant materials and information", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Writing", Description: "Write the document content", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
+				{Name: "Review", Description: "Proofread for accuracy and completeness", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
 			},
 		},
 		{
-			Name:        "数据处理流程",
-			Description: "适用于数据处理类任务的4个执行节点流程",
+			Name:        "Data Processing Workflow",
+			Description: "4-execution-node workflow for data processing tasks",
 			Nodes: []nodeDef{
-				{Name: "数据采集", Description: "从数据源采集原始数据", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "数据清洗", Description: "清洗和预处理数据", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "数据分析", Description: "分析数据并生成洞察", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "结果验证", Description: "验证分析结果的准确性", SortOrder: 4, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
+				{Name: "Data Collection", Description: "Collect raw data from data sources", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Data Cleaning", Description: "Clean and preprocess data", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
+				{Name: "Data Analysis", Description: "Analyze data and generate insights", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
+				{Name: "Result Validation", Description: "Validate the accuracy of analysis results", SortOrder: 4, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
 			},
 		},
 	}
 
 	var errs []error
 	for _, t := range templates {
-		// 每个模板使用一个事务，以避免并发创建工作区时发生死锁
+		// Each template uses its own transaction to avoid deadlocks when creating workspaces concurrently
 		tx, txErr := s.db.BeginTx(ctx, nil)
 		if txErr != nil {
 			slog.Warn("SeedBuiltinTemplates: failed to begin tx", "name", t.Name, "err", txErr)
@@ -528,15 +528,15 @@ func (s *Store) SeedBuiltinTemplates(ctx context.Context, workspaceID uuid.UUID)
 	return nil
 }
 
-// GetWorkspaceMember 根据工作区 ID 和成员 ID 查询工作区成员关系。
+// GetWorkspaceMember queries a workspace membership by workspace ID and member ID.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 查询参数，包含工作区 ID 和成员 ID
+// Parameters:
+//   - ctx: request context
+//   - params: query parameters, including workspace ID and member ID
 //
-// 返回：
-//   - db.WorkspaceMember: 工作区成员关系记录
-//   - error: 查询失败时返回错误
+// Returns:
+//   - db.WorkspaceMember: the workspace membership record
+//   - error: error if the query fails
 func (s *Store) GetWorkspaceMember(ctx context.Context, params types.GetWorkspaceMemberParams) (types.WorkspaceMember, error) {
 	dbParams, err := FromDomainGetWorkspaceMemberParams(params)
 	if err != nil {
@@ -549,7 +549,7 @@ func (s *Store) GetWorkspaceMember(ctx context.Context, params types.GetWorkspac
 	return ToDomainWorkspaceMember(wm)
 }
 
-// CreateWorkspaceMember 将成员添加到工作区。
+// CreateWorkspaceMember adds a member to a workspace.
 func (s *Store) CreateWorkspaceMember(ctx context.Context, params types.CreateWorkspaceMemberParams) (types.WorkspaceMember, error) {
 	dbParams, err := FromDomainCreateWorkspaceMemberParams(params)
 	if err != nil {
@@ -562,15 +562,15 @@ func (s *Store) CreateWorkspaceMember(ctx context.Context, params types.CreateWo
 	return ToDomainWorkspaceMember(member)
 }
 
-// GetWorkspaceMemberRole 查询工作区成员的角色。
+// GetWorkspaceMemberRole queries the role of a workspace member.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 查询参数，包含工作区 ID 和成员 ID
+// Parameters:
+//   - ctx: request context
+//   - params: query parameters, including workspace ID and member ID
 //
-// 返回：
-//   - string: 成员角色（owner/admin/member/viewer）
-//   - error: 查询失败时返回错误
+// Returns:
+//   - string: the member role (owner/admin/member/viewer)
+//   - error: error if the query fails
 func (s *Store) GetWorkspaceMemberRole(ctx context.Context, params types.GetWorkspaceMemberRoleParams) (string, error) {
 	dbParams, err := FromDomainGetWorkspaceMemberRoleParams(params)
 	if err != nil {

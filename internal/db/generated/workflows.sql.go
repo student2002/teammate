@@ -96,7 +96,7 @@ type CreateWorkflowTemplateParams struct {
 	LastTriggeredAt sql.NullTime        `db:"last_triggered_at" json:"last_triggered_at"`
 }
 
-// 工作流模板查询
+// Workflow template queries
 func (q *Queries) CreateWorkflowTemplate(ctx context.Context, arg CreateWorkflowTemplateParams) (WorkflowTemplate, error) {
 	row := q.db.QueryRowContext(ctx, createWorkflowTemplate,
 		arg.WorkspaceID,

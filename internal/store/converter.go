@@ -1,24 +1,24 @@
-// converter.go 实现 sqlc 生成类型（db 包）与 domain 类型（types 包）之间的双向转换。
+// converter.go implements bidirectional conversion between sqlc-generated types (db package) and domain types (types package).
 //
-// 本文件是四层架构中 Store 层的"类型隔离边界"：
-//   - Store 的公共方法签名只暴露 types.* domain 类型
-//   - Store 内部继续使用 sqlc 生成的 db.* 类型与底层查询交互
-//   - 本转换层在 Store 方法体首尾做 db.* ↔ types.* 的转换
+// This file is the "type isolation boundary" of the Store layer in the four-layer architecture:
+//   - Store's public method signatures only expose types.* domain types
+//   - Store internally continues to use sqlc-generated db.* types to interact with underlying queries
+//   - This conversion layer converts between db.* ↔ types.* at the start and end of Store method bodies
 //
-// 字段映射规则（domain 风格，不依赖 database/sql）：
+// Field mapping rules (domain style, does not depend on database/sql):
 //   - uuid.UUID → string（.String() / uuid.Parse）
-//   - uuid.NullUUID → *string（nil 表示 NULL）
+//   - uuid.NullUUID → *string (nil means NULL)
 //   - []uuid.UUID → []string
 //   - sql.NullString → *string
 //   - sql.NullTime → *time.Time
 //   - sql.NullInt32 → *int32
-//   - pqtype.NullRawMessage → json.RawMessage（nil 表示 NULL）
-//   - pqtype.Inet → string（原始 CIDR/IP）
-//   - 枚举类型（TaskStatus 等 string 别名）→ string，零成本透传
+//   - pqtype.NullRawMessage → json.RawMessage (nil means NULL)
+//   - pqtype.Inet → string (raw CIDR/IP)
+//   - Enum types (string aliases like TaskStatus) → string, zero-cost pass-through
 //
-// 错误约定：
-//   - 所有 toDomainXxx 和 FromDomainXxxParams 都返回 error（uuid.Parse 可能失败）
-//   - 错误用 fmt.Errorf 包装，不裸返回
+// Error conventions:
+//   - All toDomainXxx and FromDomainXxxParams return error (uuid.Parse may fail)
+//   - Errors are wrapped with fmt.Errorf, never returned bare
 package store
 
 import (
@@ -36,13 +36,13 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// 基础转换辅助函数
+// Basic conversion helper functions
 // ---------------------------------------------------------------------------
 
-// uuidToString 将 uuid.UUID 转换为 string。
+// uuidToString converts a uuid.UUID to a string.
 func uuidToString(u uuid.UUID) string { return u.String() }
 
-// stringToUUID 将 string 转换为 uuid.UUID，解析失败时返回错误。
+// stringToUUID converts a string to a uuid.UUID, returning an error on parse failure.
 func stringToUUID(s string) (uuid.UUID, error) {
 	u, err := uuid.Parse(s)
 	if err != nil {
@@ -51,7 +51,7 @@ func stringToUUID(s string) (uuid.UUID, error) {
 	return u, nil
 }
 
-// nullUUIDToString 将 uuid.NullUUID 转换为 *string，nil 表示 NULL。
+// nullUUIDToString converts a uuid.NullUUID to a *string; nil means NULL.
 func nullUUIDToString(nu uuid.NullUUID) *string {
 	if !nu.Valid {
 		return nil
@@ -60,8 +60,8 @@ func nullUUIDToString(nu uuid.NullUUID) *string {
 	return &s
 }
 
-// stringToNullUUID 将 *string 转换为 uuid.NullUUID，nil 表示 NULL。
-// 解析失败时返回零值 NullUUID（Valid=false）。
+// stringToNullUUID converts a *string to a uuid.NullUUID; nil means NULL.
+// Returns a zero-value NullUUID (Valid=false) on parse failure.
 func stringToNullUUID(s *string) uuid.NullUUID {
 	if s == nil {
 		return uuid.NullUUID{}
@@ -73,7 +73,7 @@ func stringToNullUUID(s *string) uuid.NullUUID {
 	return uuid.NullUUID{UUID: u, Valid: true}
 }
 
-// nullUUIDToStringRequired 与 nullUUIDToString 相同，保留以备语义区分。
+// nullUUIDToStringRequired is identical to nullUUIDToString; kept for semantic distinction.
 func nullUUIDToStringRequired(nu uuid.NullUUID) (string, error) {
 	if !nu.Valid {
 		return "", fmt.Errorf("null uuid where required expected")
@@ -81,7 +81,7 @@ func nullUUIDToStringRequired(nu uuid.NullUUID) (string, error) {
 	return nu.UUID.String(), nil
 }
 
-// uuidSliceToStringSlice 将 []uuid.UUID 转换为 []string。
+// uuidSliceToStringSlice converts a []uuid.UUID to a []string.
 func uuidSliceToStringSlice(us []uuid.UUID) []string {
 	out := make([]string, 0, len(us))
 	for _, u := range us {
@@ -90,7 +90,7 @@ func uuidSliceToStringSlice(us []uuid.UUID) []string {
 	return out
 }
 
-// stringSliceToUUIDSlice 将 []string 转换为 []uuid.UUID，解析失败时返回错误。
+// stringSliceToUUIDSlice converts a []string to a []uuid.UUID, returning an error on parse failure.
 func stringSliceToUUIDSlice(ss []string) ([]uuid.UUID, error) {
 	out := make([]uuid.UUID, 0, len(ss))
 	for _, s := range ss {
@@ -103,7 +103,7 @@ func stringSliceToUUIDSlice(ss []string) ([]uuid.UUID, error) {
 	return out, nil
 }
 
-// nullTimeToPtr 将 sql.NullTime 转换为 *time.Time，nil 表示 NULL。
+// nullTimeToPtr converts a sql.NullTime to a *time.Time; nil means NULL.
 func nullTimeToPtr(nt sql.NullTime) *time.Time {
 	if !nt.Valid {
 		return nil
@@ -112,7 +112,7 @@ func nullTimeToPtr(nt sql.NullTime) *time.Time {
 	return &t
 }
 
-// ptrToNullTime 将 *time.Time 转换为 sql.NullTime，nil 表示 NULL。
+// ptrToNullTime converts a *time.Time to a sql.NullTime; nil means NULL.
 func ptrToNullTime(t *time.Time) sql.NullTime {
 	if t == nil {
 		return sql.NullTime{}
@@ -120,7 +120,7 @@ func ptrToNullTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
-// nullStringToPtr 将 sql.NullString 转换为 *string，nil 表示 NULL。
+// nullStringToPtr converts a sql.NullString to a *string; nil means NULL.
 func nullStringToPtr(ns sql.NullString) *string {
 	if !ns.Valid {
 		return nil
@@ -129,8 +129,8 @@ func nullStringToPtr(ns sql.NullString) *string {
 	return &s
 }
 
-// nullStringToValue 将 sql.NullString 转换为 string，NULL 退化为空串。
-// 用于 domain 结构体里 Type 字段是 string（非 *string）的情况。
+// nullStringToValue converts a sql.NullString to a string; NULL degrades to an empty string.
+// Used when the Type field in a domain struct is a string (not a *string).
 func nullStringToValue(ns sql.NullString) string {
 	if !ns.Valid {
 		return ""
@@ -138,7 +138,7 @@ func nullStringToValue(ns sql.NullString) string {
 	return ns.String
 }
 
-// ptrToNullString 将 *string 转换为 sql.NullString，nil 表示 NULL。
+// ptrToNullString converts a *string to a sql.NullString; nil means NULL.
 func ptrToNullString(s *string) sql.NullString {
 	if s == nil {
 		return sql.NullString{}
@@ -146,7 +146,7 @@ func ptrToNullString(s *string) sql.NullString {
 	return sql.NullString{String: *s, Valid: true}
 }
 
-// nullInt32ToPtr 将 sql.NullInt32 转换为 *int32，nil 表示 NULL。
+// nullInt32ToPtr converts a sql.NullInt32 to a *int32; nil means NULL.
 func nullInt32ToPtr(ni sql.NullInt32) *int32 {
 	if !ni.Valid {
 		return nil
@@ -155,7 +155,7 @@ func nullInt32ToPtr(ni sql.NullInt32) *int32 {
 	return &v
 }
 
-// ptrToNullInt32 将 *int32 转换为 sql.NullInt32，nil 表示 NULL。
+// ptrToNullInt32 converts a *int32 to a sql.NullInt32; nil means NULL.
 func ptrToNullInt32(i *int32) sql.NullInt32 {
 	if i == nil {
 		return sql.NullInt32{}
@@ -163,7 +163,7 @@ func ptrToNullInt32(i *int32) sql.NullInt32 {
 	return sql.NullInt32{Int32: *i, Valid: true}
 }
 
-// nullRawToRaw 将 pqtype.NullRawMessage 转换为 json.RawMessage，nil 表示 NULL。
+// nullRawToRaw converts a pqtype.NullRawMessage to a json.RawMessage; nil means NULL.
 func nullRawToRaw(nrm pqtype.NullRawMessage) json.RawMessage {
 	if !nrm.Valid {
 		return nil
@@ -171,9 +171,9 @@ func nullRawToRaw(nrm pqtype.NullRawMessage) json.RawMessage {
 	return nrm.RawMessage
 }
 
-// rawToNullRaw 将 json.RawMessage 转换为 pqtype.NullRawMessage，nil 或空表示 NULL。
-// 重要：空 json.RawMessage("") 必须返回 Valid:false，否则 pgx 会把空 []byte 当 binary
-// 发送给 jsonb 字段，触发 PG 报错 "invalid input syntax for type json"。
+// rawToNullRaw converts a json.RawMessage to a pqtype.NullRawMessage; nil or empty means NULL.
+// Important: an empty json.RawMessage("") must return Valid:false, otherwise pgx will send the
+// empty []byte as binary to the jsonb column, triggering a PG error "invalid input syntax for type json".
 func rawToNullRaw(rm json.RawMessage) pqtype.NullRawMessage {
 	if len(rm) == 0 {
 		return pqtype.NullRawMessage{}
@@ -181,12 +181,12 @@ func rawToNullRaw(rm json.RawMessage) pqtype.NullRawMessage {
 	return pqtype.NullRawMessage{RawMessage: rm, Valid: true}
 }
 
-// inetToString 将 pqtype.Inet 转换为 string（原始 CIDR/IP）。
+// inetToString converts a pqtype.Inet to a string (raw CIDR/IP).
 func inetToString(inet pqtype.Inet) string {
 	return inet.IPNet.String()
 }
 
-// stringToInet 将 string 转换为 pqtype.Inet，解析失败时返回零值。
+// stringToInet converts a string to a pqtype.Inet, returning a zero value on parse failure.
 func stringToInet(s string) pqtype.Inet {
 	if s == "" {
 		return pqtype.Inet{}
@@ -204,10 +204,10 @@ func stringToInet(s string) pqtype.Inet {
 }
 
 // ===========================================================================
-// Task 领域
+// Task domain
 // ===========================================================================
 
-// ToDomainTask 将 db.Task 转换为 types.Task。
+// ToDomainTask converts db.Task to types.Task.
 func ToDomainTask(t db.Task) (types.Task, error) {
 	return types.Task{
 		ID:           t.ID,
@@ -231,7 +231,7 @@ func ToDomainTask(t db.Task) (types.Task, error) {
 	}, nil
 }
 
-// toDomainTaskSlice 将 []db.Task 转换为 []types.Task。
+// toDomainTaskSlice converts []db.Task to []types.Task.
 func ToDomainTaskSlice(ts []db.Task) ([]types.Task, error) {
 	out := make([]types.Task, 0, len(ts))
 	for _, t := range ts {
@@ -244,7 +244,7 @@ func ToDomainTaskSlice(ts []db.Task) ([]types.Task, error) {
 	return out, nil
 }
 
-// FromDomainCreateTaskParams 将 types.CreateTaskParams 转换为 db.CreateTaskParams。
+// FromDomainCreateTaskParams converts types.CreateTaskParams to db.CreateTaskParams.
 func FromDomainCreateTaskParams(p types.CreateTaskParams) (db.CreateTaskParams, error) {
 	projectUUID, err := stringToUUID(p.ProjectID)
 	if err != nil {
@@ -271,7 +271,7 @@ func FromDomainCreateTaskParams(p types.CreateTaskParams) (db.CreateTaskParams, 
 	}, nil
 }
 
-// FromDomainUpdateTaskParams 将 types.UpdateTaskParams 转换为 db.UpdateTaskParams。
+// FromDomainUpdateTaskParams converts types.UpdateTaskParams to db.UpdateTaskParams.
 func FromDomainUpdateTaskParams(p types.UpdateTaskParams) (db.UpdateTaskParams, error) {
 	return db.UpdateTaskParams{
 		ID:          p.ID,
@@ -285,7 +285,7 @@ func FromDomainUpdateTaskParams(p types.UpdateTaskParams) (db.UpdateTaskParams, 
 	}, nil
 }
 
-// FromDomainUpdateTaskStatusParams 将 types.UpdateTaskStatusParams 转换为 db.UpdateTaskStatusParams。
+// FromDomainUpdateTaskStatusParams converts types.UpdateTaskStatusParams to db.UpdateTaskStatusParams.
 func FromDomainUpdateTaskStatusParams(p types.UpdateTaskStatusParams) (db.UpdateTaskStatusParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -294,7 +294,7 @@ func FromDomainUpdateTaskStatusParams(p types.UpdateTaskStatusParams) (db.Update
 	return db.UpdateTaskStatusParams{ID: int32(id.ID()), Status: db.TaskStatus(p.Status)}, nil
 }
 
-// FromDomainUpdateTaskGitBranchParams 将 types.UpdateTaskGitBranchParams 转换为 db.UpdateTaskGitBranchParams。
+// FromDomainUpdateTaskGitBranchParams converts types.UpdateTaskGitBranchParams to db.UpdateTaskGitBranchParams.
 func FromDomainUpdateTaskGitBranchParams(p types.UpdateTaskGitBranchParams) (db.UpdateTaskGitBranchParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -306,10 +306,10 @@ func FromDomainUpdateTaskGitBranchParams(p types.UpdateTaskGitBranchParams) (db.
 // ===========================================================================
 
 // ===========================================================================
-// TaskNode 领域
+// TaskNode domain
 // ===========================================================================
 
-// ToDomainTaskNode 将 db.TaskNode 转换为 types.TaskNode。
+// ToDomainTaskNode converts db.TaskNode to types.TaskNode.
 func ToDomainTaskNode(n db.TaskNode) (types.TaskNode, error) {
 	return types.TaskNode{
 		ID:                   n.ID.String(),
@@ -339,7 +339,7 @@ func ToDomainTaskNode(n db.TaskNode) (types.TaskNode, error) {
 	}, nil
 }
 
-// toDomainTaskNodeSlice 将 []db.TaskNode 转换为 []types.TaskNode。
+// toDomainTaskNodeSlice converts []db.TaskNode to []types.TaskNode.
 func ToDomainTaskNodeSlice(ns []db.TaskNode) ([]types.TaskNode, error) {
 	out := make([]types.TaskNode, 0, len(ns))
 	for _, n := range ns {
@@ -352,7 +352,7 @@ func ToDomainTaskNodeSlice(ns []db.TaskNode) ([]types.TaskNode, error) {
 	return out, nil
 }
 
-// FromDomainCreateTaskNodeParams 将 types.CreateTaskNodeParams 转换为 db.CreateTaskNodeParams。
+// FromDomainCreateTaskNodeParams converts types.CreateTaskNodeParams to db.CreateTaskNodeParams.
 func FromDomainCreateTaskNodeParams(p types.CreateTaskNodeParams) (db.CreateTaskNodeParams, error) {
 	assigneeID := stringToNullUUID(p.AssigneeID)
 	reserved := stringToNullUUID(p.ReservedForAgentID)
@@ -378,7 +378,7 @@ func FromDomainCreateTaskNodeParams(p types.CreateTaskNodeParams) (db.CreateTask
 	}, nil
 }
 
-// FromDomainClaimTaskNodeParams 将 types.ClaimTaskNodeParams 转换为 db.ClaimTaskNodeParams。
+// FromDomainClaimTaskNodeParams converts types.ClaimTaskNodeParams to db.ClaimTaskNodeParams.
 func FromDomainClaimTaskNodeParams(p types.ClaimTaskNodeParams) (db.ClaimTaskNodeParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -391,7 +391,7 @@ func FromDomainClaimTaskNodeParams(p types.ClaimTaskNodeParams) (db.ClaimTaskNod
 	}, nil
 }
 
-// FromDomainClaimTaskNodeByHumanParams 将 types.ClaimTaskNodeByHumanParams 转换为 db.ClaimTaskNodeByHumanParams。
+// FromDomainClaimTaskNodeByHumanParams converts types.ClaimTaskNodeByHumanParams to db.ClaimTaskNodeByHumanParams.
 func FromDomainClaimTaskNodeByHumanParams(p types.ClaimTaskNodeByHumanParams) (db.ClaimTaskNodeByHumanParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -404,7 +404,7 @@ func FromDomainClaimTaskNodeByHumanParams(p types.ClaimTaskNodeByHumanParams) (d
 	}, nil
 }
 
-// FromDomainReclaimTaskNodeParams 将 types.ReclaimTaskNodeParams 转换为 db.ReclaimTaskNodeParams。
+// FromDomainReclaimTaskNodeParams converts types.ReclaimTaskNodeParams to db.ReclaimTaskNodeParams.
 func FromDomainReclaimTaskNodeParams(p types.ReclaimTaskNodeParams) (db.ReclaimTaskNodeParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -413,7 +413,7 @@ func FromDomainReclaimTaskNodeParams(p types.ReclaimTaskNodeParams) (db.ReclaimT
 	return db.ReclaimTaskNodeParams{ID: id, Version: p.Version}, nil
 }
 
-// FromDomainResetRejectCountParams 将 types.ResetRejectCountParams 转换为 db.ResetRejectCountParams。
+// FromDomainResetRejectCountParams converts types.ResetRejectCountParams to db.ResetRejectCountParams.
 func FromDomainResetRejectCountParams(p types.ResetRejectCountParams) (db.ResetRejectCountParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -422,7 +422,7 @@ func FromDomainResetRejectCountParams(p types.ResetRejectCountParams) (db.ResetR
 	return db.ResetRejectCountParams{ID: id}, nil
 }
 
-// FromDomainUpdateNodeSummaryParams 将 types.UpdateNodeSummaryParams 转换为 db.UpdateNodeSummaryParams。
+// FromDomainUpdateNodeSummaryParams converts types.UpdateNodeSummaryParams to db.UpdateNodeSummaryParams.
 func FromDomainUpdateNodeSummaryParams(p types.UpdateNodeSummaryParams) (db.UpdateNodeSummaryParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -431,7 +431,7 @@ func FromDomainUpdateNodeSummaryParams(p types.UpdateNodeSummaryParams) (db.Upda
 	return db.UpdateNodeSummaryParams{ID: id, Summary: p.Summary}, nil
 }
 
-// FromDomainUpdateTaskNodeStatusParams 将 types.UpdateTaskNodeStatusParams 转换为 db.UpdateTaskNodeStatusParams。
+// FromDomainUpdateTaskNodeStatusParams converts types.UpdateTaskNodeStatusParams to db.UpdateTaskNodeStatusParams.
 func FromDomainUpdateTaskNodeStatusParams(p types.UpdateTaskNodeStatusParams) (db.UpdateTaskNodeStatusParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -452,7 +452,7 @@ func FromDomainUpdateTaskNodeStatusParams(p types.UpdateTaskNodeStatusParams) (d
 	}, nil
 }
 
-// FromDomainGetNextTaskNodeParams 将 types.GetNextTaskNodeParams 转换为 db.GetNextTaskNodeParams。
+// FromDomainGetNextTaskNodeParams converts types.GetNextTaskNodeParams to db.GetNextTaskNodeParams.
 func FromDomainGetNextTaskNodeParams(p types.GetNextTaskNodeParams) (db.GetNextTaskNodeParams, error) {
 	id, err := stringToUUID(p.NodeID)
 	if err != nil {
@@ -461,7 +461,7 @@ func FromDomainGetNextTaskNodeParams(p types.GetNextTaskNodeParams) (db.GetNextT
 	return db.GetNextTaskNodeParams{TaskID: p.TaskID, ID: id}, nil
 }
 
-// FromDomainGetPrevTaskNodeParams 将 types.GetPrevTaskNodeParams 转换为 db.GetPrevTaskNodeParams。
+// FromDomainGetPrevTaskNodeParams converts types.GetPrevTaskNodeParams to db.GetPrevTaskNodeParams.
 func FromDomainGetPrevTaskNodeParams(p types.GetPrevTaskNodeParams) (db.GetPrevTaskNodeParams, error) {
 	id, err := stringToUUID(p.NodeID)
 	if err != nil {
@@ -470,7 +470,7 @@ func FromDomainGetPrevTaskNodeParams(p types.GetPrevTaskNodeParams) (db.GetPrevT
 	return db.GetPrevTaskNodeParams{TaskID: p.TaskID, ID: id}, nil
 }
 
-// FromDomainGetPrevStandardNodeAssigneeParams 将 types.GetPrevStandardNodeAssigneeParams 转换为 db.GetPrevStandardNodeAssigneeParams。
+// FromDomainGetPrevStandardNodeAssigneeParams converts types.GetPrevStandardNodeAssigneeParams to db.GetPrevStandardNodeAssigneeParams.
 func FromDomainGetPrevStandardNodeAssigneeParams(p types.GetPrevStandardNodeAssigneeParams) (db.GetPrevStandardNodeAssigneeParams, error) {
 	id, err := stringToUUID(p.NodeID)
 	if err != nil {
@@ -480,10 +480,10 @@ func FromDomainGetPrevStandardNodeAssigneeParams(p types.GetPrevStandardNodeAssi
 }
 
 // ===========================================================================
-// Comment 领域
+// Comment domain
 // ===========================================================================
 
-// ToDomainComment 将 db.Comment 转换为 types.Comment。
+// ToDomainComment converts db.Comment to types.Comment.
 func ToDomainComment(c db.Comment) (types.Comment, error) {
 	return types.Comment{
 		ID:           c.ID.String(),
@@ -503,7 +503,7 @@ func ToDomainComment(c db.Comment) (types.Comment, error) {
 	}, nil
 }
 
-// toDomainCommentSlice 将 []db.Comment 转换为 []types.Comment。
+// toDomainCommentSlice converts []db.Comment to []types.Comment.
 func ToDomainCommentSlice(cs []db.Comment) ([]types.Comment, error) {
 	out := make([]types.Comment, 0, len(cs))
 	for _, c := range cs {
@@ -516,7 +516,7 @@ func ToDomainCommentSlice(cs []db.Comment) ([]types.Comment, error) {
 	return out, nil
 }
 
-// FromDomainCreateCommentParams 将 types.CreateCommentParams 转换为 db.CreateCommentParams。
+// FromDomainCreateCommentParams converts types.CreateCommentParams to db.CreateCommentParams.
 func FromDomainCreateCommentParams(p types.CreateCommentParams) (db.CreateCommentParams, error) {
 	nodeID := stringToNullUUID(p.NodeID)
 	sourceNodeID := stringToNullUUID(p.SourceNodeID)
@@ -543,7 +543,7 @@ func FromDomainCreateCommentParams(p types.CreateCommentParams) (db.CreateCommen
 	}, nil
 }
 
-// FromDomainUpdateCommentParams 将 types.UpdateCommentParams 转换为 db.UpdateCommentParams。
+// FromDomainUpdateCommentParams converts types.UpdateCommentParams to db.UpdateCommentParams.
 func FromDomainUpdateCommentParams(p types.UpdateCommentParams) (db.UpdateCommentParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -553,10 +553,10 @@ func FromDomainUpdateCommentParams(p types.UpdateCommentParams) (db.UpdateCommen
 }
 
 // ===========================================================================
-// NodeTransition 领域
+// NodeTransition domain
 // ===========================================================================
 
-// ToDomainNodeTransition 将 db.NodeTransition 转换为 types.NodeTransition。
+// ToDomainNodeTransition converts db.NodeTransition to types.NodeTransition.
 func ToDomainNodeTransition(nt db.NodeTransition) (types.NodeTransition, error) {
 	return types.NodeTransition{
 		ID:           nt.ID.String(),
@@ -572,7 +572,7 @@ func ToDomainNodeTransition(nt db.NodeTransition) (types.NodeTransition, error) 
 	}, nil
 }
 
-// toDomainNodeTransitionSlice 将 []db.NodeTransition 转换为 []types.NodeTransition。
+// toDomainNodeTransitionSlice converts []db.NodeTransition to []types.NodeTransition.
 func ToDomainNodeTransitionSlice(nts []db.NodeTransition) ([]types.NodeTransition, error) {
 	out := make([]types.NodeTransition, 0, len(nts))
 	for _, nt := range nts {
@@ -585,7 +585,7 @@ func ToDomainNodeTransitionSlice(nts []db.NodeTransition) ([]types.NodeTransitio
 	return out, nil
 }
 
-// FromDomainCreateNodeTransitionParams 将 types.CreateNodeTransitionParams 转换为 db.CreateNodeTransitionParams。
+// FromDomainCreateNodeTransitionParams converts types.CreateNodeTransitionParams to db.CreateNodeTransitionParams.
 func FromDomainCreateNodeTransitionParams(p types.CreateNodeTransitionParams) (db.CreateNodeTransitionParams, error) {
 	taskNodeID, err := stringToUUID(p.TaskNodeID)
 	if err != nil {
@@ -606,10 +606,10 @@ func FromDomainCreateNodeTransitionParams(p types.CreateNodeTransitionParams) (d
 }
 
 // ===========================================================================
-// TokenUsage 领域
+// TokenUsage domain
 // ===========================================================================
 
-// toDomainTokenUsage 将 db.TokenUsage 转换为 types.TokenUsage。
+// toDomainTokenUsage converts db.TokenUsage to types.TokenUsage.
 func ToDomainTokenUsage(tu db.TokenUsage) (types.TokenUsage, error) {
 	return types.TokenUsage{
 		ID:           tu.ID,
@@ -623,7 +623,7 @@ func ToDomainTokenUsage(tu db.TokenUsage) (types.TokenUsage, error) {
 	}, nil
 }
 
-// FromDomainCreateTokenUsageParams 将 types.CreateTokenUsageParams 转换为 db.CreateTokenUsageParams。
+// FromDomainCreateTokenUsageParams converts types.CreateTokenUsageParams to db.CreateTokenUsageParams.
 func FromDomainCreateTokenUsageParams(p types.CreateTokenUsageParams) (db.CreateTokenUsageParams, error) {
 	taskNodeID, err := stringToUUID(p.TaskNodeID)
 	if err != nil {
@@ -644,10 +644,10 @@ func FromDomainCreateTokenUsageParams(p types.CreateTokenUsageParams) (db.Create
 }
 
 // ===========================================================================
-// Agent 领域
+// Agent domain
 // ===========================================================================
 
-// ToDomainAgent 将 db.Agent 转换为 types.Agent。
+// ToDomainAgent converts db.Agent to types.Agent.
 func ToDomainAgent(a db.Agent) (types.Agent, error) {
 	return types.Agent{
 		ID:            a.ID.String(),
@@ -666,7 +666,7 @@ func ToDomainAgent(a db.Agent) (types.Agent, error) {
 	}, nil
 }
 
-// toDomainAgentSlice 将 []db.Agent 转换为 []types.Agent。
+// toDomainAgentSlice converts []db.Agent to []types.Agent.
 func ToDomainAgentSlice(as []db.Agent) ([]types.Agent, error) {
 	out := make([]types.Agent, 0, len(as))
 	for _, a := range as {
@@ -679,7 +679,7 @@ func ToDomainAgentSlice(as []db.Agent) ([]types.Agent, error) {
 	return out, nil
 }
 
-// FromDomainCreateAgentParams 将 types.CreateAgentParams 转换为 db.CreateAgentParams。
+// FromDomainCreateAgentParams converts types.CreateAgentParams to db.CreateAgentParams.
 func FromDomainCreateAgentParams(p types.CreateAgentParams) (db.CreateAgentParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -699,7 +699,7 @@ func FromDomainCreateAgentParams(p types.CreateAgentParams) (db.CreateAgentParam
 	}, nil
 }
 
-// FromDomainUpdateAgentParams 将 types.UpdateAgentParams 转换为 db.UpdateAgentParams。
+// FromDomainUpdateAgentParams converts types.UpdateAgentParams to db.UpdateAgentParams.
 func FromDomainUpdateAgentParams(p types.UpdateAgentParams) (db.UpdateAgentParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -717,7 +717,7 @@ func FromDomainUpdateAgentParams(p types.UpdateAgentParams) (db.UpdateAgentParam
 	}, nil
 }
 
-// FromDomainUpdateAgentStatusParams 将 types.UpdateAgentStatusParams 转换为 db.UpdateAgentStatusParams。
+// FromDomainUpdateAgentStatusParams converts types.UpdateAgentStatusParams to db.UpdateAgentStatusParams.
 func FromDomainUpdateAgentStatusParams(p types.UpdateAgentStatusParams) (db.UpdateAgentStatusParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -727,10 +727,10 @@ func FromDomainUpdateAgentStatusParams(p types.UpdateAgentStatusParams) (db.Upda
 }
 
 // ===========================================================================
-// Workspace 领域
+// Workspace domain
 // ===========================================================================
 
-// ToDomainWorkspace 将 db.Workspace 转换为 types.Workspace。
+// ToDomainWorkspace converts db.Workspace to types.Workspace.
 func ToDomainWorkspace(w db.Workspace) (types.Workspace, error) {
 	return types.Workspace{
 		ID:          w.ID.String(),
@@ -743,7 +743,7 @@ func ToDomainWorkspace(w db.Workspace) (types.Workspace, error) {
 	}, nil
 }
 
-// toDomainWorkspaceSlice 将 []db.Workspace 转换为 []types.Workspace。
+// toDomainWorkspaceSlice converts []db.Workspace to []types.Workspace.
 func ToDomainWorkspaceSlice(ws []db.Workspace) ([]types.Workspace, error) {
 	out := make([]types.Workspace, 0, len(ws))
 	for _, w := range ws {
@@ -756,7 +756,7 @@ func ToDomainWorkspaceSlice(ws []db.Workspace) ([]types.Workspace, error) {
 	return out, nil
 }
 
-// FromDomainCreateWorkspaceParams 将 types.CreateWorkspaceParams 转换为 db.CreateWorkspaceParams。
+// FromDomainCreateWorkspaceParams converts types.CreateWorkspaceParams to db.CreateWorkspaceParams.
 func FromDomainCreateWorkspaceParams(p types.CreateWorkspaceParams) (db.CreateWorkspaceParams, error) {
 	return db.CreateWorkspaceParams{
 		Name:        p.Name,
@@ -766,7 +766,7 @@ func FromDomainCreateWorkspaceParams(p types.CreateWorkspaceParams) (db.CreateWo
 	}, nil
 }
 
-// FromDomainUpdateWorkspaceParams 将 types.UpdateWorkspaceParams 转换为 db.UpdateWorkspaceParams。
+// FromDomainUpdateWorkspaceParams converts types.UpdateWorkspaceParams to db.UpdateWorkspaceParams.
 func FromDomainUpdateWorkspaceParams(p types.UpdateWorkspaceParams) (db.UpdateWorkspaceParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -780,10 +780,10 @@ func FromDomainUpdateWorkspaceParams(p types.UpdateWorkspaceParams) (db.UpdateWo
 }
 
 // ===========================================================================
-// Project 领域
+// Project domain
 // ===========================================================================
 
-// ToDomainProject 将 db.Project 转换为 types.Project。
+// ToDomainProject converts db.Project to types.Project.
 func ToDomainProject(p db.Project) (types.Project, error) {
 	return types.Project{
 		ID:                p.ID.String(),
@@ -800,7 +800,7 @@ func ToDomainProject(p db.Project) (types.Project, error) {
 	}, nil
 }
 
-// toDomainProjectSlice 将 []db.Project 转换为 []types.Project。
+// toDomainProjectSlice converts []db.Project to []types.Project.
 func ToDomainProjectSlice(ps []db.Project) ([]types.Project, error) {
 	out := make([]types.Project, 0, len(ps))
 	for _, p := range ps {
@@ -813,7 +813,7 @@ func ToDomainProjectSlice(ps []db.Project) ([]types.Project, error) {
 	return out, nil
 }
 
-// FromDomainCreateProjectParams 将 types.CreateProjectParams 转换为 db.CreateProjectParams。
+// FromDomainCreateProjectParams converts types.CreateProjectParams to db.CreateProjectParams.
 func FromDomainCreateProjectParams(p types.CreateProjectParams) (db.CreateProjectParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -830,7 +830,7 @@ func FromDomainCreateProjectParams(p types.CreateProjectParams) (db.CreateProjec
 	}, nil
 }
 
-// FromDomainUpdateProjectParams 将 types.UpdateProjectParams 转换为 db.UpdateProjectParams。
+// FromDomainUpdateProjectParams converts types.UpdateProjectParams to db.UpdateProjectParams.
 func FromDomainUpdateProjectParams(p types.UpdateProjectParams) (db.UpdateProjectParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -850,23 +850,23 @@ func FromDomainUpdateProjectParams(p types.UpdateProjectParams) (db.UpdateProjec
 }
 
 // ===========================================================================
-// ListTasks / Subtask / CountTasksByStatus 参数补充（Task 3 试点所需）
+// ListTasks / Subtask / CountTasksByStatus param supplement (required for Task 3 pilot)
 // ===========================================================================
 
-// FromDomainListTasksParams 将 types.ListTasksParams 转换为 db.ListTasksParams。
+// FromDomainListTasksParams converts types.ListTasksParams to db.ListTasksParams.
 //
-// 注意：types.ListTasksParams 当前仅有 WorkspaceID 字段，db 版本需要 ProjectID 与 Status。
-// 调用方需在 service 层补齐 Status；此处按零值透传。
+// Note: types.ListTasksParams currently only has a WorkspaceID field; the db version needs ProjectID and Status.
+// The caller must fill in Status at the service layer; here it is passed through as a zero value.
 func FromDomainListTasksParams(p types.ListTasksParams) (db.ListTasksParams, error) {
 	pid, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
 		return db.ListTasksParams{}, fmt.Errorf("convert project id: %w", err)
 	}
-	// types.ListTasksParams 无 status 字段，传 NULL（SQL 的 @status IS NULL 分支匹配所有状态）
+	// types.ListTasksParams has no status field; pass NULL (the SQL @status IS NULL branch matches all statuses)
 	return db.ListTasksParams{ProjectID: pid, Status: db.NullTaskStatus{}}, nil
 }
 
-// FromDomainListTasksPaginatedParams 将 types.ListTasksPaginatedParams 转换为 db.ListTasksPaginatedParams。
+// FromDomainListTasksPaginatedParams converts types.ListTasksPaginatedParams to db.ListTasksPaginatedParams.
 func FromDomainListTasksPaginatedParams(p types.ListTasksPaginatedParams) (db.ListTasksPaginatedParams, error) {
 	pid, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -874,7 +874,7 @@ func FromDomainListTasksPaginatedParams(p types.ListTasksPaginatedParams) (db.Li
 	}
 	var statusVal db.NullTaskStatus
 	if len(p.Statuses) > 0 {
-		// 仅取首个状态过滤；多状态过滤需在 types 包扩展参数语义
+		// Only takes the first status filter; multi-status filtering requires extending the param semantics in the types package
 		statusVal = db.NullTaskStatus{TaskStatus: db.TaskStatus(p.Statuses[0]), Valid: true}
 	}
 	return db.ListTasksPaginatedParams{
@@ -886,7 +886,7 @@ func FromDomainListTasksPaginatedParams(p types.ListTasksPaginatedParams) (db.Li
 	}, nil
 }
 
-// FromDomainCreateSubtaskParams 将 types.CreateSubtaskParams 转换为 db.CreateSubtaskParams。
+// FromDomainCreateSubtaskParams converts types.CreateSubtaskParams to db.CreateSubtaskParams.
 func FromDomainCreateSubtaskParams(p types.CreateSubtaskParams) (db.CreateSubtaskParams, error) {
 	pid, err := stringToUUID(p.ProjectID)
 	if err != nil {
@@ -914,7 +914,7 @@ func FromDomainCreateSubtaskParams(p types.CreateSubtaskParams) (db.CreateSubtas
 	}, nil
 }
 
-// FromDomainCountTasksByStatusParams 将 types.CountTasksByStatusParams 转换为 db.CountTasksByStatusParams。
+// FromDomainCountTasksByStatusParams converts types.CountTasksByStatusParams to db.CountTasksByStatusParams.
 func FromDomainCountTasksByStatusParams(p types.CountTasksByStatusParams) (db.CountTasksByStatusParams, error) {
 	pid, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -932,10 +932,10 @@ func FromDomainCountTasksByStatusParams(p types.CountTasksByStatusParams) (db.Co
 }
 
 // ===========================================================================
-// Invitation 领域
+// Invitation domain
 // ===========================================================================
 
-// ToDomainInvitation 将 db.Invitation 转换为 types.Invitation。
+// ToDomainInvitation converts db.Invitation to types.Invitation.
 func ToDomainInvitation(i db.Invitation) (types.Invitation, error) {
 	return types.Invitation{
 		ID:          i.ID.String(),
@@ -950,7 +950,7 @@ func ToDomainInvitation(i db.Invitation) (types.Invitation, error) {
 	}, nil
 }
 
-// ToDomainInvitationSlice 将 []db.Invitation 转换为 []types.Invitation。
+// ToDomainInvitationSlice converts []db.Invitation to []types.Invitation.
 func ToDomainInvitationSlice(is []db.Invitation) ([]types.Invitation, error) {
 	out := make([]types.Invitation, 0, len(is))
 	for _, i := range is {
@@ -963,11 +963,11 @@ func ToDomainInvitationSlice(is []db.Invitation) ([]types.Invitation, error) {
 	return out, nil
 }
 
-// FromDomainCreateInvitationParams 将 domain 风格的参数组装为 db.CreateInvitationParams。
+// FromDomainCreateInvitationParams assembles domain-style params into db.CreateInvitationParams.
 //
-// 注意：types.CreateInvitationParams 与 db.CreateInvitationParams 字段一一对应但类型不同，
-// 本函数接受 uuid.UUID/uuid.NullUUID 等 db 风格入参，与 store/invitation.go 的方法签名保持一致。
-// 未来若 store/invitation.go 统一改为 string，本函数入参可同步改为 string。
+// Note: types.CreateInvitationParams and db.CreateInvitationParams fields are one-to-one but of different types;
+// this function accepts db-style input params like uuid.UUID/uuid.NullUUID, keeping the method signature consistent with store/invitation.go.
+// In the future, if store/invitation.go uniformly changes to string, this function's input params can be changed accordingly to string.
 func fromDomainCreateInvitationParams(workspaceID uuid.UUID, email, role, tokenHash string, invitedBy uuid.UUID, expiresAt time.Time) db.CreateInvitationParams {
 	return db.CreateInvitationParams{
 		WorkspaceID: workspaceID,
@@ -980,10 +980,10 @@ func fromDomainCreateInvitationParams(workspaceID uuid.UUID, email, role, tokenH
 }
 
 // ===========================================================================
-// AgentPermission 领域
+// AgentPermission domain
 // ===========================================================================
 
-// ToDomainAgentPermission 将 db.AgentPermission 转换为 types.AgentPermission。
+// ToDomainAgentPermission converts db.AgentPermission to types.AgentPermission.
 func ToDomainAgentPermission(p db.AgentPermission) (types.AgentPermission, error) {
 	return types.AgentPermission{
 		ID:           p.ID.String(),
@@ -996,7 +996,7 @@ func ToDomainAgentPermission(p db.AgentPermission) (types.AgentPermission, error
 	}, nil
 }
 
-// ToDomainAgentPermissionSlice 将 []db.AgentPermission 转换为 []types.AgentPermission。
+// ToDomainAgentPermissionSlice converts []db.AgentPermission to []types.AgentPermission.
 func ToDomainAgentPermissionSlice(ps []db.AgentPermission) ([]types.AgentPermission, error) {
 	out := make([]types.AgentPermission, 0, len(ps))
 	for _, p := range ps {
@@ -1010,13 +1010,13 @@ func ToDomainAgentPermissionSlice(ps []db.AgentPermission) ([]types.AgentPermiss
 }
 
 // ===========================================================================
-// Memory 领域
+// Memory domain
 // ===========================================================================
 
-// ToDomainMemory 将 db.Memory 转换为 types.Memory。
+// ToDomainMemory converts db.Memory to types.Memory.
 //
-// 注意：db.Memory 有 Embedding interface{} 字段，types.Memory 故意不含 Embedding
-// （app 代码从不读 embedding，只写入）。本函数丢弃 Embedding。
+// Note: db.Memory has an Embedding interface{} field; types.Memory intentionally does not contain Embedding
+// (app code never reads embedding, only writes it). This function discards Embedding.
 func ToDomainMemory(m db.Memory) (types.Memory, error) {
 	return types.Memory{
 		ID:           m.ID.String(),
@@ -1035,7 +1035,7 @@ func ToDomainMemory(m db.Memory) (types.Memory, error) {
 	}, nil
 }
 
-// ToDomainMemorySlice 将 []db.Memory 转换为 []types.Memory。
+// ToDomainMemorySlice converts []db.Memory to []types.Memory.
 func ToDomainMemorySlice(ms []db.Memory) ([]types.Memory, error) {
 	out := make([]types.Memory, 0, len(ms))
 	for _, m := range ms {
@@ -1048,7 +1048,7 @@ func ToDomainMemorySlice(ms []db.Memory) ([]types.Memory, error) {
 	return out, nil
 }
 
-// FromDomainCreateMemoryParams 将 types.CreateMemoryParams 转换为 db.CreateMemoryParams。
+// FromDomainCreateMemoryParams converts types.CreateMemoryParams to db.CreateMemoryParams.
 func FromDomainCreateMemoryParams(p types.CreateMemoryParams) (db.CreateMemoryParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1067,10 +1067,10 @@ func FromDomainCreateMemoryParams(p types.CreateMemoryParams) (db.CreateMemoryPa
 	}, nil
 }
 
-// FromDomainListMemoriesByWorkspaceParams 将 domain 风格的参数组装为 db.ListMemoriesByWorkspaceParams。
+// FromDomainListMemoriesByWorkspaceParams assembles domain-style params into db.ListMemoriesByWorkspaceParams.
 //
-// 注意：db 版本用 sql.NullBool/sql.NullFloat64/sql.NullInt32 包装 nullable 过滤条件，
-// domain 飝格用 *bool/*float32/*int32 指针。本函数做指针→NullXX 的转换。
+// Note: the db version wraps nullable filter conditions with sql.NullBool/sql.NullFloat64/sql.NullInt32,
+// the domain version uses *bool/*float32/*int32 pointers. This function does the pointer -> NullXX conversion.
 func FromDomainListMemoriesByWorkspaceParams(workspaceID uuid.UUID, verified *bool, minConfidence *float32, limit *int32) db.ListMemoriesByWorkspaceParams {
 	var verifiedVal sql.NullBool
 	if verified != nil {
@@ -1093,10 +1093,10 @@ func FromDomainListMemoriesByWorkspaceParams(workspaceID uuid.UUID, verified *bo
 }
 
 // ===========================================================================
-// Search 领域
+// Search domain
 // ===========================================================================
 
-// FromDomainSearchTasksByWorkspaceParams 将 domain 风格的参数组装为 db.SearchTasksByWorkspaceParams。
+// FromDomainSearchTasksByWorkspaceParams assembles domain-style params into db.SearchTasksByWorkspaceParams.
 func FromDomainSearchTasksByWorkspaceParams(workspaceID uuid.UUID, pattern string) db.SearchTasksByWorkspaceParams {
 	return db.SearchTasksByWorkspaceParams{
 		WorkspaceID: workspaceID,
@@ -1104,7 +1104,7 @@ func FromDomainSearchTasksByWorkspaceParams(workspaceID uuid.UUID, pattern strin
 	}
 }
 
-// FromDomainSearchTasksByWorkspaceAndProjectParams 将 domain 风格的参数组装为 db.SearchTasksByWorkspaceAndProjectParams。
+// FromDomainSearchTasksByWorkspaceAndProjectParams assembles domain-style params into db.SearchTasksByWorkspaceAndProjectParams.
 func FromDomainSearchTasksByWorkspaceAndProjectParams(workspaceID, projectID uuid.UUID, pattern string) db.SearchTasksByWorkspaceAndProjectParams {
 	return db.SearchTasksByWorkspaceAndProjectParams{
 		WorkspaceID: workspaceID,
@@ -1113,7 +1113,7 @@ func FromDomainSearchTasksByWorkspaceAndProjectParams(workspaceID, projectID uui
 	}
 }
 
-// FromDomainSearchAgentsByWorkspaceParams 将 domain 风格的参数组装为 db.SearchAgentsByWorkspaceParams。
+// FromDomainSearchAgentsByWorkspaceParams assembles domain-style params into db.SearchAgentsByWorkspaceParams.
 func FromDomainSearchAgentsByWorkspaceParams(workspaceID uuid.UUID, pattern string) db.SearchAgentsByWorkspaceParams {
 	return db.SearchAgentsByWorkspaceParams{
 		WorkspaceID: workspaceID,
@@ -1122,10 +1122,10 @@ func FromDomainSearchAgentsByWorkspaceParams(workspaceID uuid.UUID, pattern stri
 }
 
 // ===========================================================================
-// Community 领域
+// Community domain
 // ===========================================================================
 
-// ToDomainCommunityWorkflow 将 db.CommunityWorkflow 转换为 types.CommunityWorkflow。
+// ToDomainCommunityWorkflow converts db.CommunityWorkflow to types.CommunityWorkflow.
 func ToDomainCommunityWorkflow(c db.CommunityWorkflow) (types.CommunityWorkflow, error) {
 	return types.CommunityWorkflow{
 		ID:                           c.ID.String(),
@@ -1144,7 +1144,7 @@ func ToDomainCommunityWorkflow(c db.CommunityWorkflow) (types.CommunityWorkflow,
 	}, nil
 }
 
-// ToDomainCommunityWorkflowSlice 将 []db.CommunityWorkflow 转换为 []types.CommunityWorkflow。
+// ToDomainCommunityWorkflowSlice converts []db.CommunityWorkflow to []types.CommunityWorkflow.
 func ToDomainCommunityWorkflowSlice(cs []db.CommunityWorkflow) ([]types.CommunityWorkflow, error) {
 	out := make([]types.CommunityWorkflow, 0, len(cs))
 	for _, c := range cs {
@@ -1157,7 +1157,7 @@ func ToDomainCommunityWorkflowSlice(cs []db.CommunityWorkflow) ([]types.Communit
 	return out, nil
 }
 
-// FromDomainCreateCommunityWorkflowParams 将 types.CreateCommunityWorkflowParams 转换为 db.CreateCommunityWorkflowParams。
+// FromDomainCreateCommunityWorkflowParams converts types.CreateCommunityWorkflowParams to db.CreateCommunityWorkflowParams.
 func FromDomainCreateCommunityWorkflowParams(p types.CreateCommunityWorkflowParams) (db.CreateCommunityWorkflowParams, error) {
 	return db.CreateCommunityWorkflowParams{
 		Name:                         p.Name,
@@ -1172,10 +1172,10 @@ func FromDomainCreateCommunityWorkflowParams(p types.CreateCommunityWorkflowPara
 }
 
 // ===========================================================================
-// Workflow 领域
+// Workflow domain
 // ===========================================================================
 
-// ToDomainWorkflowTemplate 将 db.WorkflowTemplate 转换为 types.WorkflowTemplate。
+// ToDomainWorkflowTemplate converts db.WorkflowTemplate to types.WorkflowTemplate.
 func ToDomainWorkflowTemplate(t db.WorkflowTemplate) (types.WorkflowTemplate, error) {
 	return types.WorkflowTemplate{
 		ID:              t.ID.String(),
@@ -1193,7 +1193,7 @@ func ToDomainWorkflowTemplate(t db.WorkflowTemplate) (types.WorkflowTemplate, er
 	}, nil
 }
 
-// ToDomainWorkflowTemplateSlice 将 []db.WorkflowTemplate 转换为 []types.WorkflowTemplate。
+// ToDomainWorkflowTemplateSlice converts []db.WorkflowTemplate to []types.WorkflowTemplate.
 func ToDomainWorkflowTemplateSlice(ts []db.WorkflowTemplate) ([]types.WorkflowTemplate, error) {
 	out := make([]types.WorkflowTemplate, 0, len(ts))
 	for _, t := range ts {
@@ -1206,7 +1206,7 @@ func ToDomainWorkflowTemplateSlice(ts []db.WorkflowTemplate) ([]types.WorkflowTe
 	return out, nil
 }
 
-// ToDomainWorkflowTemplateNode 将 db.WorkflowTemplateNode 转换为 types.WorkflowTemplateNode。
+// ToDomainWorkflowTemplateNode converts db.WorkflowTemplateNode to types.WorkflowTemplateNode.
 func ToDomainWorkflowTemplateNode(n db.WorkflowTemplateNode) (types.WorkflowTemplateNode, error) {
 	return types.WorkflowTemplateNode{
 		ID:              n.ID.String(),
@@ -1227,7 +1227,7 @@ func ToDomainWorkflowTemplateNode(n db.WorkflowTemplateNode) (types.WorkflowTemp
 	}, nil
 }
 
-// ToDomainWorkflowTemplateNodeSlice 将 []db.WorkflowTemplateNode 转换为 []types.WorkflowTemplateNode。
+// ToDomainWorkflowTemplateNodeSlice converts []db.WorkflowTemplateNode to []types.WorkflowTemplateNode.
 func ToDomainWorkflowTemplateNodeSlice(ns []db.WorkflowTemplateNode) ([]types.WorkflowTemplateNode, error) {
 	out := make([]types.WorkflowTemplateNode, 0, len(ns))
 	for _, n := range ns {
@@ -1240,7 +1240,7 @@ func ToDomainWorkflowTemplateNodeSlice(ns []db.WorkflowTemplateNode) ([]types.Wo
 	return out, nil
 }
 
-// FromDomainCreateWorkflowTemplateParams 将 types.CreateWorkflowTemplateParams 转换为 db.CreateWorkflowTemplateParams。
+// FromDomainCreateWorkflowTemplateParams converts types.CreateWorkflowTemplateParams to db.CreateWorkflowTemplateParams.
 func FromDomainCreateWorkflowTemplateParams(p types.CreateWorkflowTemplateParams) (db.CreateWorkflowTemplateParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1259,9 +1259,9 @@ func FromDomainCreateWorkflowTemplateParams(p types.CreateWorkflowTemplateParams
 	}, nil
 }
 
-// FromDomainUpdateWorkflowTemplateParams 将 types.UpdateWorkflowTemplateParams 转换为 db.UpdateWorkflowTemplateParams。
+// FromDomainUpdateWorkflowTemplateParams converts types.UpdateWorkflowTemplateParams to db.UpdateWorkflowTemplateParams.
 //
-// 注意：db 版本 ID 是 uuid.UUID，domain 版本 ID 是 string。
+// Note: the db version ID is uuid.UUID; the domain version ID is string.
 func FromDomainUpdateWorkflowTemplateParams(p types.UpdateWorkflowTemplateParams) (db.UpdateWorkflowTemplateParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -1278,9 +1278,9 @@ func FromDomainUpdateWorkflowTemplateParams(p types.UpdateWorkflowTemplateParams
 	}, nil
 }
 
-// FromDomainCreateTemplateNodeParams 将 types.CreateTemplateNodeParams 转换为 db.CreateTemplateNodeParams。
+// FromDomainCreateTemplateNodeParams converts types.CreateTemplateNodeParams to db.CreateTemplateNodeParams.
 func FromDomainCreateTemplateNodeParams(p types.CreateTemplateNodeParams) (db.CreateTemplateNodeParams, error) {
-	// TemplateID 允许为空：CreateWorkflowTemplate 会在事务内先建 template 再回填 nodes 的 TemplateID
+	// TemplateID allows empty: CreateWorkflowTemplate first creates the template within the transaction, then backfills the nodes' TemplateID
 	var tplID uuid.UUID
 	if p.TemplateID != "" {
 		var err error
@@ -1316,7 +1316,7 @@ func FromDomainCreateTemplateNodeParams(p types.CreateTemplateNodeParams) (db.Cr
 	}, nil
 }
 
-// FromDomainCreateTemplateNodeParamsSlice 批量转换 []types.CreateTemplateNodeParams 为 []db.CreateTemplateNodeParams。
+// FromDomainCreateTemplateNodeParamsSlice batch converts []types.CreateTemplateNodeParams to []db.CreateTemplateNodeParams.
 func FromDomainCreateTemplateNodeParamsSlice(ps []types.CreateTemplateNodeParams) ([]db.CreateTemplateNodeParams, error) {
 	out := make([]db.CreateTemplateNodeParams, 0, len(ps))
 	for _, p := range ps {
@@ -1330,10 +1330,10 @@ func FromDomainCreateTemplateNodeParamsSlice(ps []types.CreateTemplateNodeParams
 }
 
 // ===========================================================================
-// Skill 领域
+// Skill domain
 // ===========================================================================
 
-// ToDomainSkill 将 db.Skill 转换为 types.Skill。
+// ToDomainSkill converts db.Skill to types.Skill.
 func ToDomainSkill(s db.Skill) (types.Skill, error) {
 	return types.Skill{
 		ID:             s.ID.String(),
@@ -1346,7 +1346,7 @@ func ToDomainSkill(s db.Skill) (types.Skill, error) {
 	}, nil
 }
 
-// ToDomainSkillSlice 将 []db.Skill 转换为 []types.Skill。
+// ToDomainSkillSlice converts []db.Skill to []types.Skill.
 func ToDomainSkillSlice(ss []db.Skill) ([]types.Skill, error) {
 	out := make([]types.Skill, 0, len(ss))
 	for _, s := range ss {
@@ -1359,7 +1359,7 @@ func ToDomainSkillSlice(ss []db.Skill) ([]types.Skill, error) {
 	return out, nil
 }
 
-// FromDomainCreateSkillParams 将 types.CreateSkillParams 转换为 db.CreateSkillParams。
+// FromDomainCreateSkillParams converts types.CreateSkillParams to db.CreateSkillParams.
 func FromDomainCreateSkillParams(p types.CreateSkillParams) (db.CreateSkillParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1374,7 +1374,7 @@ func FromDomainCreateSkillParams(p types.CreateSkillParams) (db.CreateSkillParam
 	}, nil
 }
 
-// FromDomainUpdateSkillParams 将 types.UpdateSkillParams 转换为 db.UpdateSkillParams。
+// FromDomainUpdateSkillParams converts types.UpdateSkillParams to db.UpdateSkillParams.
 func FromDomainUpdateSkillParams(p types.UpdateSkillParams) (db.UpdateSkillParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -1390,10 +1390,10 @@ func FromDomainUpdateSkillParams(p types.UpdateSkillParams) (db.UpdateSkillParam
 }
 
 // ===========================================================================
-// Runtime 领域
+// Runtime domain
 // ===========================================================================
 
-// ToDomainRuntime 将 db.Runtime 转换为 types.Runtime。
+// ToDomainRuntime converts db.Runtime to types.Runtime.
 func ToDomainRuntime(r db.Runtime) (types.Runtime, error) {
 	return types.Runtime{
 		ID:               r.ID.String(),
@@ -1411,7 +1411,7 @@ func ToDomainRuntime(r db.Runtime) (types.Runtime, error) {
 	}, nil
 }
 
-// ToDomainRuntimeSlice 将 []db.Runtime 转换为 []types.Runtime。
+// ToDomainRuntimeSlice converts []db.Runtime to []types.Runtime.
 func ToDomainRuntimeSlice(rs []db.Runtime) ([]types.Runtime, error) {
 	out := make([]types.Runtime, 0, len(rs))
 	for _, r := range rs {
@@ -1424,7 +1424,7 @@ func ToDomainRuntimeSlice(rs []db.Runtime) ([]types.Runtime, error) {
 	return out, nil
 }
 
-// FromDomainCreateRuntimeParams 将 types.CreateRuntimeParams 转换为 db.CreateRuntimeParams。
+// FromDomainCreateRuntimeParams converts types.CreateRuntimeParams to db.CreateRuntimeParams.
 func FromDomainCreateRuntimeParams(p types.CreateRuntimeParams) (db.CreateRuntimeParams, error) {
 	agentID, err := stringToUUID(p.AgentID)
 	if err != nil {
@@ -1443,13 +1443,13 @@ func FromDomainCreateRuntimeParams(p types.CreateRuntimeParams) (db.CreateRuntim
 }
 
 // ===========================================================================
-// Member 领域（Auth 子域）
+// Member domain (Auth subdomain)
 // ===========================================================================
 
-// ToDomainMember 将 db.Member 转换为 types.Member。
+// ToDomainMember converts db.Member to types.Member.
 //
-// 注意：db.Member 含 PasswordHash 敏感字段，types.Member 故意不含（domain 层不暴露密码哈希）。
-// 本函数丢弃 PasswordHash 字段。
+// Note: db.Member contains the PasswordHash sensitive field; types.Member intentionally does not (the domain layer does not expose the password hash).
+// This function discards the PasswordHash field.
 func ToDomainMember(m db.Member) (types.Member, error) {
 	return types.Member{
 		ID:        m.ID.String(),
@@ -1461,10 +1461,10 @@ func ToDomainMember(m db.Member) (types.Member, error) {
 }
 
 // ===========================================================================
-// GitCredential 领域（Auth 子域）
+// GitCredential domain (Auth subdomain)
 // ===========================================================================
 
-// ToDomainGitCredential 将 db.GitCredential 转换为 types.GitCredential。
+// ToDomainGitCredential converts db.GitCredential to types.GitCredential.
 func ToDomainGitCredential(g db.GitCredential) (types.GitCredential, error) {
 	return types.GitCredential{
 		ID:           g.ID.String(),
@@ -1478,7 +1478,7 @@ func ToDomainGitCredential(g db.GitCredential) (types.GitCredential, error) {
 	}, nil
 }
 
-// ToDomainGitCredentialSlice 将 []db.GitCredential 转换为 []types.GitCredential。
+// ToDomainGitCredentialSlice converts []db.GitCredential to []types.GitCredential.
 func ToDomainGitCredentialSlice(gs []db.GitCredential) ([]types.GitCredential, error) {
 	out := make([]types.GitCredential, 0, len(gs))
 	for _, g := range gs {
@@ -1492,10 +1492,10 @@ func ToDomainGitCredentialSlice(gs []db.GitCredential) ([]types.GitCredential, e
 }
 
 // ===========================================================================
-// Agent 领域转换器（AgentSkill、AgentMcpServer、McpServer、Rows）
+// Agent domain converters (AgentSkill, AgentMcpServer, McpServer, Rows)
 // ===========================================================================
 
-// FromDomainAddAgentSkillParams 将 types.AddAgentSkillParams 转换为 db.AddAgentSkillParams。
+// FromDomainAddAgentSkillParams converts types.AddAgentSkillParams to db.AddAgentSkillParams.
 func FromDomainAddAgentSkillParams(p types.AddAgentSkillParams) (db.AddAgentSkillParams, error) {
 	agentID, err := stringToUUID(p.AgentID)
 	if err != nil {
@@ -1512,7 +1512,7 @@ func FromDomainAddAgentSkillParams(p types.AddAgentSkillParams) (db.AddAgentSkil
 	}, nil
 }
 
-// FromDomainRemoveAgentSkillParams 将 types.RemoveAgentSkillParams 转换为 db.RemoveAgentSkillParams。
+// FromDomainRemoveAgentSkillParams converts types.RemoveAgentSkillParams to db.RemoveAgentSkillParams.
 func FromDomainRemoveAgentSkillParams(p types.RemoveAgentSkillParams) (db.RemoveAgentSkillParams, error) {
 	agentID, err := stringToUUID(p.AgentID)
 	if err != nil {
@@ -1528,7 +1528,7 @@ func FromDomainRemoveAgentSkillParams(p types.RemoveAgentSkillParams) (db.Remove
 	}, nil
 }
 
-// FromDomainAddAgentMcpServerParams 将 types.AddAgentMcpServerParams 转换为 db.AddAgentMcpServerParams。
+// FromDomainAddAgentMcpServerParams converts types.AddAgentMcpServerParams to db.AddAgentMcpServerParams.
 func FromDomainAddAgentMcpServerParams(p types.AddAgentMcpServerParams) (db.AddAgentMcpServerParams, error) {
 	agentID, err := stringToUUID(p.AgentID)
 	if err != nil {
@@ -1545,7 +1545,7 @@ func FromDomainAddAgentMcpServerParams(p types.AddAgentMcpServerParams) (db.AddA
 	}, nil
 }
 
-// FromDomainRemoveAgentMcpServerParams 将 types.RemoveAgentMcpServerParams 转换为 db.RemoveAgentMcpServerParams。
+// FromDomainRemoveAgentMcpServerParams converts types.RemoveAgentMcpServerParams to db.RemoveAgentMcpServerParams.
 func FromDomainRemoveAgentMcpServerParams(p types.RemoveAgentMcpServerParams) (db.RemoveAgentMcpServerParams, error) {
 	agentID, err := stringToUUID(p.AgentID)
 	if err != nil {
@@ -1561,7 +1561,7 @@ func FromDomainRemoveAgentMcpServerParams(p types.RemoveAgentMcpServerParams) (d
 	}, nil
 }
 
-// ToDomainAgentSkill 将 db.AgentSkill 转换为 types.AgentSkill。
+// ToDomainAgentSkill converts db.AgentSkill to types.AgentSkill.
 func ToDomainAgentSkill(as db.AgentSkill) (types.AgentSkill, error) {
 	return types.AgentSkill{
 		AgentID:   as.AgentID.String(),
@@ -1571,7 +1571,7 @@ func ToDomainAgentSkill(as db.AgentSkill) (types.AgentSkill, error) {
 	}, nil
 }
 
-// ToDomainAgentMcpServer 将 db.AgentMcpServer 转换为 types.AgentMcpServer。
+// ToDomainAgentMcpServer converts db.AgentMcpServer to types.AgentMcpServer.
 func ToDomainAgentMcpServer(ams db.AgentMcpServer) (types.AgentMcpServer, error) {
 	return types.AgentMcpServer{
 		AgentID:     ams.AgentID.String(),
@@ -1581,7 +1581,7 @@ func ToDomainAgentMcpServer(ams db.AgentMcpServer) (types.AgentMcpServer, error)
 	}, nil
 }
 
-// ToDomainListAgentSkillsRow 将 db.ListAgentSkillsRow 转换为 types.ListAgentSkillsRow。
+// ToDomainListAgentSkillsRow converts db.ListAgentSkillsRow to types.ListAgentSkillsRow.
 func ToDomainListAgentSkillsRow(r db.ListAgentSkillsRow) (types.ListAgentSkillsRow, error) {
 	return types.ListAgentSkillsRow{
 		ID:             r.ID.String(),
@@ -1596,7 +1596,7 @@ func ToDomainListAgentSkillsRow(r db.ListAgentSkillsRow) (types.ListAgentSkillsR
 	}, nil
 }
 
-// ToDomainListAgentSkillsRowSlice 将 []db.ListAgentSkillsRow 转换为 []types.ListAgentSkillsRow。
+// ToDomainListAgentSkillsRowSlice converts []db.ListAgentSkillsRow to []types.ListAgentSkillsRow.
 func ToDomainListAgentSkillsRowSlice(rs []db.ListAgentSkillsRow) ([]types.ListAgentSkillsRow, error) {
 	out := make([]types.ListAgentSkillsRow, 0, len(rs))
 	for _, r := range rs {
@@ -1609,7 +1609,7 @@ func ToDomainListAgentSkillsRowSlice(rs []db.ListAgentSkillsRow) ([]types.ListAg
 	return out, nil
 }
 
-// ToDomainListAgentMcpServersRow 将 db.ListAgentMcpServersRow 转换为 types.ListAgentMcpServersRow。
+// ToDomainListAgentMcpServersRow converts db.ListAgentMcpServersRow to types.ListAgentMcpServersRow.
 func ToDomainListAgentMcpServersRow(r db.ListAgentMcpServersRow) (types.ListAgentMcpServersRow, error) {
 	return types.ListAgentMcpServersRow{
 		ID:          r.ID.String(),
@@ -1626,7 +1626,7 @@ func ToDomainListAgentMcpServersRow(r db.ListAgentMcpServersRow) (types.ListAgen
 	}, nil
 }
 
-// ToDomainListAgentMcpServersRowSlice 将 []db.ListAgentMcpServersRow 转换为 []types.ListAgentMcpServersRow。
+// ToDomainListAgentMcpServersRowSlice converts []db.ListAgentMcpServersRow to []types.ListAgentMcpServersRow.
 func ToDomainListAgentMcpServersRowSlice(rs []db.ListAgentMcpServersRow) ([]types.ListAgentMcpServersRow, error) {
 	out := make([]types.ListAgentMcpServersRow, 0, len(rs))
 	for _, r := range rs {
@@ -1639,10 +1639,10 @@ func ToDomainListAgentMcpServersRowSlice(rs []db.ListAgentMcpServersRow) ([]type
 	return out, nil
 }
 
-// FromDomainUpdateMcpServerParams 将 types.UpdateMcpServerParams 转换为 db.UpdateMcpServerParams。
+// FromDomainUpdateMcpServerParams converts types.UpdateMcpServerParams to db.UpdateMcpServerParams.
 //
-// 注意：types.UpdateMcpServerParams 不含 Status/Url 字段（更新仅改 name/url/type/auth/env），
-// 这里仅映射存在的字段。如需更新 status 请用 UpdateMcpServerStatus。
+// Note: types.UpdateMcpServerParams does not contain Status/Url fields (the update only changes name/url/type/auth/env);
+// here only the existing fields are mapped. To update status, use UpdateMcpServerStatus.
 func FromDomainUpdateMcpServerParams(p types.UpdateMcpServerParams) (db.UpdateMcpServerParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -1655,11 +1655,11 @@ func FromDomainUpdateMcpServerParams(p types.UpdateMcpServerParams) (db.UpdateMc
 		Type:     ptrToNullString(p.Type),
 		AuthType: db.McpAuthType(p.AuthType),
 		EnvVars:  rawToNullRaw(p.EnvVars),
-		Status:   "active", // 默认状态，更新时不改 status
+		Status:   "active", // default status; status is not changed on update
 	}, nil
 }
 
-// ToDomainMcpServer 将 db.McpServer 转换为 types.McpServer。
+// ToDomainMcpServer converts db.McpServer to types.McpServer.
 func ToDomainMcpServer(ms db.McpServer) (types.McpServer, error) {
 	return types.McpServer{
 		ID:          ms.ID.String(),
@@ -1674,7 +1674,7 @@ func ToDomainMcpServer(ms db.McpServer) (types.McpServer, error) {
 	}, nil
 }
 
-// fromDomainCreateMcpServerParams 将 types.CreateMcpServerParams 转换为 db.CreateMcpServerParams。
+// fromDomainCreateMcpServerParams converts types.CreateMcpServerParams to db.CreateMcpServerParams.
 func fromDomainCreateMcpServerParams(p types.CreateMcpServerParams) (db.CreateMcpServerParams, error) {
 	wsUUID, err := uuid.Parse(p.WorkspaceID)
 	if err != nil {
@@ -1690,7 +1690,7 @@ func fromDomainCreateMcpServerParams(p types.CreateMcpServerParams) (db.CreateMc
 	}, nil
 }
 
-// fromDomainUpdateMcpServerStatusParams 将 types.UpdateMcpServerStatusParams 转换为 db.UpdateMcpServerStatusParams。
+// fromDomainUpdateMcpServerStatusParams converts types.UpdateMcpServerStatusParams to db.UpdateMcpServerStatusParams.
 func fromDomainUpdateMcpServerStatusParams(p types.UpdateMcpServerStatusParams) (db.UpdateMcpServerStatusParams, error) {
 	id, err := uuid.Parse(p.ID)
 	if err != nil {
@@ -1702,7 +1702,7 @@ func fromDomainUpdateMcpServerStatusParams(p types.UpdateMcpServerStatusParams) 
 	}, nil
 }
 
-// ToDomainGetInProgressNodesByAgentRow 将 db.GetInProgressNodesByAgentRow 转换为 types.GetInProgressNodesByAgentRow。
+// ToDomainGetInProgressNodesByAgentRow converts db.GetInProgressNodesByAgentRow to types.GetInProgressNodesByAgentRow.
 func ToDomainGetInProgressNodesByAgentRow(r db.GetInProgressNodesByAgentRow) (types.GetInProgressNodesByAgentRow, error) {
 	return types.GetInProgressNodesByAgentRow{
 		ID:                   r.ID.String(),
@@ -1734,7 +1734,7 @@ func ToDomainGetInProgressNodesByAgentRow(r db.GetInProgressNodesByAgentRow) (ty
 }
 
 
-// ToDomainGetInProgressNodesByAgentRowSlice 将 []db.GetInProgressNodesByAgentRow 转换为 []types.GetInProgressNodesByAgentRow。
+// ToDomainGetInProgressNodesByAgentRowSlice converts []db.GetInProgressNodesByAgentRow to []types.GetInProgressNodesByAgentRow.
 func ToDomainGetInProgressNodesByAgentRowSlice(rs []db.GetInProgressNodesByAgentRow) ([]types.GetInProgressNodesByAgentRow, error) {
 	out := make([]types.GetInProgressNodesByAgentRow, 0, len(rs))
 	for _, r := range rs {
@@ -1747,7 +1747,7 @@ func ToDomainGetInProgressNodesByAgentRowSlice(rs []db.GetInProgressNodesByAgent
 	return out, nil
 }
 
-// ToDomainProjectMember 将 db.ProjectMember 转换为 types.ProjectMember。
+// ToDomainProjectMember converts db.ProjectMember to types.ProjectMember.
 func ToDomainProjectMember(m db.ProjectMember) (types.ProjectMember, error) {
 	return types.ProjectMember{
 		ID:         m.ID.String(),
@@ -1760,7 +1760,7 @@ func ToDomainProjectMember(m db.ProjectMember) (types.ProjectMember, error) {
 	}, nil
 }
 
-// ToDomainProjectMemberSlice 将 []db.ProjectMember 转换为 []types.ProjectMember。
+// ToDomainProjectMemberSlice converts []db.ProjectMember to []types.ProjectMember.
 func ToDomainProjectMemberSlice(ms []db.ProjectMember) ([]types.ProjectMember, error) {
 	out := make([]types.ProjectMember, 0, len(ms))
 	for _, m := range ms {
@@ -1773,7 +1773,7 @@ func ToDomainProjectMemberSlice(ms []db.ProjectMember) ([]types.ProjectMember, e
 	return out, nil
 }
 
-// FromDomainCreateProjectMemberParams 将 types.CreateProjectMemberParams 转换为 db.CreateProjectMemberParams。
+// FromDomainCreateProjectMemberParams converts types.CreateProjectMemberParams to db.CreateProjectMemberParams.
 func FromDomainCreateProjectMemberParams(p types.CreateProjectMemberParams) (db.CreateProjectMemberParams, error) {
 	pid, err := stringToUUID(p.ProjectID)
 	if err != nil {
@@ -1788,7 +1788,7 @@ func FromDomainCreateProjectMemberParams(p types.CreateProjectMemberParams) (db.
 	}, nil
 }
 
-// ToDomainProjectReviewer 将 db.ProjectReviewer 转换为 types.ProjectReviewer。
+// ToDomainProjectReviewer converts db.ProjectReviewer to types.ProjectReviewer.
 func ToDomainProjectReviewer(r db.ProjectReviewer) (types.ProjectReviewer, error) {
 	return types.ProjectReviewer{
 		ID:         r.ID.String(),
@@ -1800,7 +1800,7 @@ func ToDomainProjectReviewer(r db.ProjectReviewer) (types.ProjectReviewer, error
 	}, nil
 }
 
-// ToDomainProjectReviewerSlice 将 []db.ProjectReviewer 转换为 []types.ProjectReviewer。
+// ToDomainProjectReviewerSlice converts []db.ProjectReviewer to []types.ProjectReviewer.
 func ToDomainProjectReviewerSlice(rs []db.ProjectReviewer) ([]types.ProjectReviewer, error) {
 	out := make([]types.ProjectReviewer, 0, len(rs))
 	for _, r := range rs {
@@ -1813,7 +1813,7 @@ func ToDomainProjectReviewerSlice(rs []db.ProjectReviewer) ([]types.ProjectRevie
 	return out, nil
 }
 
-// FromDomainCreateProjectReviewerParams 将 types.CreateProjectReviewerParams 转换为 db.CreateProjectReviewerParams。
+// FromDomainCreateProjectReviewerParams converts types.CreateProjectReviewerParams to db.CreateProjectReviewerParams.
 func FromDomainCreateProjectReviewerParams(p types.CreateProjectReviewerParams) (db.CreateProjectReviewerParams, error) {
 	pid, err := stringToUUID(p.ProjectID)
 	if err != nil {
@@ -1827,7 +1827,7 @@ func FromDomainCreateProjectReviewerParams(p types.CreateProjectReviewerParams) 
 	}, nil
 }
 
-// FromDomainIsAgentProjectMemberParams 将 types.IsAgentProjectMemberParams 转换为 db.IsAgentProjectMemberParams。
+// FromDomainIsAgentProjectMemberParams converts types.IsAgentProjectMemberParams to db.IsAgentProjectMemberParams.
 func FromDomainIsAgentProjectMemberParams(p types.IsAgentProjectMemberParams) (db.IsAgentProjectMemberParams, error) {
 	pid, err := stringToUUID(p.ProjectID)
 	if err != nil {
@@ -1847,7 +1847,7 @@ func FromDomainIsAgentProjectMemberParams(p types.IsAgentProjectMemberParams) (d
 	}, nil
 }
 
-// FromDomainListProjectsByAgentMembershipParams 将 types.ListProjectsByAgentMembershipParams 转换为 db.ListProjectsByAgentMembershipParams。
+// FromDomainListProjectsByAgentMembershipParams converts types.ListProjectsByAgentMembershipParams to db.ListProjectsByAgentMembershipParams.
 func FromDomainListProjectsByAgentMembershipParams(p types.ListProjectsByAgentMembershipParams) (db.ListProjectsByAgentMembershipParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1860,10 +1860,10 @@ func FromDomainListProjectsByAgentMembershipParams(p types.ListProjectsByAgentMe
 }
 
 // ===========================================================================
-// Member 领域辅助（Workspace 子域）
+// Member domain helpers (Workspace subdomain)
 // ===========================================================================
 
-// ToDomainMemberSlice 将 []db.Member 转换为 []types.Member。
+// ToDomainMemberSlice converts []db.Member to []types.Member.
 func ToDomainMemberSlice(ms []db.Member) ([]types.Member, error) {
 	out := make([]types.Member, 0, len(ms))
 	for _, m := range ms {
@@ -1876,7 +1876,7 @@ func ToDomainMemberSlice(ms []db.Member) ([]types.Member, error) {
 	return out, nil
 }
 
-// FromDomainCreateMemberParams 将 types.CreateMemberParams 转换为 db.CreateMemberParams。
+// FromDomainCreateMemberParams converts types.CreateMemberParams to db.CreateMemberParams.
 func FromDomainCreateMemberParams(p types.CreateMemberParams) (db.CreateMemberParams, error) {
 	return db.CreateMemberParams{
 		Name:  p.Name,
@@ -1884,7 +1884,7 @@ func FromDomainCreateMemberParams(p types.CreateMemberParams) (db.CreateMemberPa
 	}, nil
 }
 
-// ToDomainWorkspaceMember 将 db.WorkspaceMember 转换为 types.WorkspaceMember。
+// ToDomainWorkspaceMember converts db.WorkspaceMember to types.WorkspaceMember.
 func ToDomainWorkspaceMember(wm db.WorkspaceMember) (types.WorkspaceMember, error) {
 	return types.WorkspaceMember{
 		ID:          wm.ID.String(),
@@ -1896,7 +1896,7 @@ func ToDomainWorkspaceMember(wm db.WorkspaceMember) (types.WorkspaceMember, erro
 	}, nil
 }
 
-// ToDomainWorkspaceMemberSlice 将 []db.WorkspaceMember 转换为 []types.WorkspaceMember。
+// ToDomainWorkspaceMemberSlice converts []db.WorkspaceMember to []types.WorkspaceMember.
 func ToDomainWorkspaceMemberSlice(wms []db.WorkspaceMember) ([]types.WorkspaceMember, error) {
 	out := make([]types.WorkspaceMember, 0, len(wms))
 	for _, wm := range wms {
@@ -1909,7 +1909,7 @@ func ToDomainWorkspaceMemberSlice(wms []db.WorkspaceMember) ([]types.WorkspaceMe
 	return out, nil
 }
 
-// FromDomainCreateWorkspaceMemberParams 将 types.CreateWorkspaceMemberParams 转换为 db.CreateWorkspaceMemberParams。
+// FromDomainCreateWorkspaceMemberParams converts types.CreateWorkspaceMemberParams to db.CreateWorkspaceMemberParams.
 func FromDomainCreateWorkspaceMemberParams(p types.CreateWorkspaceMemberParams) (db.CreateWorkspaceMemberParams, error) {
 	wsID, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1926,7 +1926,7 @@ func FromDomainCreateWorkspaceMemberParams(p types.CreateWorkspaceMemberParams) 
 	}, nil
 }
 
-// FromDomainUpdateMemberRoleParams 将 types.UpdateMemberRoleParams 转换为 db.UpdateMemberRoleParams。
+// FromDomainUpdateMemberRoleParams converts types.UpdateMemberRoleParams to db.UpdateMemberRoleParams.
 func FromDomainUpdateMemberRoleParams(p types.UpdateMemberRoleParams) (db.UpdateMemberRoleParams, error) {
 	wsID, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1943,7 +1943,7 @@ func FromDomainUpdateMemberRoleParams(p types.UpdateMemberRoleParams) (db.Update
 	}, nil
 }
 
-// FromDomainGetWorkspaceMemberParams 将 types.GetWorkspaceMemberParams 转换为 db.GetWorkspaceMemberParams。
+// FromDomainGetWorkspaceMemberParams converts types.GetWorkspaceMemberParams to db.GetWorkspaceMemberParams.
 func FromDomainGetWorkspaceMemberParams(p types.GetWorkspaceMemberParams) (db.GetWorkspaceMemberParams, error) {
 	wsID, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1959,7 +1959,7 @@ func FromDomainGetWorkspaceMemberParams(p types.GetWorkspaceMemberParams) (db.Ge
 	}, nil
 }
 
-// FromDomainGetWorkspaceMemberRoleParams 将 types.GetWorkspaceMemberRoleParams 转换为 db.GetWorkspaceMemberRoleParams。
+// FromDomainGetWorkspaceMemberRoleParams converts types.GetWorkspaceMemberRoleParams to db.GetWorkspaceMemberRoleParams.
 func FromDomainGetWorkspaceMemberRoleParams(p types.GetWorkspaceMemberRoleParams) (db.GetWorkspaceMemberRoleParams, error) {
 	wsID, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -1975,7 +1975,7 @@ func FromDomainGetWorkspaceMemberRoleParams(p types.GetWorkspaceMemberRoleParams
 	}, nil
 }
 
-// ToDomainListMembersByWorkspaceRow 将 db.ListMembersByWorkspaceRow 转换为 types.ListMembersByWorkspaceRow。
+// ToDomainListMembersByWorkspaceRow converts db.ListMembersByWorkspaceRow to types.ListMembersByWorkspaceRow.
 func ToDomainListMembersByWorkspaceRow(r db.ListMembersByWorkspaceRow) (types.ListMembersByWorkspaceRow, error) {
 	return types.ListMembersByWorkspaceRow{
 		ID:                r.ID.String(),
@@ -1989,7 +1989,7 @@ func ToDomainListMembersByWorkspaceRow(r db.ListMembersByWorkspaceRow) (types.Li
 	}, nil
 }
 
-// ToDomainListMembersByWorkspaceRowSlice 将 []db.ListMembersByWorkspaceRow 转换为 []types.ListMembersByWorkspaceRow。
+// ToDomainListMembersByWorkspaceRowSlice converts []db.ListMembersByWorkspaceRow to []types.ListMembersByWorkspaceRow.
 func ToDomainListMembersByWorkspaceRowSlice(rs []db.ListMembersByWorkspaceRow) ([]types.ListMembersByWorkspaceRow, error) {
 	out := make([]types.ListMembersByWorkspaceRow, 0, len(rs))
 	for _, r := range rs {
@@ -2003,10 +2003,10 @@ func ToDomainListMembersByWorkspaceRowSlice(rs []db.ListMembersByWorkspaceRow) (
 }
 
 // ===========================================================================
-// 便捷转换函数（用于 Service 层直接传参）
+// Convenience conversion functions (for direct param passing in the service layer)
 // ===========================================================================
 
-// ToDBGetWorkspaceMemberParams 从 uuid.UUID 构建 db.GetWorkspaceMemberParams。
+// ToDBGetWorkspaceMemberParams builds db.GetWorkspaceMemberParams from uuid.UUID.
 func ToDBGetWorkspaceMemberParams(workspaceID, memberID uuid.UUID) db.GetWorkspaceMemberParams {
 	return db.GetWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
@@ -2014,7 +2014,7 @@ func ToDBGetWorkspaceMemberParams(workspaceID, memberID uuid.UUID) db.GetWorkspa
 	}
 }
 
-// ToDBGetWorkspaceMemberRoleParams 从 uuid.UUID 构建 db.GetWorkspaceMemberRoleParams。
+// ToDBGetWorkspaceMemberRoleParams builds db.GetWorkspaceMemberRoleParams from uuid.UUID.
 func ToDBGetWorkspaceMemberRoleParams(workspaceID, memberID uuid.UUID) db.GetWorkspaceMemberRoleParams {
 	return db.GetWorkspaceMemberRoleParams{
 		WorkspaceID: workspaceID,
@@ -2022,7 +2022,7 @@ func ToDBGetWorkspaceMemberRoleParams(workspaceID, memberID uuid.UUID) db.GetWor
 	}
 }
 
-// FromDomainCreateMemberParamsSimple 从简单参数构建 db.CreateMemberParams。
+// FromDomainCreateMemberParamsSimple builds db.CreateMemberParams from simple params.
 func FromDomainCreateMemberParamsSimple(name, email string) db.CreateMemberParams {
 	return db.CreateMemberParams{
 		Name:  name,
@@ -2030,7 +2030,7 @@ func FromDomainCreateMemberParamsSimple(name, email string) db.CreateMemberParam
 	}
 }
 
-// FromDomainCreateWorkspaceParamsSimple 从简单参数构建 db.CreateWorkspaceParams。
+// FromDomainCreateWorkspaceParamsSimple builds db.CreateWorkspaceParams from simple params.
 func FromDomainCreateWorkspaceParamsSimple(name, description, issuePrefix string) db.CreateWorkspaceParams {
 	return db.CreateWorkspaceParams{
 		Name:        name,
@@ -2039,7 +2039,7 @@ func FromDomainCreateWorkspaceParamsSimple(name, description, issuePrefix string
 	}
 }
 
-// ToDomainExecutionSession 将 db.ExecutionSession 转换为 types.ExecutionSession。
+// ToDomainExecutionSession converts db.ExecutionSession to types.ExecutionSession.
 func ToDomainExecutionSession(s db.ExecutionSession) (types.ExecutionSession, error) {
 	taskNodeID, err := stringToUUID(s.TaskNodeID.String())
 	if err != nil {
@@ -2065,7 +2065,7 @@ func ToDomainExecutionSession(s db.ExecutionSession) (types.ExecutionSession, er
 	}, nil
 }
 
-// FromDomainCreateExecutionSessionParams 将 types.CreateExecutionSessionParams 转换为 db.CreateExecutionSessionParams。
+// FromDomainCreateExecutionSessionParams converts types.CreateExecutionSessionParams to db.CreateExecutionSessionParams.
 func FromDomainCreateExecutionSessionParams(p types.CreateExecutionSessionParams) (db.CreateExecutionSessionParams, error) {
 	taskNodeID, err := stringToUUID(p.TaskNodeID)
 	if err != nil {
@@ -2084,7 +2084,7 @@ func FromDomainCreateExecutionSessionParams(p types.CreateExecutionSessionParams
 	}, nil
 }
 
-// FromDomainGetActiveSessionByAgentAndWorkdirParams 将 types.GetActiveSessionByAgentAndWorkdirParams 转换为 db.GetActiveSessionByAgentAndWorkdirParams。
+// FromDomainGetActiveSessionByAgentAndWorkdirParams converts types.GetActiveSessionByAgentAndWorkdirParams to db.GetActiveSessionByAgentAndWorkdirParams.
 func FromDomainGetActiveSessionByAgentAndWorkdirParams(p types.GetActiveSessionByAgentAndWorkdirParams) (db.GetActiveSessionByAgentAndWorkdirParams, error) {
 	return db.GetActiveSessionByAgentAndWorkdirParams{
 		AgentID: stringToNullUUID(p.AgentID),
@@ -2092,7 +2092,7 @@ func FromDomainGetActiveSessionByAgentAndWorkdirParams(p types.GetActiveSessionB
 	}, nil
 }
 
-// FromDomainUpdateSessionClaudeIDParams 将 types.UpdateSessionClaudeIDParams 转换为 db.UpdateSessionClaudeIDParams。
+// FromDomainUpdateSessionClaudeIDParams converts types.UpdateSessionClaudeIDParams to db.UpdateSessionClaudeIDParams.
 func FromDomainUpdateSessionClaudeIDParams(p types.UpdateSessionClaudeIDParams) (db.UpdateSessionClaudeIDParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -2104,7 +2104,7 @@ func FromDomainUpdateSessionClaudeIDParams(p types.UpdateSessionClaudeIDParams) 
 	}, nil
 }
 
-// ToDomainGetTemplateStatsRow 将 db.GetTemplateStatsRow 转换为 types.GetTemplateStatsRow。
+// ToDomainGetTemplateStatsRow converts db.GetTemplateStatsRow to types.GetTemplateStatsRow.
 func ToDomainGetTemplateStatsRow(r db.GetTemplateStatsRow) types.GetTemplateStatsRow {
 	var avgCompletion float64
 	switch v := r.AvgCompletionSeconds.(type) {
@@ -2127,7 +2127,7 @@ func ToDomainGetTemplateStatsRow(r db.GetTemplateStatsRow) types.GetTemplateStat
 	}
 }
 
-// ToDomainWorkflowTriggerRun 将 db.WorkflowTriggerRun 转换为 types.WorkflowTriggerRun。
+// ToDomainWorkflowTriggerRun converts db.WorkflowTriggerRun to types.WorkflowTriggerRun.
 func ToDomainWorkflowTriggerRun(r db.WorkflowTriggerRun) (types.WorkflowTriggerRun, error) {
 	return types.WorkflowTriggerRun{
 		ID:                 r.ID.String(),
@@ -2144,7 +2144,7 @@ func ToDomainWorkflowTriggerRun(r db.WorkflowTriggerRun) (types.WorkflowTriggerR
 	}, nil
 }
 
-// FromDomainCreateWorkflowTriggerRunParams 将 domain 参数转换为 db 参数。
+// FromDomainCreateWorkflowTriggerRunParams converts domain params to db params.
 func FromDomainCreateWorkflowTriggerRunParams(p types.CreateWorkflowTriggerRunParams) (db.CreateWorkflowTriggerRunParams, error) {
 	wsID, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
@@ -2169,7 +2169,7 @@ func FromDomainCreateWorkflowTriggerRunParams(p types.CreateWorkflowTriggerRunPa
 	}, nil
 }
 
-// FromDomainMarkWorkflowTriggerRunCompletedParams 将 domain 参数转换为 db 参数。
+// FromDomainMarkWorkflowTriggerRunCompletedParams converts domain params to db params.
 func FromDomainMarkWorkflowTriggerRunCompletedParams(p types.MarkWorkflowTriggerRunCompletedParams) (db.MarkWorkflowTriggerRunCompletedParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -2181,7 +2181,7 @@ func FromDomainMarkWorkflowTriggerRunCompletedParams(p types.MarkWorkflowTrigger
 	}, nil
 }
 
-// FromDomainMarkWorkflowTriggerRunFailedParams 将 domain 参数转换为 db 参数。
+// FromDomainMarkWorkflowTriggerRunFailedParams converts domain params to db params.
 func FromDomainMarkWorkflowTriggerRunFailedParams(p types.MarkWorkflowTriggerRunFailedParams) (db.MarkWorkflowTriggerRunFailedParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
@@ -2193,7 +2193,7 @@ func FromDomainMarkWorkflowTriggerRunFailedParams(p types.MarkWorkflowTriggerRun
 	}, nil
 }
 
-// FromDomainListDueScheduledWorkflowTemplatesParams 将 domain 参数转换为 db 参数。
+// FromDomainListDueScheduledWorkflowTemplatesParams converts domain params to db params.
 func FromDomainListDueScheduledWorkflowTemplatesParams(p types.ListDueScheduledWorkflowTemplatesParams) (db.ListDueScheduledWorkflowTemplatesParams, error) {
 	return db.ListDueScheduledWorkflowTemplatesParams{
 		NextRunAt: ptrToNullTime(p.NextRunAt),
@@ -2201,7 +2201,7 @@ func FromDomainListDueScheduledWorkflowTemplatesParams(p types.ListDueScheduledW
 	}, nil
 }
 
-// FromDomainUpdateWorkflowTemplateTriggerScheduleParams 将 domain 参数转换为 db 参数。
+// FromDomainUpdateWorkflowTemplateTriggerScheduleParams converts domain params to db params.
 func FromDomainUpdateWorkflowTemplateTriggerScheduleParams(p types.UpdateWorkflowTemplateTriggerScheduleParams) (db.UpdateWorkflowTemplateTriggerScheduleParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {

@@ -1,4 +1,4 @@
-// Package response_test 包含 response 包的测试用例。
+// Package response_test contains test cases for the response package.
 package response_test
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/teammate/server/internal/server/response"
 )
 
-// TestBadRequest 验证 BadRequest 函数返回 400 状态码和正确的错误响应体。
+// TestBadRequest verifies the BadRequest function returns status 400 and the correct error response body.
 func TestBadRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	response.BadRequest(w, "invalid input")
@@ -33,7 +33,7 @@ func TestBadRequest(t *testing.T) {
 	}
 }
 
-// TestUnauthorized 验证 Unauthorized 函数返回 401 状态码和正确的错误码。
+// TestUnauthorized verifies the Unauthorized function returns status 401 and the correct error code.
 func TestUnauthorized(t *testing.T) {
 	w := httptest.NewRecorder()
 	response.Unauthorized(w, "not authenticated")
@@ -49,7 +49,7 @@ func TestUnauthorized(t *testing.T) {
 	}
 }
 
-// TestForbidden 验证 Forbidden 函数返回 403 状态码和正确的错误码。
+// TestForbidden verifies the Forbidden function returns status 403 and the correct error code.
 func TestForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	response.Forbidden(w, "access denied")
@@ -65,7 +65,7 @@ func TestForbidden(t *testing.T) {
 	}
 }
 
-// TestNotFound 验证 NotFound 函数返回 404 状态码和正确的错误码。
+// TestNotFound verifies the NotFound function returns status 404 and the correct error code.
 func TestNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	response.NotFound(w, "resource not found")
@@ -81,7 +81,7 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
-// TestInternalServerErrorProduction 验证生产环境下 InternalServerError 函数隐藏内部错误详情。
+// TestInternalServerErrorProduction verifies the InternalServerError function hides internal error details in production.
 func TestInternalServerErrorProduction(t *testing.T) {
 	os.Unsetenv("TEAMMATE_DEV")
 	w := httptest.NewRecorder()
@@ -96,13 +96,13 @@ func TestInternalServerErrorProduction(t *testing.T) {
 	if body.Error != "internal" {
 		t.Errorf("expected error code 'internal', got %q", body.Error)
 	}
-	// 生产环境下应隐藏内部错误详情
+	// In production, internal error details should be hidden
 	if body.Message != "internal" {
 		t.Errorf("in production, message should be 'internal', got %q", body.Message)
 	}
 }
 
-// TestInternalServerErrorDevMode 验证开发环境下 InternalServerError 函数暴露内部错误详情。
+// TestInternalServerErrorDevMode verifies the InternalServerError function exposes internal error details in dev mode.
 func TestInternalServerErrorDevMode(t *testing.T) {
 	os.Setenv("TEAMMATE_DEV", "true")
 	defer os.Unsetenv("TEAMMATE_DEV")
@@ -116,13 +116,13 @@ func TestInternalServerErrorDevMode(t *testing.T) {
 
 	var body response.ErrorBody
 	json.Unmarshal(w.Body.Bytes(), &body)
-	// 开发环境下应暴露内部错误详情
+	// In dev mode, internal error details should be exposed
 	if body.Message != "database connection failed" {
 		t.Errorf("in dev mode, message should contain error detail, got %q", body.Message)
 	}
 }
 
-// TestErrorJSONFormat 验证错误响应的 Content-Type 为 application/json 且包含 error 和 message 字段。
+// TestErrorJSONFormat verifies the error response Content-Type is application/json and contains error and message fields.
 func TestErrorJSONFormat(t *testing.T) {
 	w := httptest.NewRecorder()
 	response.BadRequest(w, "test message")

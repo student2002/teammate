@@ -1,4 +1,4 @@
--- 认证令牌查询
+-- Auth token queries
 
 -- name: GetAuthTokenByLookupHashAndType :one
 SELECT owner_type, owner_id, token_hash FROM auth_tokens

@@ -1,4 +1,4 @@
-// helpers_test.go 覆盖 store 层辅助函数的测试。
+// helpers_test.go tests for store layer helper functions.
 package store_test
 
 import (
@@ -18,7 +18,7 @@ import (
 	"github.com/teammate/server/test/testdb"
 )
 
-// TestMain 设置测试数据库和全局连接。
+// TestMain sets up the test database and global connection.
 func TestMain(m *testing.M) {
 	if _, err := testdb.SetupTestDB(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to setup test database: %v\n", err)
@@ -45,8 +45,8 @@ func connectTestDB(t *testing.T) *sql.DB {
 	return testDB
 }
 
-// testDB 保存当前测试数据库连接，由 setupTestStore 设置。
-// 由辅助函数（createTestWorkspace、createTestMember）用于注册清理操作。
+// testDB holds the current test database connection, set by setupTestStore.
+// Used by helper functions (createTestWorkspace, createTestMember) to register cleanup operations.
 var testDB *sql.DB
 
 func setupTestStore(t *testing.T) (*store.Store, *sql.DB) {
@@ -159,7 +159,7 @@ func createTestMember(t *testing.T, s *store.Store, workspaceID string) types.Me
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	// 以 member 角色将成员添加到工作区
+	// Add member to workspace with the member role
 	_, err = s.CreateWorkspaceMember(context.Background(), types.CreateWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
 		MemberID:    member.ID,
@@ -196,7 +196,7 @@ func addAgentToProject(t *testing.T, s *store.Store, projectID, agentID string) 
 	}
 }
 
-// strPtr 返回字符串指针，用于 types 参数中的 *string 字段。
+// strPtr returns a string pointer, used for *string fields in types parameters.
 func strPtr(s string) *string {
 	return &s
 }

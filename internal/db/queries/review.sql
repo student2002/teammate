@@ -1,4 +1,4 @@
--- 审查查询
+-- Review queries
 
 -- name: GetReviewQueue :many
 SELECT
@@ -29,7 +29,7 @@ SELECT tn.assignee_id
 FROM task_nodes tn
 WHERE tn.task_id = $1
   AND tn.sort_order = (
-    -- 排序在前的最近节点（兼容 0 或 1 起始编号）
+    -- The most recent preceding node (compatible with 0- or 1-based sort_order)
     SELECT MAX(sub2.sort_order)
     FROM task_nodes sub2
     JOIN task_nodes cur ON cur.id = $2

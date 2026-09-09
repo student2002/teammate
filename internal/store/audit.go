@@ -1,7 +1,7 @@
-// audit.go 提供审计日志的数据访问操作。
+// audit.go provides data access operations for audit logs.
 //
-// 记录系统中的敏感操作，用于安全审计和问题追踪。
-// 审计日志包含操作者类型/ID、操作类型、资源信息、IP 地址和请求 ID。
+// It records sensitive operations in the system for security auditing and issue tracing.
+// Audit logs include actor type/ID, action type, resource info, IP address, and request ID.
 package store
 
 import (
@@ -18,15 +18,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateAuditLog 创建一条审计日志记录。
+// CreateAuditLog creates an audit log record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: 审计日志参数，包含操作者、操作类型、资源信息等
+// Parameters:
+//   - ctx: request context
+//   - params: audit log parameters, including actor, action type, resource info, etc.
 //
-// 返回：
-//   - types.AuditLog: 创建的审计日志记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - types.AuditLog: the created audit log record
+//   - error: error returned when creation fails
 func (s *Store) CreateAuditLog(ctx context.Context, params types.CreateAuditLogParams) (types.AuditLog, error) {
 	wsID, err := stringToUUID(params.WorkspaceID)
 	if err != nil {
@@ -73,17 +73,17 @@ func (s *Store) CreateAuditLog(ctx context.Context, params types.CreateAuditLogP
 	}, nil
 }
 
-// ListAuditLogs 分页查询指定工作区的审计日志列表。
+// ListAuditLogs paginates the audit log list for the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
-//   - limit: 返回的最大记录数
-//   - offset: 分页偏移量
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
+//   - limit: the maximum number of records to return
+//   - offset: pagination offset
 //
-// 返回：
-//   - []types.AuditLog: 审计日志列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []types.AuditLog: the audit log list
+//   - error: error returned when the query fails
 func (s *Store) ListAuditLogs(ctx context.Context, workspaceID uuid.UUID, limit, offset int32) ([]types.AuditLog, error) {
 	logs, err := s.q.ListAuditLogs(ctx, db.ListAuditLogsParams{
 		WorkspaceID: workspaceID,
@@ -113,35 +113,36 @@ func (s *Store) ListAuditLogs(ctx context.Context, workspaceID uuid.UUID, limit,
 	return out, nil
 }
 
-// AuditLogEntry 是创建审计日志的辅助结构体，封装审计所需的全部字段。
+// AuditLogEntry is a helper struct for creating audit logs, encapsulating all fields needed for auditing.
 //
-// 包含操作者信息（类型和 ID）、操作详情（动作、资源类型/ID）、
-// 请求元数据（IP 地址、User-Agent、请求 ID）。
+// It contains actor info (type and ID), action details (action, resource type/ID),
+// and request metadata (IP address, User-Agent, request ID).
 //
-// 注意：本结构体字段用 uuid.UUID 而非 domain string，因为它是 LogAudit
-// 的入参，被 middleware 层以 uuid.UUID 构造。
-// 未来若 middleware 层统一改为 string，本结构体字段可同步调整。
+// Note: this struct's fields use uuid.UUID instead of domain strings because it is the
+// input parameter of LogAudit, constructed by the middleware layer with uuid.UUID.
+// In the future, if the middleware layer is uniformly changed to string, this struct's
+// fields can be adjusted accordingly.
 type AuditLogEntry struct {
-	WorkspaceID  uuid.UUID // 工作区 ID
-	ActorType    string    // 操作者类型（"member" 或 "agent"）
-	ActorID      uuid.UUID // 操作者 ID
-	Action       string    // 操作类型（如 "create_task"、"approve_node"）
-	ResourceType string    // 资源类型（如 "task"、"node"）
-	ResourceID   string    // 资源 ID
-	Details      []byte    // 操作详情（JSON 格式）
-	IPAddress    string    // 请求来源 IP 地址
-	UserAgent    string    // 请求 User-Agent
-	RequestID    uuid.UUID // 请求唯一标识
+	WorkspaceID  uuid.UUID // workspace ID
+	ActorType    string    // actor type ("member" or "agent")
+	ActorID      uuid.UUID // actor ID
+	Action       string    // action type (e.g. "create_task", "approve_node")
+	ResourceType string    // resource type (e.g. "task", "node")
+	ResourceID   string    // resource ID
+	Details      []byte    // action details (JSON format)
+	IPAddress    string    // request source IP address
+	UserAgent    string    // request User-Agent
+	RequestID    uuid.UUID // request unique identifier
 }
 
-// LogAudit 从辅助结构体创建审计日志，自动处理 IP 地址转换和 JSON 序列化。
+// LogAudit creates an audit log from the helper struct, automatically handling IP address conversion and JSON serialization.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - entry: 审计日志条目，包含所有审计字段
+// Parameters:
+//   - ctx: request context
+//   - entry: the audit log entry, including all audit fields
 //
-// 返回：
-//   - error: 创建失败时返回错误
+// Returns:
+//   - error: error returned when creation fails
 func (s *Store) LogAudit(ctx context.Context, entry AuditLogEntry) error {
 	var ipAddr pqtype.Inet
 	if entry.IPAddress != "" {
@@ -185,7 +186,7 @@ func (s *Store) LogAudit(ctx context.Context, entry AuditLogEntry) error {
 	if err != nil {
 		return fmt.Errorf("create audit log: %w", err)
 	}
-	// 静默 json 引用避免未导入警告（json 在 rawToNullRaw 路径已使用，但本文件可能孤立）
+	// Silently reference json to avoid an unused-import warning (json is used in the rawToNullRaw path, but this file may be standalone)
 	_ = json.RawMessage(nil)
 	return nil
 }

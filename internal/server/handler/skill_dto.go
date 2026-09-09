@@ -1,4 +1,4 @@
-// skill_dto.go 为 skill.go 提供参数构建器和响应转换函数。
+// skill_dto.go provides parameter builders and response conversion functions for skill.go.
 package handler
 
 import (
@@ -9,9 +9,9 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateSkillParams 从请求字段构建 apitypes.CreateSkillParams。
+// buildCreateSkillParams builds apitypes.CreateSkillParams from request fields.
 func buildCreateSkillParams(
 	workspaceID uuid.UUID,
 	name string,
@@ -43,9 +43,9 @@ func buildCreateSkillParams(
 	}
 }
 
-// ---- 响应转换函数 ----
+// ---- response conversion functions ----
 
-// skillResponse 将 domain Skill 转换为 API 响应。
+// skillResponse converts a domain Skill to an API response.
 func skillResponse(skill Skill) apitypes.SkillResponse {
 	id, _ := uuid.Parse(skill.ID)
 	wsID, _ := uuid.Parse(skill.WorkspaceID)
@@ -60,7 +60,7 @@ func skillResponse(skill Skill) apitypes.SkillResponse {
 	}
 }
 
-// nullStringValue 将 sql.NullString 转换为普通字符串（mcp_dto.go 仍依赖）。
+// nullStringValue converts a sql.NullString to a plain string (still depended on by mcp_dto.go).
 func nullStringValue(value sql.NullString) string {
 	if !value.Valid {
 		return ""

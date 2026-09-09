@@ -1,9 +1,9 @@
-// search.go 提供全局搜索的数据访问操作。
+// search.go provides data access operations for global search.
 //
-// 本文件包含：
-//   - SearchTasksByWorkspace：在指定工作区内按关键词搜索任务（ILIKE 模糊匹配标题和描述）
-//   - SearchTasksByWorkspaceAndProject：在指定工作区和项目内按关键词搜索任务
-//   - SearchAgentsByWorkspace：在指定工作区内按关键词搜索代理（ILIKE 模糊匹配名称）
+// This file includes:
+//   - SearchTasksByWorkspace: search tasks by keyword within the specified workspace (ILIKE fuzzy match on title and description)
+//   - SearchTasksByWorkspaceAndProject: search tasks by keyword within the specified workspace and project
+//   - SearchAgentsByWorkspace: search agents by keyword within the specified workspace (ILIKE fuzzy match on name)
 package store
 
 import (
@@ -15,17 +15,17 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// SearchTasksByWorkspace 在指定工作区内按关键词搜索任务。
-// 使用 ILIKE 进行标题和描述的模糊匹配，结果按创建时间倒序排列。
+// SearchTasksByWorkspace searches tasks by keyword within the specified workspace.
+// Uses ILIKE for fuzzy matching of title and description, with results ordered by creation time descending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - pattern: 搜索模式（已包含 % 通配符）
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - pattern: search pattern (already includes the % wildcard)
 //
-// 返回：
-//   - []types.Task: 匹配的任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Task: list of matching tasks
+//   - error: possible error (database query failure)
 func (s *Store) SearchTasksByWorkspace(ctx context.Context, workspaceID uuid.UUID, pattern string) ([]types.Task, error) {
 	tasks, err := s.q.SearchTasksByWorkspace(ctx, FromDomainSearchTasksByWorkspaceParams(workspaceID, pattern))
 	if err != nil {
@@ -34,18 +34,18 @@ func (s *Store) SearchTasksByWorkspace(ctx context.Context, workspaceID uuid.UUI
 	return ToDomainTaskSlice(tasks)
 }
 
-// SearchTasksByWorkspaceAndProject 在指定工作区和项目内按关键词搜索任务。
-// 使用 ILIKE 进行标题和描述的模糊匹配，结果按创建时间倒序排列。
+// SearchTasksByWorkspaceAndProject searches tasks by keyword within the specified workspace and project.
+// Uses ILIKE for fuzzy matching of title and description, with results ordered by creation time descending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - projectID: 项目 ID
-//   - pattern: 搜索模式（已包含 % 通配符）
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - projectID: project ID
+//   - pattern: search pattern (already includes the % wildcard)
 //
-// 返回：
-//   - []types.Task: 匹配的任务列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Task: list of matching tasks
+//   - error: possible error (database query failure)
 func (s *Store) SearchTasksByWorkspaceAndProject(ctx context.Context, workspaceID, projectID uuid.UUID, pattern string) ([]types.Task, error) {
 	tasks, err := s.q.SearchTasksByWorkspaceAndProject(ctx, FromDomainSearchTasksByWorkspaceAndProjectParams(workspaceID, projectID, pattern))
 	if err != nil {
@@ -54,17 +54,17 @@ func (s *Store) SearchTasksByWorkspaceAndProject(ctx context.Context, workspaceI
 	return ToDomainTaskSlice(tasks)
 }
 
-// SearchAgentsByWorkspace 在指定工作区内按关键词搜索代理。
-// 使用 ILIKE 进行名称的模糊匹配，结果按创建时间倒序排列。
+// SearchAgentsByWorkspace searches agents by keyword within the specified workspace.
+// Uses ILIKE for fuzzy matching of name, with results ordered by creation time descending.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID
-//   - pattern: 搜索模式（已包含 % 通配符）
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID
+//   - pattern: search pattern (already includes the % wildcard)
 //
-// 返回：
-//   - []types.Agent: 匹配的代理列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []types.Agent: list of matching agents
+//   - error: possible error (database query failure)
 func (s *Store) SearchAgentsByWorkspace(ctx context.Context, workspaceID uuid.UUID, pattern string) ([]types.Agent, error) {
 	agents, err := s.q.SearchAgentsByWorkspace(ctx, FromDomainSearchAgentsByWorkspaceParams(workspaceID, pattern))
 	if err != nil {

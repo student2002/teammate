@@ -1,4 +1,4 @@
--- Agent 查询
+-- Agent queries
 
 -- name: CreateAgent :one
 INSERT INTO agents (workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email)

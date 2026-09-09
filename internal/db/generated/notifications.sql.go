@@ -33,7 +33,7 @@ type ListManualInterventionNodesRow struct {
 	TaskTitle string         `db:"task_title" json:"task_title"`
 }
 
-// 通知查询
+// Notification queries
 func (q *Queries) ListManualInterventionNodes(ctx context.Context, workspaceID uuid.UUID) ([]ListManualInterventionNodesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listManualInterventionNodes, workspaceID)
 	if err != nil {

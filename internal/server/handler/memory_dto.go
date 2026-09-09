@@ -1,4 +1,4 @@
-// memory_dto.go 定义 Memory 相关的请求/响应结构体和数据转换函数。
+// memory_dto.go defines request/response structs and data conversion functions related to Memory.
 package handler
 
 import (
@@ -10,10 +10,10 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// MemoryType 记忆类型的别名（domain 幜格：string）。
+// MemoryType alias for memory type (domain model: string).
 type MemoryType = string
 
-// buildCreateMemoryParams 根据 handler 层输入构造 types.CreateMemoryParams。
+// buildCreateMemoryParams constructs types.CreateMemoryParams from handler-layer input.
 func buildCreateMemoryParams(
 	workspaceID uuid.UUID,
 	sourceTaskID sql.NullInt32,

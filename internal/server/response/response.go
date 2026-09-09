@@ -1,7 +1,7 @@
-// response.go 提供统一的 HTTP 响应格式化工具，包括 JSON 响应和标准错误响应。
-// 自动清理 sqlc 生成的 NullXxx 可空类型包装器，使 API 响应更简洁。
-// 提供一组便捷函数用于生成标准错误响应（400/401/403/404/409/500/503）。
-// 安全说明：生产环境下 InternalServerError 隐藏内部错误详情，仅返回错误码。
+// response.go provides unified HTTP response formatting utilities, including JSON responses and standard error responses.
+// It automatically cleans sqlc-generated NullXxx nullable wrapper types, making API responses more concise.
+// It provides a set of convenience functions for generating standard error responses (400/401/403/404/409/500/503).
+// Security note: in production, InternalServerError hides internal error details and returns only the error code.
 package response
 
 import (
@@ -14,8 +14,8 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// nullWrapperKeys 是 sqlc NullXxx 包装器的已知字段名列表。
-// 当 map 中恰好包含以下一个键加一个 "Valid" 键时，认为是 sqlc 可空包装器。
+// nullWrapperKeys is the list of known field names for sqlc NullXxx wrappers.
+// When a map contains exactly one of these keys plus a "Valid" key, it is treated as a sqlc nullable wrapper.
 var nullWrapperKeys = []string{
 	"String",
 	"UUID",
@@ -26,18 +26,18 @@ var nullWrapperKeys = []string{
 	"RawMessage",
 }
 
-// CleanValue 递归清理单个值中的 sqlc NullXxx 包装器。
-// sqlc 生成的可空类型会序列化为 {"String":"x","Valid":true} 形式的 JSON 对象，
-// 该函数将其解包为原始值（如 "x"），使 API 响应更简洁。
+// CleanValue recursively cleans sqlc NullXxx wrappers from a single value.
+// sqlc-generated nullable types serialize as JSON objects like {"String":"x","Valid":true};
+// this function unwraps them to the original value (e.g. "x"), making API responses more concise.
 //
-// 清理规则：
+// Cleaning rules:
 //   - {"String":"x","Valid":true}  → "x"
 //   - {"String":"","Valid":false}  → nil
 //   - {"UUID":"...","Valid":true}  → "..."
 //   - {"UUID":"00000000-...","Valid":false} → nil
 //   - {"Time":"...","Valid":true}  → "..."
 //   - {"Time":"...","Valid":false} → nil
-//   - {"RawMessage":...,"Valid":true}  → 原始 JSON 值
+//   - {"RawMessage":...,"Valid":true}  → original JSON value
 //   - {"RawMessage":null,"Valid":false} → nil
 //   - {"Int64":0,"Valid":true}     → 0
 //   - {"Int64":0,"Valid":false}    → nil
@@ -46,11 +46,11 @@ var nullWrapperKeys = []string{
 //   - {"Bool":false,"Valid":true}  → false
 //   - {"Bool":false,"Valid":false} → nil
 //
-// 参数：
-//   - v: 待清理的值（可以是任意类型）
+// Parameters:
+//   - v: the value to clean (can be of any type)
 //
-// 返回：
-//   - interface{}: 清理后的值
+// Returns:
+//   - interface{}: the cleaned value
 func CleanValue(v interface{}) interface{} {
 	switch val := v.(type) {
 	case map[string]interface{}:
@@ -66,21 +66,21 @@ func CleanValue(v interface{}) interface{} {
 	}
 }
 
-// cleanMapValue 处理 map：如果是 NullXxx 包装器则解包，否则递归清理所有值。
+// cleanMapValue processes a map: unwraps it if it is a NullXxx wrapper, otherwise recursively cleans all values.
 //
-// 参数：
-//   - m: 待清理的 map
+// Parameters:
+//   - m: the map to clean
 //
-// 返回：
-//   - interface{}: 解包后的原始值或清理后的 map
+// Returns:
+//   - interface{}: the unwrapped original value or the cleaned map
 func cleanMapValue(m map[string]interface{}) interface{} {
-	// 先递归清理 map 中的所有值
+	// First recursively clean all values in the map
 	cleaned := make(map[string]interface{}, len(m))
 	for k, v := range m {
 		cleaned[k] = CleanValue(v)
 	}
 
-	// 检查该 map 本身是否是 NullXxx 包装器（包含 "Valid" 键且恰好有两个键）
+	// Check whether the map itself is a NullXxx wrapper (contains a "Valid" key and exactly two keys)
 	if validVal, hasValid := cleaned["Valid"]; hasValid && len(cleaned) == 2 {
 		for _, wrapperKey := range nullWrapperKeys {
 			if innerVal, hasKey := cleaned[wrapperKey]; hasKey {
@@ -99,15 +99,15 @@ func cleanMapValue(m map[string]interface{}) interface{} {
 	return cleaned
 }
 
-// unwrapRawMessage 处理 RawMessage 的特殊情况，其中内部值可能是需要解析回 JSON 的字符串。
+// unwrapRawMessage handles the special case for RawMessage, where the inner value may be a string that needs to be parsed back into JSON.
 //
-// 参数：
-//   - v: RawMessage 包装器中的内部值
+// Parameters:
+//   - v: the inner value within a RawMessage wrapper
 //
-// 返回：
-//   - interface{}: 解析后的 JSON 值
+// Returns:
+//   - interface{}: the parsed JSON value
 func unwrapRawMessage(v interface{}) interface{} {
-	// 如果原始消息被序列化为字符串，尝试反序列化
+	// If the original message was serialized as a string, attempt to deserialize it
 	if s, ok := v.(string); ok {
 		var parsed interface{}
 		if err := json.Unmarshal([]byte(s), &parsed); err == nil {
@@ -115,20 +115,20 @@ func unwrapRawMessage(v interface{}) interface{} {
 		}
 		return s
 	}
-	// 如果已经是解析后的 JSON 值（对象/数组等），递归清理
+	// If it is already a parsed JSON value (object/array, etc.), clean it recursively
 	return CleanValue(v)
 }
 
-// JSON 将值序列化为 JSON，清理 sqlc NullXxx 包装器后写入响应。
-// 用于替代 render.JSON 处理所有 handler 响应。
+// JSON serializes a value to JSON, cleans sqlc NullXxx wrappers, and writes the response.
+// It replaces render.JSON for handling all handler responses.
 //
-// 优化：如果序列化后的输出不含 NullXxx 包装器（无 "Valid": 键），
-// 则跳过反序列化/清理/重新序列化的循环，直接输出原始 JSON。
+// Optimization: if the serialized output contains no NullXxx wrappers (no "Valid": key),
+// it skips the deserialize/clean/re-serialize loop and writes the raw JSON directly.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求对象
-//   - v: 待序列化为 JSON 的值
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request object
+//   - v: the value to serialize as JSON
 func JSON(w http.ResponseWriter, r *http.Request, v interface{}) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -136,7 +136,7 @@ func JSON(w http.ResponseWriter, r *http.Request, v interface{}) {
 		return
 	}
 
-	// 快速检查：如果不存在 NullXxx 包装器，跳过昂贵的反序列化→清理→重新序列化流程
+	// Fast check: if no NullXxx wrappers are present, skip the expensive deserialize -> clean -> re-serialize flow
 	needsCleaning := bytes.Contains(raw, []byte(`"Valid":`))
 
 	var out []byte
@@ -162,27 +162,27 @@ func JSON(w http.ResponseWriter, r *http.Request, v interface{}) {
 	w.Write(out)
 }
 
-// isDevMode 检查是否在开发模式下运行（TEAMMATE_DEV=true）。
-// 开发模式下会返回详细的错误信息，生产环境仅返回错误码。
+// isDevMode checks whether the server runs in development mode (TEAMMATE_DEV=true).
+// In development mode detailed error information is returned; in production only the error code is returned.
 func isDevMode() bool {
 	return os.Getenv("TEAMMATE_DEV") == "true"
 }
 
-// ErrorBody 是标准的 JSON 错误响应体结构。
+// ErrorBody is the standard JSON error response body structure.
 type ErrorBody struct {
-	// Error 是错误码常量，如 "bad_request"、"unauthorized"、"internal"。
+	// Error is the error code constant, e.g. "bad_request", "unauthorized", "internal".
 	Error string `json:"error"`
-	// Message 是人类可读的错误描述，开发模式下包含详细错误信息。
+	// Message is the human-readable error description; in development mode it includes detailed error info.
 	Message string `json:"message"`
 }
 
-// Error 写入一个 JSON 格式的错误响应。生产环境下隐藏内部错误详情。
+// Error writes a JSON-formatted error response. In production, internal error details are hidden.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - httpStatus: HTTP 状态码
-//   - code: 错误码常量（来自 types 包）
-//   - err: 原始错误对象（仅开发模式下返回给客户端）
+// Parameters:
+//   - w: HTTP response writer
+//   - httpStatus: HTTP status code
+//   - code: error code constant (from the types package)
+//   - err: original error object (returned to the client only in development mode)
 func Error(w http.ResponseWriter, httpStatus int, code string, err error) {
 	msg := code
 	if isDevMode() && err != nil {
@@ -195,77 +195,77 @@ func Error(w http.ResponseWriter, httpStatus int, code string, err error) {
 	json.NewEncoder(w).Encode(body)
 }
 
-// BadRequest 写入 400 错误响应，表示请求参数无效或请求格式错误。
+// BadRequest writes a 400 error response, indicating invalid request parameters or a malformed request.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func BadRequest(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeBadRequest, Message: message})
 }
 
-// Unauthorized 写入 401 错误响应，表示未认证或认证令牌无效/过期。
+// Unauthorized writes a 401 error response, indicating not authenticated or an invalid/expired auth token.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func Unauthorized(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeUnauthorized, Message: message})
 }
 
-// Forbidden 写入 403 错误响应，表示已认证但权限不足，无法访问目标资源。
+// Forbidden writes a 403 error response, indicating authenticated but insufficient permissions to access the target resource.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func Forbidden(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeForbidden, Message: message})
 }
 
-// NotFound 写入 404 错误响应，表示请求的资源不存在。
+// NotFound writes a 404 error response, indicating the requested resource does not exist.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func NotFound(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeNotFound, Message: message})
 }
 
-// Conflict 写入 409 错误响应，表示资源冲突（如并发认领失败、乐观锁冲突）。
+// Conflict writes a 409 error response, indicating a resource conflict (e.g. concurrent claim failure, optimistic lock conflict).
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func Conflict(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusConflict)
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeConflict, Message: message})
 }
 
-// InternalServerError 写入 500 错误响应，生产环境下隐藏内部错误详情。
-// 错误详情记录到服务器日志，便于排查问题。
+// InternalServerError writes a 500 error response, hiding internal error details in production.
+// Error details are logged to the server log for troubleshooting.
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - err: 原始错误对象
+// Parameters:
+//   - w: HTTP response writer
+//   - err: original error object
 func InternalServerError(w http.ResponseWriter, err error) {
 	log.Printf("[error] internal server error: %v", err)
 	Error(w, http.StatusInternalServerError, types.ErrCodeInternal, err)
 }
 
-// ServiceUnavailable 写入 503 错误响应，表示服务暂时不可用（如维护中或过载）。
+// ServiceUnavailable writes a 503 error response, indicating the service is temporarily unavailable (e.g. under maintenance or overloaded).
 //
-// 参数：
-//   - w: HTTP 响应写入器
-//   - message: 错误描述信息
+// Parameters:
+//   - w: HTTP response writer
+//   - message: error description
 func ServiceUnavailable(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)

@@ -1,4 +1,4 @@
-// stats_test.go 覆盖统计数据访问的测试。
+// stats_test.go covers statistics data access tests.
 package store_test
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestGetProjectStats 测试获取项目统计信息，包含3个活跃任务
+// TestGetProjectStats tests retrieving project statistics with 3 active tasks
 func TestGetProjectStats(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -19,7 +19,7 @@ func TestGetProjectStats(t *testing.T) {
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 创建任务
+	// Create tasks
 	for i := 0; i < 3; i++ {
 		_, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 			ProjectID:  proj.ID,
@@ -48,7 +48,7 @@ func TestGetProjectStats(t *testing.T) {
 	}
 }
 
-// TestGetProjectStats_EmptyProject 测试空项目的统计信息
+// TestGetProjectStats_EmptyProject tests statistics for an empty project
 func TestGetProjectStats_EmptyProject(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -72,7 +72,7 @@ func TestGetProjectStats_EmptyProject(t *testing.T) {
 	}
 }
 
-// TestGetAgentStats 测试获取代理统计信息
+// TestGetAgentStats tests retrieving agent statistics
 func TestGetAgentStats(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()

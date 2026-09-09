@@ -1,5 +1,5 @@
-// node_pending_project_test.go 覆盖 node:pending 项目级广播：只投递给项目成员 Agent，
-// 非项目成员 Agent 收不到节点通知（信息隔离）。
+// node_pending_project_test.go covers node:pending project-scoped broadcast: only delivered to project member Agents,
+// non-project-member Agents do not receive node notifications (information isolation).
 package service_test
 
 import (
@@ -12,18 +12,18 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestCreateTask_PublishesNodePendingOnlyToProjectMembers 验证创建任务时，
-// node:pending 只发给项目成员 Agent 的在线 runtime；非项目成员 Agent 不收到广播。
+// TestCreateTask_PublishesNodePendingOnlyToProjectMembers verifies that when a task is created,
+// node:pending is only sent to online runtimes of project member Agents; non-project-member Agents do not receive the broadcast.
 func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	hub := &recordingHub{}
 	svc.Hub = hub
 
-	// agent1、agent2 是项目成员（setupServiceTest 已加入项目）
+	// agent1 and agent2 are project members (setupServiceTest already added them to the project)
 	agent1Runtime := createOnlineRuntime(t, svc, env.agent1ID)
 	agent2Runtime := createOnlineRuntime(t, svc, env.agent2ID)
 
-	// 创建非项目成员 agent3（同一工作区，但不属于该项目）
+	// Create a non-project-member agent3 (same workspace, but not belonging to this project)
 	agent3, _, err := svc.Store.CreateAgent(context.Background(), types.CreateAgentParams{
 		WorkspaceID:  env.workspaceID,
 		Name:         "agent3-" + uuid.NewString()[:8],
@@ -39,7 +39,7 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 	}
 	agent3Runtime := createOnlineRuntime(t, svc, agent3.ID)
 
-	// 通过 service 层创建任务（触发 publishNodePendingEvents 项目级广播）
+	// Create a task through the service layer (triggers publishNodePendingEvents project-scoped broadcast)
 	taskSvc := service.NewTaskService(svc)
 	desc := "node pending project test"
 	_, err = taskSvc.Create(context.Background(), uuid.MustParse(env.projectID), types.CreateTaskParams{
@@ -58,7 +58,7 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 
-	// 收集所有 node:pending 事件的投递目标
+	// Collect all node:pending event delivery targets
 	subs, events := hub.recorded()
 	var pendingSubs []string
 	for i, e := range events {
@@ -67,7 +67,7 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 		}
 	}
 
-	// 只有项目成员（agent1/agent2）的 runtime 收到广播
+	// Only runtimes of project members (agent1/agent2) should receive the broadcast
 	expected := map[string]bool{agent1Runtime: true, agent2Runtime: true}
 	if len(pendingSubs) != len(expected) {
 		t.Fatalf("expected %d node:pending deliveries, got %d: %v", len(expected), len(pendingSubs), pendingSubs)

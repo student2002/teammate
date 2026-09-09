@@ -1,4 +1,4 @@
--- 工作流触发器查询
+-- Workflow trigger queries
 
 -- name: CreateWorkflowTriggerRun :one
 INSERT INTO workflow_trigger_runs (

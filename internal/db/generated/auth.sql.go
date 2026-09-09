@@ -28,7 +28,7 @@ type GetAuthTokenByLookupHashAndTypeRow struct {
 	TokenHash string    `db:"token_hash" json:"token_hash"`
 }
 
-// 认证令牌查询
+// Auth token queries
 func (q *Queries) GetAuthTokenByLookupHashAndType(ctx context.Context, arg GetAuthTokenByLookupHashAndTypeParams) (GetAuthTokenByLookupHashAndTypeRow, error) {
 	row := q.db.QueryRowContext(ctx, getAuthTokenByLookupHashAndType, arg.LookupHash, arg.TokenType)
 	var i GetAuthTokenByLookupHashAndTypeRow

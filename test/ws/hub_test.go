@@ -1,4 +1,4 @@
-// hub_test.go 覆盖 SSE Hub 的测试。
+// hub_test.go covers tests for the SSE Hub.
 package ws_test
 
 import (
@@ -39,32 +39,32 @@ func connectTestRedis(t *testing.T) *redis.Client {
 	return rdb
 }
 
-// testKeyPrefix 避免与生产数据冲突。
+// testKeyPrefix avoids conflicts with production data.
 const testKeyPrefix = "test:sse:"
 
-// TestEventBuffering 验证发布的事件存储在 Redis 有序集合中。
+// TestEventBuffering verifies that published events are stored in a Redis sorted set.
 func TestEventBuffering(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
 
-	_ = ws.NewHub(rdb) // 此测试中不需要 hub 进行直接的 Redis 操作
+	_ = ws.NewHub(rdb) // hub is not needed for direct Redis operations in this test
 	runtimeID := uuid.New().String()
 	testBufferKey := testKeyPrefix + runtimeID
 	ctx := context.Background()
 
-	// 清理测试键
+	// Clean up test keys
 	t.Cleanup(func() { rdb.Del(ctx, testBufferKey) })
 
-	// 发布多个事件
+	// Publish multiple events
 	events := []ws.SSEEvent{
 		{ID: fmt.Sprintf("%d", time.Now().Add(-2*time.Second).UnixNano()), Event: "node:pending", Data: json.RawMessage(`{"node_id":"1"}`)},
 		{ID: fmt.Sprintf("%d", time.Now().Add(-1*time.Second).UnixNano()), Event: "node:pending", Data: json.RawMessage(`{"node_id":"2"}`)},
 		{ID: fmt.Sprintf("%d", time.Now().UnixNano()), Event: "node:pending", Data: json.RawMessage(`{"node_id":"3"}`)},
 	}
 
-	// 直接缓冲事件
+	// Buffer events directly
 	for _, evt := range events {
-		// 覆盖缓冲区键以进行测试
+		// Override buffer key for testing
 		data, _ := json.Marshal(evt)
 		score, _ := strconv.ParseFloat(evt.ID, 64)
 		pipe := rdb.Pipeline()
@@ -75,7 +75,7 @@ func TestEventBuffering(t *testing.T) {
 		}
 	}
 
-	// 验证事件已存储在有序集合中
+	// Verify events are stored in the sorted set
 	count, err := rdb.ZCard(ctx, testBufferKey).Result()
 	if err != nil {
 		t.Fatalf("zcard: %v", err)
@@ -86,7 +86,7 @@ func TestEventBuffering(t *testing.T) {
 	t.Logf("event buffering: %d events stored in Redis sorted set", count)
 }
 
-// TestLastEventIDReplay 验证使用 Last-Event-ID 连接时可以重放丢失的事件。
+// TestLastEventIDReplay verifies that missed events can be replayed when connecting with Last-Event-ID.
 func TestLastEventIDReplay(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -98,7 +98,7 @@ func TestLastEventIDReplay(t *testing.T) {
 
 	t.Cleanup(func() { rdb.Del(ctx, testBufferKey) })
 
-	// 创建具有已知时间戳的事件
+	// Create events with known timestamps
 	now := time.Now()
 	events := []ws.SSEEvent{
 		{ID: fmt.Sprintf("%d", now.Add(-3*time.Second).UnixNano()), Event: "node:pending", Data: json.RawMessage(`{"node_id":"old1"}`)},
@@ -107,7 +107,7 @@ func TestLastEventIDReplay(t *testing.T) {
 		{ID: fmt.Sprintf("%d", now.UnixNano()), Event: "node:pending", Data: json.RawMessage(`{"node_id":"new2"}`)},
 	}
 
-	// 使用测试键前缀直接缓冲事件
+	// Buffer events directly using test key prefix
 	for _, evt := range events {
 		data, _ := json.Marshal(evt)
 		score, _ := strconv.ParseFloat(evt.ID, 64)
@@ -119,17 +119,17 @@ func TestLastEventIDReplay(t *testing.T) {
 		}
 	}
 
-	// 模拟 Last-Event-ID = events[1].ID（客户端已看到前 2 个事件）
+	// Simulate Last-Event-ID = events[1].ID (client has seen the first 2 events)
 	lastEventID := events[1].ID
 
-	// 使用 GetBufferedEvents 重放错过的消息
-	// 我们需要临时覆盖缓冲区键以进行测试
-	// 由于 GetBufferedEvents 使用 BufferKey(runtimeID)，我们需要使用实际的键格式
-	// 我们使用真实的 hub 方法和实际的键
+	// Use GetBufferedEvents to replay missed messages
+	// We need to temporarily override the buffer key for testing
+	// Since GetBufferedEvents uses BufferKey(runtimeID), we need to use the actual key format
+	// We use the real hub methods and actual keys
 	actualRuntimeID := "test-replay-" + runtimeID
 	actualBufferKey := ws.BufferKey(actualRuntimeID)
 
-	// 将测试数据复制到实际的缓冲区键格式
+	// Copy test data to the actual buffer key format
 	srcKey := testBufferKey
 	rdb.Copy(ctx, srcKey, actualBufferKey, 0, true)
 	t.Cleanup(func() { rdb.Del(ctx, actualBufferKey) })
@@ -139,12 +139,12 @@ func TestLastEventIDReplay(t *testing.T) {
 		t.Fatalf("get buffered events: %v", err)
 	}
 
-	// 应重放 lastEventID 之后的事件（events[2] 和 events[3]）
+	// Should replay events after lastEventID (events[2] and events[3])
 	if len(replayed) != 2 {
 		t.Fatalf("expected 2 replayed events, got %d", len(replayed))
 	}
 
-	// 验证重放的事件是正确的
+	// Verify the replayed events are correct
 	var replayedNodeIDs []string
 	for _, evt := range replayed {
 		var data map[string]interface{}
@@ -157,7 +157,7 @@ func TestLastEventIDReplay(t *testing.T) {
 	t.Logf("Last-Event-ID replay: correctly replayed %d events after ID %s", len(replayed), lastEventID)
 }
 
-// TestSyncRequiredDegradation 验证缓冲区过期/为空时客户端应收到 sync:required 事件。
+// TestSyncRequiredDegradation verifies that clients receive a sync:required event when the buffer is expired/empty.
 func TestSyncRequiredDegradation(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -168,26 +168,26 @@ func TestSyncRequiredDegradation(t *testing.T) {
 
 	t.Cleanup(func() { rdb.Del(ctx, ws.BufferKey(runtimeID)) })
 
-	// 当缓冲区为空且客户端提供了 Last-Event-ID 时，
-	// GetBufferedEvents 返回空（缓冲区已过期）
+	// When the buffer is empty and the client provided a Last-Event-ID,
+	// GetBufferedEvents returns empty (buffer has expired)
 	replayed, err := hub.GetBufferedEvents(ctx, runtimeID, "1234567890")
 	if err != nil {
 		t.Fatalf("get buffered events: %v", err)
 	}
 
-	// 缓冲区为空，因此不重放任何事件
+	// Buffer is empty, so no events are replayed
 	if len(replayed) != 0 {
 		t.Fatalf("expected 0 replayed events for expired buffer, got %d", len(replayed))
 	}
 
-	// 在真实的 SSE 处理器中，这会触发 sync:required 事件。
-	// 我们验证导致 sync:required 的条件：
-	// - 客户端发送 Last-Event-ID
-	// - 缓冲区返回空（已过期或从未存在）
-	// 这意味着客户端必须执行一次完整同步。
+	// In the real SSE handler, this would trigger a sync:required event.
+	// We verify the conditions that lead to sync:required:
+	// - Client sends Last-Event-ID
+	// - Buffer returns empty (expired or never existed)
+	// This means the client must perform a full sync.
 	t.Log("sync:required degradation: empty buffer correctly signals full sync needed")
 
-	// 同时使用无法解析的 Last-Event-ID 进行测试
+	// Also test with unparseable Last-Event-ID
 	replayed, err = hub.GetBufferedEvents(ctx, runtimeID, "not-a-timestamp")
 	if err != nil {
 		t.Fatalf("get buffered events with bad ID: %v", err)
@@ -198,7 +198,7 @@ func TestSyncRequiredDegradation(t *testing.T) {
 	t.Log("sync:required degradation: unparseable Last-Event-ID also signals full sync")
 }
 
-// TestCrossInstanceDelivery 验证通过 Redis Pub/Sub 将事件传递给本地订阅者。
+// TestCrossInstanceDelivery verifies that events are delivered to local subscribers via Redis Pub/Sub.
 func TestCrossInstanceDelivery(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -208,18 +208,18 @@ func TestCrossInstanceDelivery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 启动 hub 的 Redis 监听器
+	// Start the hub's Redis listener
 	go hub.Start(ctx)
 	t.Cleanup(func() { hub.Close() })
 
-	// 给 Redis Pub/Sub 留出建立订阅的时间
+	// Allow time for Redis Pub/Sub to establish subscription
 	time.Sleep(500 * time.Millisecond)
 
-	// 在本地订阅
+	// Subscribe locally
 	ch, unsub := hub.Subscribe(runtimeID)
 	defer unsub()
 
-	// 直接通过 Redis 发布事件（模拟另一个实例）
+	// Publish event directly via Redis (simulating another instance)
 	event := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Event: ws.EventNodePending,
@@ -236,7 +236,7 @@ func TestCrossInstanceDelivery(t *testing.T) {
 		t.Fatalf("publish to redis: %v", err)
 	}
 
-	// 等待事件通过 Redis Pub/Sub 到达
+	// Wait for the event to arrive via Redis Pub/Sub
 	select {
 	case received := <-ch:
 		if received.Event != ws.EventNodePending {
@@ -253,7 +253,7 @@ func TestCrossInstanceDelivery(t *testing.T) {
 	}
 }
 
-// TestPublishDeliversLocally 验证 Publish 将事件传递给本地订阅者。
+// TestPublishDeliversLocally verifies that Publish delivers events to local subscribers.
 func TestPublishDeliversLocally(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -267,11 +267,11 @@ func TestPublishDeliversLocally(t *testing.T) {
 		hub.Close()
 	})
 
-	// 在本地订阅
+	// Subscribe locally
 	ch, unsub := hub.Subscribe(runtimeID)
 	defer unsub()
 
-	// 发布事件
+	// Publish event
 	event := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Event: ws.EventNodePending,
@@ -283,7 +283,7 @@ func TestPublishDeliversLocally(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	// 验证本地投递
+	// Verify local delivery
 	select {
 	case received := <-ch:
 		if received.Event != ws.EventNodePending {
@@ -294,7 +294,7 @@ func TestPublishDeliversLocally(t *testing.T) {
 		t.Fatal("timeout waiting for local event delivery")
 	}
 
-	// 验证事件已缓冲在 Redis 中
+	// Verify event is buffered in Redis
 	count, err := rdb.ZCard(ctx, ws.BufferKey(runtimeID)).Result()
 	if err != nil {
 		t.Fatalf("zcard: %v", err)
@@ -304,7 +304,7 @@ func TestPublishDeliversLocally(t *testing.T) {
 	}
 }
 
-// TestSubscribeUnsubscribe 验证订阅和取消订阅功能正常。
+// TestSubscribeUnsubscribe verifies that subscribe and unsubscribe work correctly.
 func TestSubscribeUnsubscribe(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -312,23 +312,23 @@ func TestSubscribeUnsubscribe(t *testing.T) {
 	hub := ws.NewHub(rdb)
 	runtimeID := "test-sub-" + uuid.New().String()
 
-	// 订阅
+	// Subscribe
 	ch, unsub := hub.Subscribe(runtimeID)
 
-	// 验证通道已注册
+	// Verify channel is registered
 	if hub.ClientCount(runtimeID) != 1 {
 		t.Fatalf("expected 1 subscriber, got %d", hub.ClientCount(runtimeID))
 	}
 
-	// 取消订阅
+	// Unsubscribe
 	unsub()
 
-	// 验证通道已移除
+	// Verify channel is removed
 	if hub.ClientCount(runtimeID) != 0 {
 		t.Fatalf("expected 0 subscribers after unsub, got %d", hub.ClientCount(runtimeID))
 	}
 
-	// 通道应已关闭
+	// Channel should be closed
 	_, ok := <-ch
 	if ok {
 		t.Fatal("expected channel to be closed after unsubscribe")
@@ -336,7 +336,7 @@ func TestSubscribeUnsubscribe(t *testing.T) {
 	t.Log("subscribe/unsubscribe works correctly")
 }
 
-// TestHubMultipleSubscribers 验证同一运行时的多个订阅者都能接收到事件。
+// TestHubMultipleSubscribers verifies that multiple subscribers to the same runtime all receive events.
 func TestHubMultipleSubscribers(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -350,7 +350,7 @@ func TestHubMultipleSubscribers(t *testing.T) {
 		hub.Close()
 	})
 
-	// 订阅 3 clients
+	// Subscribe 3 clients
 	ch1, unsub1 := hub.Subscribe(runtimeID)
 	ch2, unsub2 := hub.Subscribe(runtimeID)
 	ch3, unsub3 := hub.Subscribe(runtimeID)
@@ -358,7 +358,7 @@ func TestHubMultipleSubscribers(t *testing.T) {
 	defer unsub2()
 	defer unsub3()
 
-	// 发布事件
+	// Publish event
 	event := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Event: ws.EventNodePending,
@@ -366,7 +366,7 @@ func TestHubMultipleSubscribers(t *testing.T) {
 	}
 	hub.Publish(ctx, runtimeID, event)
 
-	// 所有 3 个都应收到
+	// All 3 should receive
 	for i, ch := range []<-chan ws.SSEEvent{ch1, ch2, ch3} {
 		select {
 		case <-ch:

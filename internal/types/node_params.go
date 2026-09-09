@@ -1,7 +1,7 @@
-// node_params.go 定义 TaskNode/Subtask 领域操作的领域参数结构体。
+// node_params.go defines the domain parameter structs for TaskNode/Subtask domain operations.
 //
-// 这些结构体是 sqlc 生成的 db.XxxParams 的 domain 对应物，
-// 字段一一对应，类型按 domain 风格映射：
+// These structs are the domain counterparts of the sqlc-generated db.XxxParams,
+// with fields mapped one-to-one and types mapped in domain style:
 //   - uuid.UUID → string
 //   - uuid.NullUUID → *string
 //   - sql.NullString → *string
@@ -15,21 +15,21 @@ import (
 	"time"
 )
 
-// ClaimTaskNodeParams 是 Agent 认领节点的领域参数结构体。
+// ClaimTaskNodeParams is the domain parameter struct for an Agent claiming a node.
 type ClaimTaskNodeParams struct {
 	ID         string  `json:"id"`
 	AssigneeID *string `json:"assignee_id"`
 	Version    int32   `json:"version"`
 }
 
-// ClaimTaskNodeByHumanParams 是人类认领节点的领域参数结构体。
+// ClaimTaskNodeByHumanParams is the domain parameter struct for a human claiming a node.
 type ClaimTaskNodeByHumanParams struct {
 	ID         string  `json:"id"`
 	AssigneeID *string `json:"assignee_id"`
 	Version    int32   `json:"version"`
 }
 
-// CreateTaskNodeParams 是创建任务节点的领域参数结构体。
+// CreateTaskNodeParams is the domain parameter struct for creating a task node.
 type CreateTaskNodeParams struct {
 	TaskID            int32           `json:"task_id"`
 	Name              string          `json:"name"`
@@ -47,57 +47,57 @@ type CreateTaskNodeParams struct {
 	DependsOn         []string        `json:"depends_on"`
 }
 
-// GetNextTaskNodeParams 是获取下一节点的领域参数结构体。
+// GetNextTaskNodeParams is the domain parameter struct for getting the next node.
 type GetNextTaskNodeParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`
 }
 
-// GetPrevStandardNodeAssigneeParams 是获取前一标准节点 assignee 的领域参数结构体。
+// GetPrevStandardNodeAssigneeParams is the domain parameter struct for getting the assignee of the previous standard node.
 type GetPrevStandardNodeAssigneeParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`
 }
 
-// GetPrevTaskNodeParams 是获取前一节点的领域参数结构体。
+// GetPrevTaskNodeParams is the domain parameter struct for getting the previous node.
 type GetPrevTaskNodeParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`
 }
 
-// GetTaskNodeBySortOrderParams 是按 sort_order 获取节点的领域参数结构体。
+// GetTaskNodeBySortOrderParams is the domain parameter struct for getting a node by sort_order.
 type GetTaskNodeBySortOrderParams struct {
 	TaskID    int32 `json:"task_id"`
 	SortOrder int32 `json:"sort_order"`
 }
 
-// ReclaimTaskNodeParams 是重新认领节点的领域参数结构体。
+// ReclaimTaskNodeParams is the domain parameter struct for reclaiming a node.
 type ReclaimTaskNodeParams struct {
 	ID      string `json:"id"`
 	Version int32  `json:"version"`
 }
 
-// ResetRejectCountParams 是重置节点驳回计数的领域参数结构体。
+// ResetRejectCountParams is the domain parameter struct for resetting a node's reject count.
 type ResetRejectCountParams struct {
 	ID string `json:"id"`
 }
 
-// UpdateNodeSummaryParams 是更新节点摘要的领域参数结构体。
+// UpdateNodeSummaryParams is the domain parameter struct for updating a node's summary.
 type UpdateNodeSummaryParams struct {
 	ID              string `json:"id"`
 	Summary         string `json:"summary"`
 	PreviousSummary string `json:"previous_summary"`
 }
 
-// UpdateTaskNodeStatusParams 是更新节点状态的领域参数结构体。
+// UpdateTaskNodeStatusParams is the domain parameter struct for updating a node's status.
 //
-// 注意：底层 SQL `UpdateTaskNodeStatus` 是"全字段覆盖 UPDATE"——
-// SET 子句会覆盖 assignee_type/assignee_id/reserved_for_agent_id/reject_count/reservation_expires_at，
-// WHERE 子句用 version 和旧 status 做乐观锁校验。
-// 因此调用方必须从当前节点快照回填全部字段（不是只传新 status）。
+// Note: the underlying SQL `UpdateTaskNodeStatus` is a "full-field overwrite UPDATE" —
+// the SET clause overwrites assignee_type/assignee_id/reserved_for_agent_id/reject_count/reservation_expires_at,
+// and the WHERE clause uses version and the old status for optimistic-lock verification.
+// Therefore the caller must backfill all fields from the current node snapshot (not just the new status).
 type UpdateTaskNodeStatusParams struct {
 	ID          string     `json:"id"`
-	Status      string     `json:"status"`                 // 新状态（SET status = $2）
+	Status      string     `json:"status"`                 // New status (SET status = $2)
 	AssigneeType string    `json:"assignee_type"`          // SET assignee_type = $3
 	AssigneeID  *string    `json:"assignee_id"`            // SET assignee_id = $4
 	ReservedForAgentID *string `json:"reserved_for_agent_id"` // SET reserved_for_agent_id = $5
@@ -105,11 +105,11 @@ type UpdateTaskNodeStatusParams struct {
 	CompletedAt *time.Time `json:"completed_at"`           // SET completed_at = $7
 	CompletedBy *string    `json:"completed_by"`           // SET completed_by = $8
 	ReservationExpiresAt *time.Time `json:"reservation_expires_at"` // SET reservation_expires_at = $9
-	Version     int32      `json:"version"`                // WHERE version = $10（旧版本号，UPDATE 后自增）
-	ExpectedCurrentStatus string `json:"expected_current_status"` // WHERE status = $11（旧状态校验）
+	Version     int32      `json:"version"`                // WHERE version = $10 (old version number, auto-incremented after UPDATE)
+	ExpectedCurrentStatus string `json:"expected_current_status"` // WHERE status = $11 (old status verification)
 }
 
-// CreateSubtaskParams 是创建子任务的领域参数结构体。
+// CreateSubtaskParams is the domain parameter struct for creating a subtask.
 type CreateSubtaskParams struct {
 	ProjectID    string     `json:"project_id"`
 	Title        string     `json:"title"`
@@ -127,7 +127,7 @@ type CreateSubtaskParams struct {
 	ParentTaskID *int32     `json:"parent_task_id"`
 }
 
-// CreateTaskLogParams 是创建任务日志的领域参数结构体。
+// CreateTaskLogParams is the domain parameter struct for creating a task log.
 type CreateTaskLogParams struct {
 	TaskID    int32     `json:"task_id"`
 	NodeID    string    `json:"node_id"`
@@ -136,7 +136,7 @@ type CreateTaskLogParams struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// ListTaskLogsByTaskNodeParams 是按节点列出任务日志的领域参数结构体。
+// ListTaskLogsByTaskNodeParams is the domain parameter struct for listing task logs by node.
 type ListTaskLogsByTaskNodeParams struct {
 	TaskID int32  `json:"task_id"`
 	NodeID string `json:"node_id"`

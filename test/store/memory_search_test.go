@@ -1,4 +1,4 @@
-// memory_search_test.go 覆盖记忆语义搜索的测试。
+// memory_search_test.go covers memory semantic search tests.
 package store_test
 
 import (
@@ -10,14 +10,14 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestSearchMemories_ILIKE 验证通过 ILIKE 搜索记忆标题和内容。
+// TestSearchMemories_ILIKE verifies searching memory titles and content via ILIKE.
 func TestSearchMemories_ILIKE(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 
-	// 创建记忆
+	// Create memories
 	_, err := s.CreateMemory(ctx, types.CreateMemoryParams{
 		WorkspaceID: ws.ID,
 		Type:        "insight",
@@ -38,7 +38,7 @@ func TestSearchMemories_ILIKE(t *testing.T) {
 		t.Fatalf("CreateMemory: %v", err)
 	}
 
-	// 按标题搜索
+	// Search by title
 	results, err := s.SearchMemories(ctx, "API", uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("SearchMemories: %v", err)
@@ -50,7 +50,7 @@ func TestSearchMemories_ILIKE(t *testing.T) {
 		t.Fatalf("expected 'API Design Pattern', got %s", results[0].Title)
 	}
 
-	// 按内容搜索
+	// Search by content
 	results, err = s.SearchMemories(ctx, "PostgreSQL", uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("SearchMemories: %v", err)
@@ -60,14 +60,14 @@ func TestSearchMemories_ILIKE(t *testing.T) {
 	}
 }
 
-// TestSearchMemories_SpecialChars 验证搜索含特殊字符（% 和 _）的记忆。
+// TestSearchMemories_SpecialChars verifies searching memories containing special characters (% and _).
 func TestSearchMemories_SpecialChars(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 
-	// 创建包含特殊字符的记忆
+	// Create a memory with special characters
 	_, err := s.CreateMemory(ctx, types.CreateMemoryParams{
 		WorkspaceID: ws.ID,
 		Type:        "convention",
@@ -78,7 +78,7 @@ func TestSearchMemories_SpecialChars(t *testing.T) {
 		t.Fatalf("CreateMemory: %v", err)
 	}
 
-	// 使用特殊字符搜索——应转义 % 和 _
+	// Search with special characters — should escape % and _
 	results, err := s.SearchMemories(ctx, "100%", uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("SearchMemories: %v", err)
@@ -96,7 +96,7 @@ func TestSearchMemories_SpecialChars(t *testing.T) {
 	}
 }
 
-// TestMarkMemoriesStaleByTask 验证按任务标记记忆为过时。
+// TestMarkMemoriesStaleByTask verifies marking memories as stale by task.
 func TestMarkMemoriesStaleByTask(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
@@ -106,7 +106,7 @@ func TestMarkMemoriesStaleByTask(t *testing.T) {
 	agent, _ := createTestAgent(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// 创建任务
+	// Create a task
 	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Task with memory",
@@ -120,7 +120,7 @@ func TestMarkMemoriesStaleByTask(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// 创建与任务关联的记忆
+	// Create a memory associated with the task
 	_, err = s.CreateMemory(ctx, types.CreateMemoryParams{
 		WorkspaceID:  ws.ID,
 		SourceTaskID: &task.ID,
@@ -132,13 +132,13 @@ func TestMarkMemoriesStaleByTask(t *testing.T) {
 		t.Fatalf("CreateMemory: %v", err)
 	}
 
-	// 将记忆标记为过期
+	// Mark the memory as stale
 	err = s.MarkMemoriesStaleByTask(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("MarkMemoriesStaleByTask: %v", err)
 	}
 
-	// 通过搜索验证记忆现在已过期（过期记忆不应出现）
+	// Verify the memory is now stale via search (stale memories should not appear)
 	results, err := s.SearchMemories(ctx, "Task insight", uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("SearchMemories: %v", err)

@@ -1,4 +1,4 @@
-// node_dto.go 定义 Node 相关的请求/响应结构体和领域类型别名。
+// node_dto.go defines request/response structs and domain type aliases related to Node.
 package handler
 
 import (
@@ -7,7 +7,7 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// ---- 领域类型别名，消除 handler 对 db/generated 的直接依赖 ----
+// ---- domain type aliases, removing the handler's direct dependency on db/generated ----
 // Note: AssigneeType, AssigneeTypeHuman, NodeType are defined in workflow_dto.go.
 
 type TaskNodeStatus = string
@@ -22,42 +22,42 @@ const TransitionActionInterruptAck = apitypes.TransitionActionInterruptAck
 
 type CreateNodeTransitionParams = apitypes.CreateNodeTransitionParams
 
-// ---- 请求结构体 ----
+// ---- request structs ----
 
-// approveNodeRequest 审批请求体。
+// approveNodeRequest approval request body.
 type approveNodeRequest struct {
-	Comment string `json:"comment"` // 审批意见
+	Comment string `json:"comment"` // approval comment
 }
 
-// rejectNodeRequest �驳回请求体。
+// rejectNodeRequest rejection request body.
 type rejectNodeRequest struct {
-	TargetNodeID *uuid.UUID `json:"target_node_id"` // 回退目标节点 ID（可选）
-	Comment      string     `json:"comment"`        // 驳回意见
+	TargetNodeID *uuid.UUID `json:"target_node_id"` // rollback target node ID (optional)
+	Comment      string     `json:"comment"`        // rejection comment
 }
 
-// manualInterventionRequest 人工干预请求体。
+// manualInterventionRequest manual intervention request body.
 type manualInterventionRequest struct {
-	Comment string `json:"comment"` // 干预说明
+	Comment string `json:"comment"` // intervention explanation
 }
 
-// resolveNodeRequest 解决人工干预请求体。
+// resolveNodeRequest resolve manual intervention request body.
 type resolveNodeRequest struct {
-	Comment string     `json:"comment"`  // 解决说明
-	AgentID *uuid.UUID `json:"agent_id"` // 可选：重新分配给其他 Agent
-	Action  string     `json:"action"`   // 恢复方式：re_execute（默认）或 complete
+	Comment string     `json:"comment"`  // resolution explanation
+	AgentID *uuid.UUID `json:"agent_id"` // optional: reassign to another Agent
+	Action  string     `json:"action"`   // resolution method: re_execute (default) or complete
 }
 
-// completeNodeRequest 完成节点请求体。
+// completeNodeRequest complete node request body.
 type completeNodeRequest struct {
-	Summary string `json:"summary"` // 执行摘要
+	Summary string `json:"summary"` // execution summary
 }
 
-// interruptAckRequest 中断确认请求体。
+// interruptAckRequest interrupt acknowledgment request body.
 type interruptAckRequest struct {
-	Comment string `json:"comment"` // 确认说明
+	Comment string `json:"comment"` // acknowledgment explanation
 }
 
-// updateSummaryRequest 更新摘要请求体。
+// updateSummaryRequest update summary request body.
 type updateSummaryRequest struct {
-	Summary string `json:"summary"` // 执行摘要
+	Summary string `json:"summary"` // execution summary
 }

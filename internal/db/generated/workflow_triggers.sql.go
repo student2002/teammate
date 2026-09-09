@@ -32,7 +32,7 @@ type CreateWorkflowTriggerRunParams struct {
 	Payload            json.RawMessage     `db:"payload" json:"payload"`
 }
 
-// 工作流触发器查询
+// Workflow trigger queries
 func (q *Queries) CreateWorkflowTriggerRun(ctx context.Context, arg CreateWorkflowTriggerRunParams) (WorkflowTriggerRun, error) {
 	row := q.db.QueryRowContext(ctx, createWorkflowTriggerRun,
 		arg.WorkspaceID,

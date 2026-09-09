@@ -1,4 +1,4 @@
--- 邀请
+-- Invitations
 
 -- name: CreateInvitation :one
 INSERT INTO invitations (workspace_id, email, role, token_hash, invited_by, expires_at)

@@ -1,4 +1,4 @@
-// memory.go 实现记忆子命令，管理工作区共享记忆。
+// memory.go implements the memory subcommand, managing workspace shared memories.
 package main
 
 import (

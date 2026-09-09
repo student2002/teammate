@@ -1,4 +1,4 @@
-// routes_public.go 注册无需认证的公共路由。
+// routes_public.go registers public routes that require no authentication.
 package server
 
 import (

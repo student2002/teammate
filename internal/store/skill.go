@@ -1,4 +1,4 @@
-// skill.go 提供技能管理的数据访问操作。
+// skill.go provides data access operations for skill management.
 package store
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// GetSkill 根据 ID 获取单个技能。
+// GetSkill gets a single skill by ID.
 func (s *Store) GetSkill(ctx context.Context, id uuid.UUID) (types.Skill, error) {
 	skill, err := s.q.GetSkill(ctx, id)
 	if err != nil {
@@ -19,7 +19,7 @@ func (s *Store) GetSkill(ctx context.Context, id uuid.UUID) (types.Skill, error)
 	return ToDomainSkill(skill)
 }
 
-// CreateSkill 创建一个新的技能。
+// CreateSkill creates a new skill.
 func (s *Store) CreateSkill(ctx context.Context, params types.CreateSkillParams) (types.Skill, error) {
 	dbParams, err := FromDomainCreateSkillParams(params)
 	if err != nil {
@@ -32,7 +32,7 @@ func (s *Store) CreateSkill(ctx context.Context, params types.CreateSkillParams)
 	return ToDomainSkill(skill)
 }
 
-// ListSkills 列出指定工作区的所有技能。
+// ListSkills lists all skills in the specified workspace.
 func (s *Store) ListSkills(ctx context.Context, workspaceID uuid.UUID) ([]types.Skill, error) {
 	skills, err := s.q.ListSkills(ctx, workspaceID)
 	if err != nil {
@@ -41,7 +41,7 @@ func (s *Store) ListSkills(ctx context.Context, workspaceID uuid.UUID) ([]types.
 	return ToDomainSkillSlice(skills)
 }
 
-// DeleteSkill 删除一个技能。
+// DeleteSkill deletes a skill.
 func (s *Store) DeleteSkill(ctx context.Context, id uuid.UUID) error {
 	if err := s.q.DeleteSkill(ctx, id); err != nil {
 		return fmt.Errorf("delete skill: %w", err)

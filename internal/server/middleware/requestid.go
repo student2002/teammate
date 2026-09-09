@@ -1,7 +1,7 @@
-// requestid.go 提供请求 ID 注入中间件，为每个 HTTP 请求生成唯一的 UUID v4 标识符。
+// requestid.go provides a request-ID injection middleware that generates a unique UUID v4 identifier for each HTTP request.
 //
-// 请求 ID 的 context key 定义在 internal/contextx 包中，
-// service 层通过 contextx.GetRequestIDFromContext 读取，避免反向依赖 middleware。
+// The context key for the request ID is defined in the internal/contextx package;
+// the service layer reads it via contextx.GetRequestIDFromContext, avoiding a reverse dependency on middleware.
 package middleware
 
 import (
@@ -13,14 +13,14 @@ import (
 	"github.com/teammate/server/internal/contextx"
 )
 
-// GetRequestIDFromContext 从请求上下文中获取请求 ID。
-// 委托给 contextx.GetRequestIDFromContext，保持向后兼容。
+// GetRequestIDFromContext retrieves the request ID from the request context.
+// It delegates to contextx.GetRequestIDFromContext for backward compatibility.
 func GetRequestIDFromContext(ctx context.Context) uuid.UUID {
 	return contextx.GetRequestIDFromContext(ctx)
 }
 
-// RequestID 为每个请求生成唯一的请求 ID（UUID v4），并注入到请求上下文中。
-// 该 ID 会设置到 X-Request-ID 响应头，客户端可用于问题反馈和请求追踪。
+// RequestID generates a unique request ID (UUID v4) for each request and injects it into the request context.
+// The ID is also set on the X-Request-ID response header, so the client can use it for issue feedback and request tracing.
 func RequestID() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

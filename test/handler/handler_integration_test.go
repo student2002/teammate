@@ -1,4 +1,4 @@
-// handler_integration_test.go 覆盖 handler 层集成流程的测试。
+// handler_integration_test.go tests handler layer integration flows.
 package handler_test
 
 import (
@@ -14,7 +14,7 @@ import (
 	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
-// ---------- 工作区 API ----------
+// ---------- Workspace API ----------
 
 func TestWorkspaceAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -45,7 +45,7 @@ func TestWorkspaceAPI(t *testing.T) {
 	createdWsID := wsResult["id"].(string)
 	t.Logf("Created workspace: %s", createdWsID)
 
-	// 清理
+	// Cleanup
 	defer func() {
 		doRequestWithToken(t, client, http.MethodDelete, srv.URL+"/api/workspaces/"+createdWsID, token, nil)
 	}()
@@ -100,7 +100,7 @@ func TestWorkspaceAPI(t *testing.T) {
 	}
 }
 
-// ---------- 工作流 API ----------
+// ---------- Workflow API ----------
 
 func TestWorkflowAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -114,7 +114,7 @@ func TestWorkflowAPI(t *testing.T) {
 
 	baseURL := srv.URL + "/api/workspaces/" + wsID + "/workflows"
 
-	// 1. 创建带节点的工作流模板
+	// 1. Create a workflow template with nodes
 	createBody := map[string]interface{}{
 		"name":        "test-workflow",
 		"description": "integration test workflow",
@@ -170,7 +170,7 @@ func TestWorkflowAPI(t *testing.T) {
 	}
 }
 
-// ---------- 项目 API ----------
+// ---------- Project API ----------
 
 func TestProjectAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -256,7 +256,7 @@ func TestProjectAPI(t *testing.T) {
 	}
 }
 
-// ---------- 代理 API ----------
+// ---------- Agent API ----------
 
 func TestAgentAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -344,7 +344,7 @@ func TestAgentAPI(t *testing.T) {
 	}
 }
 
-// ---------- 任务 API ----------
+// ---------- Task API ----------
 
 func TestTaskAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -356,13 +356,13 @@ func TestTaskAPI(t *testing.T) {
 
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建项目
+	// Create project
 	projID := createProject(t, client, srv.URL, wsID, token)
 
-	// 创建带节点的工作流模板
+	// Create a workflow template with nodes
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
 
-	// 设置
+	// Setup
 	updateBody := map[string]interface{}{
 		"name":                "test-project",
 		"description":         "integration test project",
@@ -375,7 +375,7 @@ func TestTaskAPI(t *testing.T) {
 
 	taskBaseURL := srv.URL + "/api/projects/" + projID + "/tasks"
 
-	// 1. 创建任务（应自动创建 task_nodes）
+	// 1. Create a task (should auto-create task_nodes)
 	authorID := uuid.New().String()
 	createBody := map[string]interface{}{
 		"title":                "Test task",
@@ -399,14 +399,14 @@ func TestTaskAPI(t *testing.T) {
 	taskID := int32(taskMap["id"].(float64))
 	t.Logf("Created task: %d", taskID)
 
-	// 验证 task_nodes 已自动创建
+	// Verify task_nodes were auto-created
 	nodesArr, ok := taskResult["nodes"].([]interface{})
 	if !ok || len(nodesArr) == 0 {
 		t.Fatal("CreateTask: expected task_nodes to be auto-created, got none")
 	}
 	t.Logf("Auto-created %d task nodes", len(nodesArr))
 
-	// 2. 列出任务（传入状态筛选器，避免空字符串导致 SQL 枚举转换错误）
+	// 2. List tasks (pass status filter to avoid empty string causing SQL enum conversion error)
 	_, status, body = doRequestWithToken(t, client, http.MethodGet, taskBaseURL+"?status=active", token, nil)
 	if status != http.StatusOK {
 		t.Fatalf("ListTasks: expected 200, got %d", status)
@@ -432,7 +432,7 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatalf("expected title 'Test task', got %q", taskGet["title"])
 	}
 
-	// 4. 列出任务节点（task 作用域端点）
+	// 4. List task nodes (task-scoped endpoint)
 	_, status, body = doRequestWithToken(t, client, http.MethodGet, fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID), token, nil)
 	if status != http.StatusOK {
 		t.Fatalf("ListTaskNodes: expected 200, got %d", status)
@@ -445,14 +445,14 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatal("ListTaskNodes: expected at least 1 node")
 	}
 
-	// 清理：删除任务
+	// Cleanup: delete task
 	_, status, _ = doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/%d", taskBaseURL, taskID), token, nil)
 	if status != http.StatusNoContent {
 		t.Fatalf("DeleteTask: expected 204, got %d", status)
 	}
 }
 
-// ---------- 节点操作 API ----------
+// ---------- Node Operations API ----------
 
 func TestNodeOperationsAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -464,11 +464,11 @@ func TestNodeOperationsAPI(t *testing.T) {
 
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 完整设置：项目、工作流、任务
+	// Full setup: project, workflow, task
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
 
-	// 设置
+	// Setup
 	updateBody := map[string]interface{}{
 		"name":                "test-project",
 		"description":         "integration test project",
@@ -479,9 +479,9 @@ func TestNodeOperationsAPI(t *testing.T) {
 	_, _, _ = doRequestWithToken(t, client, http.MethodPut,
 		srv.URL+"/api/workspaces/"+wsID+"/projects/"+projID, token, updateBody)
 
-	// 创建代理用于认领
+	// Create agent for claiming
 	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
-	// 将 Agent 添加到项目（认领节点所需）
+	// Add agent to project (required for node claiming)
 	q := dbQueries(t, db)
 	_, err := q.CreateProjectMember(context.Background(), dbgen.CreateProjectMemberParams{
 		ProjectID:  uuid.MustParse(projID),
@@ -494,7 +494,7 @@ func TestNodeOperationsAPI(t *testing.T) {
 	}
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
-	// 创建任务
+	// Create task
 	taskBaseURL := srv.URL + "/api/projects/" + projID + "/tasks"
 	authorID := uuid.New().String()
 	createTaskBody := map[string]interface{}{
@@ -522,7 +522,7 @@ func TestNodeOperationsAPI(t *testing.T) {
 		t.Fatal("expected task nodes to be created")
 	}
 
-	// 获取第一个待处理节点
+	// Get the first pending node
 	firstNode := nodesArr[0].(map[string]interface{})
 	nodeID := firstNode["id"].(string)
 	t.Logf("Task %d, first node: %s", taskID, nodeID)
@@ -546,7 +546,7 @@ func TestNodeOperationsAPI(t *testing.T) {
 	}
 	t.Logf("Node claimed successfully, status: %v", claimedNode["status"])
 
-	// 2. 同一 Agent 重复认领具有幂等性（返回 200）
+	// 2. Duplicate claim by the same agent is idempotent (returns 200)
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, claimBody)
 	if status != http.StatusOK {
 		t.Fatalf("Same-agent double-claim: expected 200 (idempotent), got %d", status)
@@ -572,18 +572,18 @@ func TestNodeOperationsAPI(t *testing.T) {
 	}
 	t.Logf("Node approved, status: %v", approvedNode["status"])
 
-	// 4. 测试乐观锁——尝试认领已完成的节点应失败
+	// 4. Test optimistic locking — claiming a completed node should fail
 	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, claimBody)
 	if status != http.StatusConflict {
 		t.Fatalf("Claim completed node: expected 409, got %d", status)
 	}
 	t.Log("Claim on completed node correctly rejected with 409 (optimistic lock via status guard)")
 
-	// 清理：删除任务
+	// Cleanup: delete task
 	_, _, _ = doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/%d", taskBaseURL, taskID), token, nil)
 }
 
-// ---------- 运行时 API ----------
+// ---------- Runtime API ----------
 
 func TestRuntimeAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
@@ -595,12 +595,12 @@ func TestRuntimeAPI(t *testing.T) {
 
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// 创建代理
+	// Create agent
 	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
 
 	runtimeBaseURL := srv.URL + "/api/workspaces/" + wsID + "/runtimes"
 
-	// 1. 注册 runtime（Agent 注册自己的 runtime）
+	// 1. Register runtime (agent registers its own runtime)
 	daemonID := fmt.Sprintf("daemon-%s", uuid.New().String()[:8])
 	registerBody := map[string]interface{}{
 		"agent_id":           agentID,

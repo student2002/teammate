@@ -1,4 +1,4 @@
-// token.go 实现 Token 用量子命令，查询 Token 用量。
+// token.go implements the token usage subcommand, querying token usage.
 package main
 
 import (

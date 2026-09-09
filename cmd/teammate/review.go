@@ -1,4 +1,4 @@
-// review.go 实现审查子命令，管理代码审查队列。
+// review.go implements the review subcommand, managing the code review queue.
 package main
 
 import (

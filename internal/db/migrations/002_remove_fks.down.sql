@@ -1,9 +1,9 @@
--- 002_remove_fks down: 恢复被移除的外键约束与唯一约束回滚
+-- 002_remove_fks down: restore the removed foreign key and unique constraint rollback
 
--- 唯一约束回滚
+-- unique constraint rollback
 ALTER TABLE workflow_template_nodes DROP CONSTRAINT IF EXISTS workflow_template_nodes_template_sort_order_key;
 
--- 恢复外键（回滚顺序与 up 相反）
+-- restore foreign keys (rollback order is reverse of up)
 ALTER TABLE workflow_trigger_runs
     ADD CONSTRAINT workflow_trigger_runs_task_id_fkey FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL;
 

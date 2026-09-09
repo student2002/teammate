@@ -1,11 +1,11 @@
-// review.go 提供审查队列查询和自我审查检测等 HTTP API 端点。
+// review.go provides HTTP API endpoints for review queue queries and self-review detection.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - GET /projects/{projectId}/review-queue: 获取项目的审查队列，返回待审查的节点列表
-//   - GET /projects/{projectId}/review/nodes/{nodeId}/self-review-check: 检测审查节点是否存在自我审查冲突
+// This file provides the following HTTP API endpoints:
+//   - GET /projects/{projectId}/review-queue: get the project's review queue, returning the list of nodes pending review
+//   - GET /projects/{projectId}/review/nodes/{nodeId}/self-review-check: detect whether the review node has a self-review conflict
 //
-// 审查队列由 ReviewService 查询，列出指定项目中所有待审查的节点。
-// 自我审查检测用于判断审查者是否为前序节点的执行 Agent，避免自我审查回避机制违规。
+// The review queue is queried by ReviewService and lists all nodes pending review in the specified project.
+// Self-review detection is used to determine whether the reviewer is the executing Agent of a preceding node, to avoid violating the self-review avoidance mechanism.
 
 package handler
 
@@ -21,26 +21,26 @@ import (
 	"github.com/teammate/server/internal/service"
 )
 
-// ReviewHandler 处理审查相关的 HTTP 请求，包括审查队列查询和自我审查检测。
+// ReviewHandler handles HTTP requests related to reviews, including review queue queries and self-review detection.
 type ReviewHandler struct {
 	Svc *service.Service
 }
 
-// NewReviewHandler 创建 ReviewHandler 实例。
+// NewReviewHandler creates a ReviewHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供审查队列和自我审查检测能力
+// Parameters:
+//   - svc: business logic service instance, provides review queue and self-review detection capability
 //
-// 返回:
-//   - *ReviewHandler: 审查处理器实例
+// Returns:
+//   - *ReviewHandler: review handler instance
 func NewReviewHandler(svc *service.Service) *ReviewHandler {
 	return &ReviewHandler{Svc: svc}
 }
 
-// Routes 返回审查相关的路由表。
+// Routes returns the route table for review-related operations.
 //
-// 返回:
-//   - chi.Router: 包含审查队列查询和自我审查检测端点的路由
+// Returns:
+//   - chi.Router: router containing the review queue query and self-review detection endpoints
 func (h *ReviewHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -50,14 +50,14 @@ func (h *ReviewHandler) Routes() chi.Router {
 	return r
 }
 
-// GetReviewQueue 处理 GET /projects/{projectId}/review-queue 端点，获取项目的审查队列，返回待审查的节点列表。
+// GetReviewQueue handles the GET /projects/{projectId}/review-queue endpoint, getting the project's review queue and returning the list of nodes pending review.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 projectId 为项目 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter projectId is the project UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含待审查节点列表或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w containing the list of nodes pending review or an error message
 func (h *ReviewHandler) GetReviewQueue(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
 	if err != nil {
@@ -75,14 +75,14 @@ func (h *ReviewHandler) GetReviewQueue(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, r, items)
 }
 
-// CheckSelfReview 处理 GET /projects/{projectId}/review/nodes/{nodeId}/self-review-check 端点，检测审查节点是否存在自我审查冲突。
+// CheckSelfReview handles the GET /projects/{projectId}/review/nodes/{nodeId}/self-review-check endpoint, detecting whether the review node has a self-review conflict.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 taskId 为任务 ID，nodeId 为节点 UUID
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID, nodeId is the node UUID
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应，包含自我审查检测结果或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w containing the self-review detection result or an error message
 func (h *ReviewHandler) CheckSelfReview(w http.ResponseWriter, r *http.Request) {
 	taskIDStr := chi.URLParam(r, "taskId")
 	var taskID int32

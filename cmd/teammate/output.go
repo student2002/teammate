@@ -1,4 +1,4 @@
-// output.go 提供 CLI 输出格式化工具，支持 JSON/YAML/表格等格式。
+// output.go provides CLI output formatting utilities, supporting JSON/YAML/table and other formats.
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// OutputFormat 表示输出格式类型。
+// OutputFormat represents the output format type.
 type OutputFormat string
 
 const (
@@ -23,7 +23,7 @@ const (
 	FormatYAML  OutputFormat = "yaml"
 )
 
-// parseOutputFormat 将字符串解析为 OutputFormat。
+// parseOutputFormat parses a string into an OutputFormat.
 func parseOutputFormat(s string) OutputFormat {
 	switch strings.ToLower(s) {
 	case "json":
@@ -35,12 +35,12 @@ func parseOutputFormat(s string) OutputFormat {
 	}
 }
 
-// printOutput 以指定格式将数据输出到 stdout。
+// printOutput outputs data to stdout in the specified format.
 func printOutput(data interface{}, f OutputFormat) error {
 	return fprintOutput(os.Stdout, data, f)
 }
 
-// fprintOutput 以指定格式将数据输出到给定的 writer。
+// fprintOutput outputs data to the given writer in the specified format.
 func fprintOutput(w io.Writer, data interface{}, f OutputFormat) error {
 	switch f {
 	case FormatJSON:
@@ -57,7 +57,7 @@ func fprintOutput(w io.Writer, data interface{}, f OutputFormat) error {
 	}
 }
 
-// printTable 使用 tabwriter 将数据渲染为简单表格。
+// printTable renders data as a simple table using tabwriter.
 func printTable(w io.Writer, data interface{}) error {
 	v := reflect.ValueOf(data)
 
@@ -167,14 +167,14 @@ func fmtValue(v reflect.Value) string {
 		v = v.Elem()
 	}
 
-	// 处理实现了 Stringer 接口的类型
+	// Handle types implementing the Stringer interface
 	if v.CanInterface() {
 		if s, ok := v.Interface().(fmt.Stringer); ok {
 			return s.String()
 		}
 	}
 
-	// 处理 sql.Null* 类型
+	// Handle sql.Null* types
 	if v.CanInterface() {
 		switch nv := v.Interface().(type) {
 		case sql.NullString:
@@ -207,9 +207,9 @@ func fmtValue(v reflect.Value) string {
 
 	switch v.Kind() {
 	case reflect.Slice, reflect.Array:
-		// 特殊情况：[16]byte (uuid.UUID)
+		// Special case: [16]byte (uuid.UUID)
 		if v.Type().Elem().Kind() == reflect.Uint8 && v.Len() == 16 {
-			// 尝试格式化为 UUID
+			// Try to format as a UUID
 			var buf [16]byte
 			for i := 0; i < 16; i++ {
 				buf[i] = byte(v.Index(i).Uint())
@@ -230,8 +230,8 @@ func fmtValue(v reflect.Value) string {
 		}
 		return fmt.Sprintf("%v", v.Interface())
 	case reflect.Struct:
-		// 对于上述未捕获到的类似 NullString 的结构体，
-		// 尝试查找并使用 .String 字段
+		// For NullString-like structs not caught above,
+		// try to find and use the .String field
 		sf := v.FieldByName("String")
 		if sf.IsValid() && sf.Kind() == reflect.String {
 			validF := v.FieldByName("Valid")

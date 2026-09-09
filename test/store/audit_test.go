@@ -1,4 +1,4 @@
-// audit_test.go 覆盖审计日志数据访问的测试。
+// audit_test.go tests for audit log data access.
 package store_test
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestAuditLogCRUD 验证审计日志的创建和列表查询功能。
+// TestAuditLogCRUD verifies audit log creation and listing functionality.
 func TestAuditLogCRUD(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()

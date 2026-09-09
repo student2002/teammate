@@ -1,4 +1,4 @@
-// project.go 实现项目子命令，管理项目的增删改查和成员配置。
+// project.go implements the project subcommand, managing project CRUD operations and member configuration.
 package main
 
 import (

@@ -1,4 +1,4 @@
-// root.go 定义 CLI 根命令，提供子命令注册、服务连接和公共初始化。
+// root.go defines the CLI root command, providing subcommand registration, service connection, and common initialization.
 package main
 
 import (
@@ -12,7 +12,7 @@ var (
 	outputFmt string
 )
 
-// 退出码
+// Exit codes
 const (
 	ExitSuccess   = 0
 	ExitGeneral   = 1
@@ -25,7 +25,7 @@ const (
 	ExitInternal  = 50
 )
 
-// skipAuthCommands 不需要认证的命令（完整 CommandPath）。
+// skipAuthCommands lists commands that do not require authentication (full CommandPath).
 var skipAuthCommands = map[string]bool{
 	"teammate auth login":            true,
 	"teammate auth register":         true,
@@ -33,7 +33,7 @@ var skipAuthCommands = map[string]bool{
 	"teammate completion zsh":        true,
 	"teammate completion fish":       true,
 	"teammate completion powershell": true,
-	"teammate":                       true, // root 本身
+	"teammate":                       true, // root itself
 }
 
 var rootCmd = &cobra.Command{
@@ -46,23 +46,23 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", "table", "output format: table, json, yaml")
 	rootCmd.PersistentFlags().String("token", "", "JWT token (overrides stored credentials)")
 
-	// 全局认证拦截
+	// Global authentication interception
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if skipAuthCommands[cmd.CommandPath()] {
 			return nil
 		}
-		// 验证 token 有效（未登录或过期则退出）
+		// Validate the token (exit if not logged in or expired)
 		requireAuth()
 		return nil
 	}
 }
 
-// getOutputFormat 返回当前输出格式。
+// getOutputFormat returns the current output format.
 func getOutputFormat() OutputFormat {
 	return parseOutputFormat(outputFmt)
 }
 
-// exitError 打印错误信息并以指定退出码退出。
+// exitError prints an error message and exits with the specified exit code.
 func exitError(code int, msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(code)

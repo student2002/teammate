@@ -1,16 +1,16 @@
-// notification.go 实现通知的业务逻辑，聚合工作区内的人工干预节点和提及评论。
+// notification.go implements the business logic for notifications, aggregating manual-intervention nodes and mention comments within a workspace.
 //
-// 本文件包含：
-//   - NotificationService 结构体：通知管理服务，聚合多种类型的通知
-//   - NotificationItem 结构体：通知条目，包含类型、标题、描述、时间和关联任务 ID
-//   - ListNotifications：列出指定工作区和成员的通知，合并人工干预和提及两类通知
+// This file contains:
+//   - NotificationService struct: the notification management service, aggregating multiple types of notifications
+//   - NotificationItem struct: a notification entry, including type, title, description, time, and the associated task ID
+//   - ListNotifications: lists notifications for the specified workspace and member, merging two types of notifications: manual intervention and mention
 //
-// 通知类型包括：
-//   - manual_intervention：需要人类处理的工作流节点
-//   - mention：在评论中被 @mention 的成员
+// Notification types include:
+//   - manual_intervention: workflow nodes that require human handling
+//   - mention: members who are @mentioned in comments
 //
-// 两类通知合并后返回，供前端统一渲染通知中心。
-// 人工干预通知面向工作区所有成员，提及通知仅针对被 @mention 的特定成员。
+// The two types of notifications are merged and returned for the frontend to render the notification center uniformly.
+// Manual-intervention notifications target all members of the workspace, while mention notifications only target the specific member who was @mentioned.
 package service
 
 import (
@@ -22,43 +22,43 @@ import (
 	"github.com/google/uuid"
 )
 
-// NotificationService 提供通知管理相关的业务逻辑。
+// NotificationService provides the business logic for notification management.
 type NotificationService struct {
 	svc *Service
 }
 
-// NewNotificationService 创建一个新的 NotificationService 实例。
+// NewNotificationService creates a new NotificationService instance.
 func NewNotificationService(svc *Service) *NotificationService {
 	return &NotificationService{svc: svc}
 }
 
-// NotificationItem 表示一条通知，包含通知类型（manual_intervention 或 mention）、
-// 标题、描述、创建时间和关联的任务 ID。
+// NotificationItem represents a notification, including the notification type (manual_intervention or mention),
+// title, description, creation time, and the associated task ID.
 type NotificationItem struct {
-	ID          string    `json:"id"`           // 通知唯一标识
-	Type        string    `json:"type"`         // 通知类型：manual_intervention 或 mention
-	Title       string    `json:"title"`        // 通知标题（通常为任务标题）
-	Description string    `json:"description"`  // 通知描述（节点名称或评论内容）
-	CreatedAt   time.Time `json:"created_at"`   // 通知创建时间
-	TaskID      int32     `json:"task_id"`      // 关联的任务 ID
+	ID          string    `json:"id"`           // notification unique identifier
+	Type        string    `json:"type"`         // notification type: manual_intervention or mention
+	Title       string    `json:"title"`        // notification title (usually the task title)
+	Description string    `json:"description"`  // notification description (node name or comment content)
+	CreatedAt   time.Time `json:"created_at"`   // notification creation time
+	TaskID      int32     `json:"task_id"`      // associated task ID
 }
 
-// ListNotifications 列出指定工作区和成员的通知，包括人工干预节点和提及评论。
-// 两类通知合并后返回，供前端统一渲染通知中心。
+// ListNotifications lists notifications for the specified workspace and member, including manual-intervention nodes and mention comments.
+// The two types of notifications are merged and returned for the frontend to render the notification center uniformly.
 //
-// 步骤：
-//  1. 查询工作区内所有 manual_intervention 状态的节点，生成人工干预通知
-//  2. 如果指定了成员 ID，查询该成员被 @mention 的评论，生成提及通知
-//  3. 合并两类通知并返回
+// Steps:
+//  1. Query all nodes in the workspace that are in the manual_intervention state, and generate manual-intervention notifications
+//  2. If a member ID is specified, query the comments where the member was @mentioned, and generate mention notifications
+//  3. Merge the two types of notifications and return
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 ID，用于隔离通知
-//   - memberID: 成员 ID，用于查询提及评论（传入 uuid.Nil 则跳过提及查询）
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace ID, used to isolate notifications
+//   - memberID: member ID, used to query mention comments (passing uuid.Nil skips the mention query)
 //
-// 返回：
-//   - []NotificationItem: 通知列表
-//   - error: 可能的错误（数据库查询失败）
+// Returns:
+//   - []NotificationItem: notification list
+//   - error: possible errors (database query failure)
 func (s *NotificationService) ListNotifications(ctx context.Context, workspaceID uuid.UUID, memberID uuid.UUID) ([]NotificationItem, error) {
 	notifications := make([]NotificationItem, 0)
 

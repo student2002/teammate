@@ -1,4 +1,4 @@
-// notification.go 实现通知子命令，查询和管理通知。
+// notification.go implements the notification subcommand, querying and managing notifications.
 package main
 
 import (

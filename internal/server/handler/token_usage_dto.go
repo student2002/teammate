@@ -1,4 +1,4 @@
-// token_usage_dto.go 为 token_usage.go 提供参数构建器。
+// token_usage_dto.go provides parameter builders for token_usage.go.
 package handler
 
 import (
@@ -9,9 +9,9 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// ---- 参数构建器 ----
+// ---- parameter builders ----
 
-// buildCreateTokenUsageParams 从请求字段构建 types.CreateTokenUsageParams。
+// buildCreateTokenUsageParams builds types.CreateTokenUsageParams from request fields.
 func buildCreateTokenUsageParams(
 	taskNodeID uuid.UUID,
 	agentID uuid.UUID,
@@ -24,7 +24,7 @@ func buildCreateTokenUsageParams(
 	if costEstimate != "" {
 		costPtr = &costEstimate
 	}
-	// 静默 sql 引用，保留以备后续 buildXxxWithNullString 透传用
+	// keep the sql reference silent, reserved for subsequent buildXxxWithNullString pass-through
 	_ = sql.NullString{}
 	return types.CreateTokenUsageParams{
 		TaskNodeID:   taskNodeID.String(),

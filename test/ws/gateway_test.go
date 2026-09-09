@@ -1,4 +1,4 @@
-// gateway_test.go 覆盖 WebSocket 日志网关的测试。
+// gateway_test.go covers tests for the WebSocket log gateway.
 package ws_test
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/teammate/server/internal/server/ws"
 )
 
-// TestLogMessageDelivery 验证发布日志消息能够将其传递给订阅者。
+// TestLogMessageDelivery verifies that publishing a log message delivers it to subscribers.
 func TestLogMessageDelivery(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -23,11 +23,11 @@ func TestLogMessageDelivery(t *testing.T) {
 
 	t.Cleanup(func() { gw.Close() })
 
-	// 订阅
+	// Subscribe
 	ch, unsub := gw.Subscribe(taskID)
 	defer unsub()
 
-	// 发布一条日志消息
+	// Publish a log message
 	msg := ws.LogMessage{
 		TaskID:    taskID,
 		NodeID:    uuid.New().String(),
@@ -41,7 +41,7 @@ func TestLogMessageDelivery(t *testing.T) {
 		t.Fatalf("publish log: %v", err)
 	}
 
-	// 验证本地投递
+	// Verify local delivery
 	select {
 	case received := <-ch:
 		if received.Content != "Hello, world!" {
@@ -59,7 +59,7 @@ func TestLogMessageDelivery(t *testing.T) {
 	}
 }
 
-// TestLogDesensitization 验证 API 密钥、令牌和密码在传递前会被遮蔽处理。
+// TestLogDesensitization verifies that API keys, tokens, and passwords are masked before delivery.
 func TestLogDesensitization(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -70,14 +70,14 @@ func TestLogDesensitization(t *testing.T) {
 
 	t.Cleanup(func() { gw.Close() })
 
-	// 订阅
+	// Subscribe
 	ch, unsub := gw.Subscribe(taskID)
 	defer unsub()
 
 	testCases := []struct {
 		name     string
 		input    string
-		forbid   string // 输出中必须不出现的子串
+		forbid   string // substring that must not appear in output
 	}{
 		{
 			name:   "api_key_sk",
@@ -139,13 +139,13 @@ func TestLogDesensitization(t *testing.T) {
 	}
 }
 
-// TestLogDesensitizationDirect 直接测试 Desensitize 函数，无需 Redis。
+// TestLogDesensitizationDirect directly tests the Desensitize function without Redis.
 func TestLogDesensitizationDirect(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		forbid   string
-		contains string // 应该出现的子串
+		contains string // substring that should appear
 	}{
 		{
 			name:     "sk_key_masked",
@@ -210,7 +210,7 @@ func TestLogDesensitizationDirect(t *testing.T) {
 	}
 }
 
-// TestGatewayMultipleSubscribers 验证订阅同一任务的多个客户端都能收到日志消息。
+// TestGatewayMultipleSubscribers verifies that multiple subscribers to the same task all receive log messages.
 func TestGatewayMultipleSubscribers(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -221,7 +221,7 @@ func TestGatewayMultipleSubscribers(t *testing.T) {
 
 	t.Cleanup(func() { gw.Close() })
 
-	// 订阅 3 clients
+	// Subscribe 3 clients
 	ch1, unsub1 := gw.Subscribe(taskID)
 	ch2, unsub2 := gw.Subscribe(taskID)
 	ch3, unsub3 := gw.Subscribe(taskID)
@@ -229,7 +229,7 @@ func TestGatewayMultipleSubscribers(t *testing.T) {
 	defer unsub2()
 	defer unsub3()
 
-	// 发布一条日志消息
+	// Publish a log message
 	msg := ws.LogMessage{
 		TaskID:    taskID,
 		NodeID:    uuid.New().String(),
@@ -239,7 +239,7 @@ func TestGatewayMultipleSubscribers(t *testing.T) {
 	}
 	gw.PublishLog(ctx, taskID, msg)
 
-	// 所有 3 个都应收到
+	// All 3 should receive
 	for i, ch := range []<-chan ws.LogMessage{ch1, ch2, ch3} {
 		select {
 		case received := <-ch:
@@ -253,7 +253,7 @@ func TestGatewayMultipleSubscribers(t *testing.T) {
 	}
 }
 
-// TestGatewayCrossInstanceDelivery 验证通过 Redis 发布的日志消息能传递给本地订阅者。
+// TestGatewayCrossInstanceDelivery verifies that log messages published via Redis are delivered to local subscribers.
 func TestGatewayCrossInstanceDelivery(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -263,19 +263,19 @@ func TestGatewayCrossInstanceDelivery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 启动网关的 Redis 监听器
+	// Start the gateway's Redis listener
 	go gw.Start(ctx)
 	t.Cleanup(func() { gw.Close() })
 
-	// 给 Redis Pub/Sub 留出建立订阅的时间
+	// Allow time for Redis Pub/Sub to establish subscription
 	time.Sleep(1500 * time.Millisecond)
 
-	// 在本地订阅
+	// Subscribe locally
 	ch, unsub := gw.Subscribe(taskID)
 	defer unsub()
 
-	// 直接通过 Redis 发布（模拟另一个实例）
-	// 必须包装成 redisLogMessage 格式，因为 Gateway.Start 需要它
+	// Publish directly via Redis (simulating another instance)
+	// Must be wrapped in redisLogMessage format because Gateway.Start expects it
 	type redisLogMessage struct {
 		Source string         `json:"source"`
 		Msg    ws.LogMessage  `json:"msg"`
@@ -288,7 +288,7 @@ func TestGatewayCrossInstanceDelivery(t *testing.T) {
 		Timestamp: time.Now().UnixMilli(),
 	}
 	wrapped := redisLogMessage{
-		Source: "other-instance", // 使用不同的来源以避免去重
+		Source: "other-instance", // Use a different source to avoid deduplication
 		Msg:    msg,
 	}
 	data, _ := json.Marshal(wrapped)
@@ -297,7 +297,7 @@ func TestGatewayCrossInstanceDelivery(t *testing.T) {
 		t.Fatalf("publish to redis: %v", err)
 	}
 
-	// 等待事件通过 Redis Pub/Sub 到达
+	// Wait for the event to arrive via Redis Pub/Sub
 	select {
 	case received := <-ch:
 		if received.Content != "cross-instance log" {
@@ -309,7 +309,7 @@ func TestGatewayCrossInstanceDelivery(t *testing.T) {
 	}
 }
 
-// TestGatewaySubscribeUnsubscribe 验证订阅/取消订阅的生命周期。
+// TestGatewaySubscribeUnsubscribe verifies the subscribe/unsubscribe lifecycle.
 func TestGatewaySubscribeUnsubscribe(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -317,23 +317,23 @@ func TestGatewaySubscribeUnsubscribe(t *testing.T) {
 	gw := ws.NewGateway(rdb)
 	taskID := "task-sub-lifecycle-" + uuid.New().String()[:8]
 
-	// 订阅
+	// Subscribe
 	ch, unsub := gw.Subscribe(taskID)
 
-	// 验证通道已注册
+	// Verify channel is registered
 	if gw.ClientCount(taskID) != 1 {
 		t.Fatalf("expected 1 subscriber, got %d", gw.ClientCount(taskID))
 	}
 
-	// 取消订阅
+	// Unsubscribe
 	unsub()
 
-	// 验证通道已移除
+	// Verify channel is removed
 	if gw.ClientCount(taskID) != 0 {
 		t.Fatalf("expected 0 subscribers after unsub, got %d", gw.ClientCount(taskID))
 	}
 
-	// 通道应已关闭
+	// Channel should be closed
 	_, ok := <-ch
 	if ok {
 		t.Fatal("expected channel to be closed after unsubscribe")
@@ -341,7 +341,7 @@ func TestGatewaySubscribeUnsubscribe(t *testing.T) {
 	t.Log("gateway subscribe/unsubscribe works correctly")
 }
 
-// TestLogAutoTimestamp 验证如果未提供时间戳，会自动生成一个。
+// TestLogAutoTimestamp verifies that a timestamp is auto-generated if not provided.
 func TestLogAutoTimestamp(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -355,7 +355,7 @@ func TestLogAutoTimestamp(t *testing.T) {
 	ch, unsub := gw.Subscribe(taskID)
 	defer unsub()
 
-	// 使用零时间戳发布
+	// Publish with zero timestamp
 	msg := ws.LogMessage{
 		TaskID:  taskID,
 		NodeID:  uuid.New().String(),

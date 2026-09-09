@@ -1,4 +1,4 @@
-// completion.go 实现 shell 补全子命令，生成各 shell 的补全脚本。
+// completion.go implements the shell completion subcommand, generating completion scripts for each shell.
 package main
 
 import (

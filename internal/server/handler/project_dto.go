@@ -1,4 +1,4 @@
-// project_dto.go 定义 Project 相关的请求/响应结构体和数据转换函数。
+// project_dto.go defines request/response structs and data conversion functions related to Project.
 package handler
 
 import (
@@ -9,62 +9,62 @@ import (
 	apitypes "github.com/teammate/server/internal/types"
 )
 
-// --- 请求 DTO ---
+// --- request DTOs ---
 
-// createProjectRequest 创建项目请求体。
+// createProjectRequest create project request body.
 type createProjectRequest struct {
-	Name        string `json:"name"`         // 项目名称
-	Description string `json:"description"`  // 项目描述
-	Icon        string `json:"icon"`         // 项目图标
-	Status      string `json:"status"`       // 项目状态
-	RepoUrl     string `json:"repo_url"`     // Git 仓库 URL
-	Context     string `json:"context"`      // 项目上下文
+	Name        string `json:"name"`         // project name
+	Description string `json:"description"`  // project description
+	Icon        string `json:"icon"`         // project icon
+	Status      string `json:"status"`       // project status
+	RepoUrl     string `json:"repo_url"`     // Git repository URL
+	Context     string `json:"context"`      // project context
 }
 
-// updateProjectRequest 更新项目请求体。
+// updateProjectRequest update project request body.
 type updateProjectRequest struct {
-	Name        string `json:"name"`        // 项目名称
-	Description string `json:"description"` // 项目描述
-	Status      string `json:"status"`      // 项目状态
-	RepoUrl     string `json:"repo_url"`    // Git 仓库 URL
-	Context     string `json:"context"`     // 项目上下文
+	Name        string `json:"name"`        // project name
+	Description string `json:"description"` // project description
+	Status      string `json:"status"`      // project status
+	RepoUrl     string `json:"repo_url"`    // Git repository URL
+	Context     string `json:"context"`     // project context
 }
 
-// addProjectMemberRequest 添加项目成员请求体。
+// addProjectMemberRequest add project member request body.
 type addProjectMemberRequest struct {
-	MemberType string     `json:"member_type"` // 成员类型（human/agent）
-	AgentID    *uuid.UUID `json:"agent_id"`    // Agent ID（Agent 类型时必填）
-	MemberID   *uuid.UUID `json:"member_id"`   // 人类用户 ID（human 类型时必填）
-	Role       string     `json:"role"`        // 项目角色
+	MemberType string     `json:"member_type"` // member type (human/agent)
+	AgentID    *uuid.UUID `json:"agent_id"`    // Agent ID (required when type is Agent)
+	MemberID   *uuid.UUID `json:"member_id"`   // human user ID (required when type is human)
+	Role       string     `json:"role"`        // project role
 }
 
-// addProjectReviewerRequest 添加项目审查者请求体。
+// addProjectReviewerRequest add project reviewer request body.
 type addProjectReviewerRequest struct {
-	MemberType string     `json:"member_type"` // 成员类型（human/agent）
+	MemberType string     `json:"member_type"` // member type (human/agent)
 	AgentID    *uuid.UUID `json:"agent_id"`    // Agent ID
-	MemberID   *uuid.UUID `json:"member_id"`   // 人类用户 ID
+	MemberID   *uuid.UUID `json:"member_id"`   // human user ID
 }
 
-// createGitCredentialRequest 创建 Git 凭据请求体。
+// createGitCredentialRequest create Git credential request body.
 type createGitCredentialRequest struct {
-	RepoUrl  string `json:"repo_url"`  // Git 仓库 URL
-	Username string `json:"username"`  // 用户名
-	PAT      string `json:"pat"`       // 个人访问 Token
-	// PATType 指示 Token 类型："fine_grained"（仓库范围）或 "classic"（账户范围）。
-	// 建议使用 "fine_grained" 以获得最小权限访问。
+	RepoUrl  string `json:"repo_url"`  // Git repository URL
+	Username string `json:"username"`  // username
+	PAT      string `json:"pat"`       // personal access token
+	// PATType indicates the token type: "fine_grained" (repository scope) or "classic" (account scope).
+	// "fine_grained" is recommended for least-privilege access.
 	PATType string `json:"pat_type"`
 }
 
-// updateGitCredentialRequest 更新 Git 凭据请求体。
+// updateGitCredentialRequest update Git credential request body.
 type updateGitCredentialRequest struct {
-	RepoUrl  string `json:"repo_url"`  // Git 仓库 URL
-	Username string `json:"username"`  // 用户名
-	PAT      string `json:"pat"`       // 新的个人访问 Token
+	RepoUrl  string `json:"repo_url"`  // Git repository URL
+	Username string `json:"username"`  // username
+	PAT      string `json:"pat"`       // new personal access token
 }
 
-// --- 响应 DTO ---
+// --- response DTOs ---
 
-// encryptedCredential 加密凭据响应体（Agent 路径）。
+// encryptedCredential encrypted credential response body (Agent path).
 type encryptedCredential struct {
 	ID           uuid.UUID `json:"id"`
 	RepoUrl      string    `json:"repo_url"`
@@ -72,7 +72,7 @@ type encryptedCredential struct {
 	EncryptedPAT string    `json:"encrypted_pat"`
 }
 
-// maskedCredential 脱敏凭据响应体（人类用户路径）。
+// maskedCredential masked credential response body (human user path).
 type maskedCredential struct {
 	ID        uuid.UUID  `json:"id"`
 	RepoUrl   string     `json:"repo_url"`
@@ -83,7 +83,7 @@ type maskedCredential struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
-// credentialResponse Git 凭据创建/更新响应体。
+// credentialResponse Git credential create/update response body.
 type credentialResponse struct {
 	ID           uuid.UUID  `json:"id"`
 	ProjectID    uuid.UUID  `json:"project_id"`
@@ -96,18 +96,18 @@ type credentialResponse struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
-// Project 项目的别名（领域类型）。
+// Project alias for project (domain type).
 type Project = apitypes.Project
 
-// ProjectStatus 项目状态的别名（领域类型 string）。
+// ProjectStatus alias for project status (domain type string).
 type ProjectStatus = string
 
-// 项目状态常量。
+// project status constants.
 const (
 	ProjectStatusPlanned = apitypes.ProjectStatusPlanned
 )
 
-// buildCreateProjectParams 根据 handler 层输入构造 types.CreateProjectParams。
+// buildCreateProjectParams builds types.CreateProjectParams from handler-layer input.
 func buildCreateProjectParams(
 	workspaceID uuid.UUID,
 	name string,
@@ -132,7 +132,7 @@ func buildCreateProjectParams(
 	}
 }
 
-// buildUpdateProjectParams 根据 handler 层输入构造 types.UpdateProjectParams。
+// buildUpdateProjectParams builds types.UpdateProjectParams from handler-layer input.
 func buildUpdateProjectParams(
 	id uuid.UUID,
 	name string,
@@ -154,7 +154,7 @@ func buildUpdateProjectParams(
 	}
 }
 
-// buildCreateProjectMemberParams 根据 handler 层输入构造 types.CreateProjectMemberParams。
+// buildCreateProjectMemberParams builds types.CreateProjectMemberParams from handler-layer input.
 func buildCreateProjectMemberParams(
 	projectID uuid.UUID,
 	memberType string,
@@ -181,7 +181,7 @@ func buildCreateProjectMemberParams(
 	}
 }
 
-// buildCreateProjectReviewerParams 根据 handler 层输入构造 types.CreateProjectReviewerParams。
+// buildCreateProjectReviewerParams builds types.CreateProjectReviewerParams from handler-layer input.
 func buildCreateProjectReviewerParams(
 	projectID uuid.UUID,
 	memberType string,
@@ -206,7 +206,7 @@ func buildCreateProjectReviewerParams(
 	}
 }
 
-// buildCreateGitCredentialParams 根据 handler 层输入构造 types.CreateGitCredentialParams。
+// buildCreateGitCredentialParams builds types.CreateGitCredentialParams from handler-layer input.
 func buildCreateGitCredentialParams(
 	projectID uuid.UUID,
 	repoUrl string,
@@ -228,7 +228,7 @@ func buildCreateGitCredentialParams(
 	}
 }
 
-// buildUpdateGitCredentialParams 根据 handler 层输入构造 types.UpdateGitCredentialParams。
+// buildUpdateGitCredentialParams builds types.UpdateGitCredentialParams from handler-layer input.
 func buildUpdateGitCredentialParams(
 	id uuid.UUID,
 	repoUrl string,

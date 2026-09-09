@@ -1,12 +1,12 @@
-// runtime.go 提供 Agent 守护进程运行时（Runtime）的数据访问操作。
+// runtime.go provides data access operations for the agent daemon runtime (Runtime).
 //
-// Runtime 表示一个正在运行的 Agent 守护进程实例，通过心跳维持在线状态。
-// 每个 Agent 可以有多个 Runtime（部署在不同机器上）。
+// A Runtime represents a running agent daemon instance that stays online via heartbeats.
+// Each agent can have multiple Runtimes (deployed on different machines).
 //
-// 本文件包含：
-//   - Runtime CRUD 和心跳更新
-//   - 全量同步数据收集（SyncRuntime）
-//   - Runtime ID 查询（用于 SSE 事件广播）
+// This file includes:
+//   - Runtime CRUD and heartbeat updates
+//   - Full sync data collection (SyncRuntime)
+//   - Runtime ID queries (used for SSE event broadcasting)
 package store
 
 import (
@@ -21,15 +21,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateRuntime 创建一条新的 Runtime 记录。
+// CreateRuntime creates a new Runtime record.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - params: Runtime 创建参数，包含 Agent ID、守护进程 ID、提供商等
+// Parameters:
+//   - ctx: request context
+//   - params: Runtime creation parameters, including agent ID, daemon ID, provider, etc.
 //
-// 返回：
-//   - db.Runtime: 创建的 Runtime 记录
-//   - error: 创建失败时返回错误
+// Returns:
+//   - db.Runtime: the created Runtime record
+//   - error: error returned when creation fails
 func (s *Store) CreateRuntime(ctx context.Context, params types.CreateRuntimeParams) (types.Runtime, error) {
 	dbParams, err := FromDomainCreateRuntimeParams(params)
 	if err != nil {
@@ -42,18 +42,18 @@ func (s *Store) CreateRuntime(ctx context.Context, params types.CreateRuntimePar
 	return ToDomainRuntime(runtime)
 }
 
-// UpdateRuntimeHeartbeat 更新 Runtime 的心跳时间戳。
+// UpdateRuntimeHeartbeat updates the heartbeat timestamp of a Runtime.
 //
-// 守护进程每 30 秒发送一次心跳，Server 更新 last_heartbeat 字段。
-// 超过 90 秒未收到心跳的 Runtime 被标记为 offline。
+// The daemon sends a heartbeat every 30 seconds, and the Server updates the last_heartbeat field.
+// A Runtime that has not received a heartbeat for more than 90 seconds is marked as offline.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - id: Runtime 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - id: Runtime UUID
 //
-// 返回：
-//   - db.Runtime: 更新后的 Runtime 记录
-//   - error: 更新失败时返回错误
+// Returns:
+//   - db.Runtime: the updated Runtime record
+//   - error: error returned when the update fails
 func (s *Store) UpdateRuntimeHeartbeat(ctx context.Context, id uuid.UUID) (types.Runtime, error) {
 	runtime, err := s.q.UpdateRuntimeHeartbeat(ctx, db.UpdateRuntimeHeartbeatParams{
 		ID:            id,
@@ -65,14 +65,14 @@ func (s *Store) UpdateRuntimeHeartbeat(ctx context.Context, id uuid.UUID) (types
 	return ToDomainRuntime(runtime)
 }
 
-// ListRuntimes 查询所有 Runtime 记录。
+// ListRuntimes queries all Runtime records.
 //
-// 参数：
-//   - ctx: 请求上下文
+// Parameters:
+//   - ctx: request context
 //
-// 返回：
-//   - []db.Runtime: Runtime 列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.Runtime: Runtime list
+//   - error: error returned when the query fails
 func (s *Store) ListRuntimes(ctx context.Context) ([]types.Runtime, error) {
 	runtimes, err := s.q.ListRuntimes(ctx)
 	if err != nil {
@@ -81,15 +81,15 @@ func (s *Store) ListRuntimes(ctx context.Context) ([]types.Runtime, error) {
 	return ToDomainRuntimeSlice(runtimes)
 }
 
-// ListRuntimesByWorkspace 查询指定工作区内所有 Agent 的 Runtime 记录。
+// ListRuntimesByWorkspace queries the Runtime records of all agents within the specified workspace.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - workspaceID: 工作区 UUID
+// Parameters:
+//   - ctx: request context
+//   - workspaceID: workspace UUID
 //
-// 返回：
-//   - []db.Runtime: Runtime 列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []db.Runtime: Runtime list
+//   - error: error returned when the query fails
 func (s *Store) ListRuntimesByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]types.Runtime, error) {
 	runtimes, err := s.q.ListRuntimesByWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -98,63 +98,63 @@ func (s *Store) ListRuntimesByWorkspace(ctx context.Context, workspaceID uuid.UU
 	return ToDomainRuntimeSlice(runtimes)
 }
 
-// SyncResult 封装守护进程全量同步所需的全部状态数据。
+// SyncResult encapsulates all state data needed for a full daemon sync.
 //
-// 包含三类数据：可认领的待处理节点、Agent 参与的活跃任务、
-// 最近提及 Agent 的评论。
+// It contains three categories of data: pending nodes that can be claimed,
+// active tasks the agent participates in, and recent comments that mention the agent.
 type SyncResult struct {
-	PendingNodes    []SyncNode    `json:"pending_nodes"`    // 可认领的待处理节点
-	ActiveTasks     []SyncTask    `json:"active_tasks"`     // Agent 参与的活跃任务
-	MentionComments []SyncComment `json:"mention_comments"` // 最近提及 Agent 的评论
+	PendingNodes    []SyncNode    `json:"pending_nodes"`    // pending nodes that can be claimed
+	ActiveTasks     []SyncTask    `json:"active_tasks"`     // active tasks the agent participates in
+	MentionComments []SyncComment `json:"mention_comments"` // recent comments that mention the agent
 }
 
-// SyncNode 是同步响应中的轻量级节点表示。
+// SyncNode is a lightweight node representation in the sync response.
 //
-// 仅包含节点的关键信息，减少同步数据量。
+// It contains only key node information to reduce the amount of sync data.
 type SyncNode struct {
-	ID           uuid.UUID `json:"id"`            // 节点 UUID
-	TaskID       string    `json:"task_id"`       // 所属任务 ID
-	ProjectID    string    `json:"project_id"`    // 所属项目 ID
-	Name         string    `json:"name"`          // 节点名称
-	NodeType     string    `json:"node_type"`     // 节点类型（standard/review/manual）
-	Status       string    `json:"status"`        // 节点状态
-	AssigneeType string    `json:"assignee_type"` // 分配者类型
-	SortOrder    int32     `json:"sort_order"`    // 排序顺序
+	ID           uuid.UUID `json:"id"`            // node UUID
+	TaskID       string    `json:"task_id"`       // owning task ID
+	ProjectID    string    `json:"project_id"`    // owning project ID
+	Name         string    `json:"name"`          // node name
+	NodeType     string    `json:"node_type"`     // node type (standard/review/manual)
+	Status       string    `json:"status"`        // node status
+	AssigneeType string    `json:"assignee_type"` // assignee type
+	SortOrder    int32     `json:"sort_order"`    // sort order
 }
 
-// SyncTask 是同步响应中的轻量级任务表示。
+// SyncTask is a lightweight task representation in the sync response.
 type SyncTask struct {
-	ID        string `json:"id"`         // 任务 ID
-	Title     string `json:"title"`      // 任务标题
-	Status    string `json:"status"`     // 任务状态
-	ProjectID string `json:"project_id"` // 所属项目 ID
+	ID        string `json:"id"`         // task ID
+	Title     string `json:"title"`      // task title
+	Status    string `json:"status"`     // task status
+	ProjectID string `json:"project_id"` // owning project ID
 }
 
-// SyncComment 是同步响应中的轻量级评论表示（包含提及信息）。
+// SyncComment is a lightweight comment representation in the sync response (including mention information).
 type SyncComment struct {
-	ID        uuid.UUID `json:"id"`         // 评论 UUID
-	TaskID    string    `json:"task_id"`    // 所属任务 ID
-	Content   string    `json:"content"`    // 评论内容
-	AuthorID  uuid.UUID `json:"author_id"`  // 作者 ID
-	CreatedAt string    `json:"created_at"` // 创建时间
+	ID        uuid.UUID `json:"id"`         // comment UUID
+	TaskID    string    `json:"task_id"`    // owning task ID
+	Content   string    `json:"content"`    // comment content
+	AuthorID  uuid.UUID `json:"author_id"`  // author ID
+	CreatedAt string    `json:"created_at"` // creation time
 }
 
-// SyncRuntime 收集守护进程全量同步所需的全部状态。
+// SyncRuntime collects all state needed for a full daemon sync.
 //
-// 查询三类数据：
-//  1. 可认领的 pending 节点（Agent 是项目成员且节点未分配或已分配给该 Agent）
-//  2. Agent 参与的活跃任务（节点分配给该 Agent 或已保留给该 Agent）
-//  3. 最近 1 小时内提及该 Agent 的评论
+// It queries three categories of data:
+//  1. Pending nodes that can be claimed (the agent is a project member and the node is unassigned or assigned to the agent)
+//  2. Active tasks the agent participates in (nodes assigned to the agent or reserved for the agent)
+//  3. Comments mentioning the agent within the last 1 hour
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - runtimeID: Runtime 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - runtimeID: Runtime UUID
 //
-// 返回：
-//   - *SyncResult: 同步数据
-//   - error: 查询失败时返回错误
+// Returns:
+//   - *SyncResult: sync data
+//   - error: error returned when the query fails
 func (s *Store) SyncRuntime(ctx context.Context, runtimeID uuid.UUID) (*SyncResult, error) {
-	// 获取 runtime 以找到 Agent ID。
+	// Get the runtime to find the agent ID.
 	runtime, err := s.q.GetRuntime(ctx, runtimeID)
 	if err != nil {
 		return nil, fmt.Errorf("get runtime: %w", err)
@@ -163,8 +163,8 @@ func (s *Store) SyncRuntime(ctx context.Context, runtimeID uuid.UUID) (*SyncResu
 
 	result := &SyncResult{}
 
-	// 1. 待处理节点：Agent 可以认领的节点（要么是 any_agent，或
-	//    为该 Agent 保留，且 Agent 是这些项目的成员）。
+	// 1. Pending nodes: nodes the agent can claim (either any_agent,
+	//    or reserved for the agent, and the agent is a member of these projects).
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT tn.id, tn.task_id, t.project_id, tn.name, tn.node_type, tn.status, tn.assignee_type, tn.sort_order
 		FROM task_nodes tn
@@ -190,7 +190,7 @@ func (s *Store) SyncRuntime(ctx context.Context, runtimeID uuid.UUID) (*SyncResu
 		return nil, fmt.Errorf("iterate pending nodes: %w", err)
 	}
 
-	// 2. Agent 参与的活动任务。
+	// 2. Active tasks the agent participates in.
 	taskRows, err := s.db.QueryContext(ctx, `
 		SELECT t.id, t.title, t.status, t.project_id
 		FROM tasks t
@@ -216,7 +216,7 @@ func (s *Store) SyncRuntime(ctx context.Context, runtimeID uuid.UUID) (*SyncResu
 		return nil, fmt.Errorf("iterate active tasks: %w", err)
 	}
 
-	// 3. 提及该 Agent 的近期评论。
+	// 3. Recent comments mentioning the agent.
 	commentRows, err := s.db.QueryContext(ctx, `
 		SELECT c.id, c.task_id, c.content, c.author_id, c.created_at
 		FROM comments c
@@ -242,15 +242,15 @@ func (s *Store) SyncRuntime(ctx context.Context, runtimeID uuid.UUID) (*SyncResu
 	return result, nil
 }
 
-// ListOnlineRuntimeIDsByAgent 查询指定 Agent 的所有在线 Runtime ID，用于定向 SSE 事件投递。
+// ListOnlineRuntimeIDsByAgent queries all online Runtime IDs for the specified agent, used for targeted SSE event delivery.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent UUID
 //
-// 返回：
-//   - []uuid.UUID: 在线 Runtime ID 列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []uuid.UUID: list of online Runtime IDs
+//   - error: error returned when the query fails
 func (s *Store) ListOnlineRuntimeIDsByAgent(ctx context.Context, agentID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id FROM runtimes
@@ -275,16 +275,16 @@ func (s *Store) ListOnlineRuntimeIDsByAgent(ctx context.Context, agentID uuid.UU
 	return ids, nil
 }
 
-// ListRuntimeIDsByAgent 查询指定 Agent 的所有 Runtime ID（不论在线状态）。
-// 用于控制事件的离线缓冲，确保 Agent 离线恢复后不丢失控制事件。
+// ListRuntimeIDsByAgent queries all Runtime IDs for the specified agent (regardless of online status).
+// Used for offline buffering of control events, ensuring the agent does not lose control events after recovering from being offline.
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent UUID
 //
-// 返回：
-//   - []uuid.UUID: Runtime ID 列表
-//   - error: 查询失败时返回错误
+// Returns:
+//   - []uuid.UUID: Runtime ID list
+//   - error: error returned when the query fails
 func (s *Store) ListRuntimeIDsByAgent(ctx context.Context, agentID uuid.UUID) ([]uuid.UUID, error) {
 	ids, err := s.q.ListRuntimeIDsByAgent(ctx, agentID)
 	if err != nil {
@@ -293,16 +293,16 @@ func (s *Store) ListRuntimeIDsByAgent(ctx context.Context, agentID uuid.UUID) ([
 	return ids, nil
 }
 
-// MarshalSyncResult 将 SyncResult 序列化为 JSON。
+// MarshalSyncResult serializes a SyncResult to JSON.
 //
-// 用于 SSE 事件的 payload 序列化。
+// Used for payload serialization of SSE events.
 //
-// 参数：
-//   - r: 同步结果
+// Parameters:
+//   - r: sync result
 //
-// 返回：
-//   - json.RawMessage: JSON 序列化结果
-//   - error: 序列化失败时返回错误
+// Returns:
+//   - json.RawMessage: JSON serialization result
+//   - error: error returned when serialization fails
 func MarshalSyncResult(r *SyncResult) (json.RawMessage, error) {
 	return json.Marshal(r)
 }

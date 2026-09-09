@@ -1,4 +1,4 @@
-// scheduler.go 提供调度器所需的运行时状态查询（如标记过期运行时、离线回退节点）。
+// scheduler.go provides the runtime state queries required by the scheduler (e.g. marking stale runtimes, offline fallback for nodes).
 package store
 
 import (
@@ -200,8 +200,8 @@ func (s *Store) DeleteLowConfidenceMemories(ctx context.Context, cutoff time.Tim
 	return count, nil
 }
 
-// ListPendingRenotifyProjectIDs 查询存在超时未认领 pending 节点的项目 ID，
-// 用于按项目粒度重新广播 node:pending（只通知项目成员 Agent）。
+// ListPendingRenotifyProjectIDs queries project IDs that have pending nodes with a timed-out unclaimed status,
+// used to re-broadcast node:pending at the project granularity (only notify project member agents).
 func (s *Store) ListPendingRenotifyProjectIDs(ctx context.Context, cutoff time.Time) ([]uuid.UUID, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT ON (t.project_id) t.project_id

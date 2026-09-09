@@ -1,4 +1,4 @@
-// task_auth_test.go 覆盖任务权限控制的测试。
+// task_auth_test.go covers tests for task permission control.
 package handler_test
 
 import (
@@ -18,7 +18,7 @@ import (
 )
 
 // ==========================================
-// 任务 CRUD 测试
+// Task CRUD Tests
 // ==========================================
 
 func setupTaskTestRouter(t *testing.T) (*httptest.Server, *http.Client) {
@@ -49,11 +49,11 @@ func TestCreateTask(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(nodes))
 	}
 
-	// 第一个节点应为 in_progress（自动启动）
+	// First node should be in_progress (auto-started)
 	if nodes[0]["status"] != "in_progress" && nodes[0]["status"] != "pending" {
 		t.Fatalf("expected first node to be in_progress or pending, got %v", nodes[0]["status"])
 	}
-	// 其余节点应为 pending
+	// Remaining nodes should be pending
 	if nodes[1]["status"] != "pending" {
 		t.Fatalf("expected second node to be pending, got %v", nodes[1]["status"])
 	}
@@ -68,7 +68,7 @@ func TestUpdateTask(t *testing.T) {
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
-	// 更新任务
+	// Update task
 	body := map[string]interface{}{
 		"title":       "Updated Task Title",
 		"description": "Updated description",
@@ -102,7 +102,7 @@ func TestUpdateTaskTitleTooLong(t *testing.T) {
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
-	// 标题过长（超过 200 个字符）
+	// Title too long (exceeds 200 characters)
 	longTitle := ""
 	for i := 0; i < 201; i++ {
 		longTitle += "a"
@@ -128,7 +128,7 @@ func TestDeleteTask(t *testing.T) {
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
-	// 删除任务
+	// Delete task
 	_, status, _ := doRequestWithToken(t, client, http.MethodDelete,
 		fmt.Sprintf("%s/api/projects/%s/tasks/%d", ts.URL, projID, taskID), token, nil)
 
@@ -136,12 +136,12 @@ func TestDeleteTask(t *testing.T) {
 		t.Fatalf("expected 204, got %d", status)
 	}
 
-	// 验证任务已删除（或已软删除）
+	// Verify task is deleted (or soft-deleted)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
 		fmt.Sprintf("%s/api/projects/%s/tasks/%d", ts.URL, projID, taskID), token, nil)
 
-	// 删除后应返回 404（软删除将其过滤掉）
-	// 若软删除尚未生效则返回 200（任务状态已改为 cancelled）
+	// Should return 404 after delete (soft delete filters it out)
+	// If soft delete hasn't taken effect, returns 200 (task status changed to cancelled)
 	if status != http.StatusNotFound && status != http.StatusOK {
 		t.Fatalf("expected 404 or 200 after delete, got %d", status)
 	}
@@ -157,7 +157,7 @@ func TestDeleteTask(t *testing.T) {
 }
 
 // ==========================================
-// 认证中间件 + RequireRole 测试
+// Authentication Middleware + RequireRole Tests
 // ==========================================
 
 func TestRequireRoleMiddleware(t *testing.T) {
@@ -174,7 +174,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 		r.Route("/workspaces/{workspaceId}", func(r chi.Router) {
 			r.Use(svcmw.WorkspaceAuthMiddlewareWithChecker(wsChecker))
 
-			// 仅限管理员的端点
+			// Admin-only endpoints
 			r.Group(func(r chi.Router) {
 				r.Use(svcmw.RequireRole("owner", "admin"))
 				r.Post("/admin-action", func(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +182,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 				})
 			})
 
-			// member 及以上权限的端点
+			// Endpoints for member and above
 			r.Group(func(r chi.Router) {
 				r.Use(svcmw.RequireRole("owner", "admin", "member"))
 				r.Post("/member-action", func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +196,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 	t.Cleanup(ts.Close)
 	client := ts.Client()
 
-	// 注册用户（在自己的工作区获得 owner 角色）
+	// Register user (gets owner role in their own workspace)
 	email := "role-test-" + uuid.New().String()[:8] + "@test.com"
 	regBody := map[string]string{
 		"name":     "Role Test",
@@ -214,7 +214,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 	}
 	token := regResult["token"].(string)
 
-	// 为了测试将用户降级为 member 角色
+	// Downgrade user to member role for testing
 	memberData := regResult["member"].(map[string]interface{})
 	memberID := memberData["id"].(string)
 	wsID := regResult["workspace_id"].(string)
@@ -223,7 +223,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 		t.Fatalf("update role: %v", err)
 	}
 
-	// 重新登录以获取具有更新角色的 Token
+	// Re-login to get a token with the updated role
 	loginBody := map[string]string{
 		"email":    email,
 		"password": "Test123456",
@@ -238,7 +238,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 	}
 	token = loginResult["token"].(string)
 
-	// 成员不应访问仅限管理员的端点
+	// Member should not access admin-only endpoints
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/workspaces/"+wsID+"/admin-action", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := client.Do(req)
@@ -250,7 +250,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 		t.Fatalf("member should be forbidden from admin action, got %d", resp.StatusCode)
 	}
 
-	// 成员应该能够访问 member 及以上权限的端点
+	// Member should be able to access member-and-above endpoints
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/workspaces/"+wsID+"/member-action", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err = client.Do(req)
@@ -311,7 +311,7 @@ func TestUnauthenticatedRequest(t *testing.T) {
 	t.Cleanup(ts.Close)
 	client := ts.Client()
 
-	// 不带认证头的请求
+	// Request without authentication header
 	resp, err := client.Get(ts.URL + "/protected")
 	if err != nil {
 		t.Fatalf("get: %v", err)

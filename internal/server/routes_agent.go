@@ -1,4 +1,4 @@
-// routes_agent.go 注册 Agent 级路由及杂项路由：Agent 统计、记忆、模板统计、社区工作流、Agent 角色。
+// routes_agent.go registers Agent-level routes and miscellaneous routes: agent stats, memories, template stats, community workflows, agent roles.
 package server
 
 import (
@@ -7,11 +7,11 @@ import (
 	"github.com/teammate/server/internal/server/handler"
 )
 
-// registerMiscRoutes 注册杂项路由：记忆、社区工作流。
+// registerMiscRoutes registers miscellaneous routes: memories, community workflows.
 func (reg *routeRegistrar) registerMiscRoutes(r chi.Router) {
 	svc := reg.svc
 
-	// 共享记忆
+	// Shared memories
 	memoryHandler := handler.NewMemoryHandler(svc, reg.wsChk)
 	r.Route("/memories", func(r chi.Router) {
 		r.Get("/", memoryHandler.ListMemories)
@@ -20,6 +20,6 @@ func (reg *routeRegistrar) registerMiscRoutes(r chi.Router) {
 		r.Delete("/{id}", memoryHandler.DeleteMemory)
 	})
 
-	// 社区工作流
+	// Community workflows
 	r.Mount("/community/workflows", handler.NewCommunityHandler(svc).Routes())
 }

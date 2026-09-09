@@ -1,4 +1,4 @@
--- 任务查询
+-- Task queries
 
 -- name: CreateTask :one
 INSERT INTO tasks (
@@ -100,7 +100,7 @@ WHERE task_nodes.id = $1
   AND (reserved_for_agent_id IS NULL OR reserved_for_agent_id = $2)
   AND task_nodes.version = $3
   AND (
-    -- 线性前驱检查：首节点（任务内最小 sort_order，兼容 0 或 1 起始编号）或排序在前的最近节点已完成
+    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
     (SELECT sort_order FROM task_nodes WHERE id = $1) =
       (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
     OR EXISTS (
@@ -116,7 +116,7 @@ WHERE task_nodes.id = $1
     )
   )
   AND (
-    -- DAG 依赖检查：所有 depends_on 节点必须已完成
+    -- DAG dependency check: all depends_on nodes must have completed
     depends_on = '{}'
     OR NOT EXISTS (
       SELECT 1 FROM unnest(depends_on) AS dep_id
@@ -140,7 +140,7 @@ WHERE task_nodes.id = $1
   AND assignee_type = 'human'
   AND task_nodes.version = $3
   AND (
-    -- 线性前驱检查：首节点（任务内最小 sort_order，兼容 0 或 1 起始编号）或排序在前的最近节点已完成
+    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
     (SELECT sort_order FROM task_nodes WHERE id = $1) =
       (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
     OR EXISTS (
@@ -384,8 +384,8 @@ WHERE tu.task_node_id = ANY($1::uuid[])
 GROUP BY tu.task_node_id;
 
 -- name: GetInProgressNodesByAgent :many
--- 查询指定 Agent 在指定工作区中认领但未完成（in_progress）的节点，
--- 用于 Agent 重启后恢复未完成的执行。
+-- Queries the in_progress nodes claimed but not yet completed by a given Agent in a given workspace,
+-- used to resume unfinished execution after an Agent restart.
 SELECT tn.*, t.project_id FROM task_nodes tn
 JOIN tasks t ON tn.task_id = t.id
 JOIN projects p ON t.project_id = p.id
@@ -395,7 +395,7 @@ WHERE tn.status = 'in_progress'
 ORDER BY tn.sort_order;
 
 -- name: ListTasksPaginated :many
--- 分页查询指定项目内的任务（支持状态过滤和搜索），不过滤历史任务，供历史任务页面使用。
+-- Paginated query for tasks within a given project (supports status filtering and search); does not filter out historical tasks, for use by the historical-tasks page.
 SELECT * FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('status')::task_status IS NULL OR status = sqlc.narg('status'))
@@ -404,7 +404,7 @@ ORDER BY updated_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountTasksByStatus :one
--- 统计指定项目和状态下的任务数量（支持搜索），用于历史任务页面分页计算。
+-- Counts tasks under a given project and status (supports search), used for pagination calculation on the historical-tasks page.
 SELECT count(*) FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('status')::task_status IS NULL OR status = sqlc.narg('status'))

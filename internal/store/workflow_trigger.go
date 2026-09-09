@@ -1,4 +1,4 @@
-// workflow_trigger.go 提供工作流触发器运行记录的数据访问操作。
+// workflow_trigger.go provides data access operations for workflow trigger run records.
 package store
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateWorkflowTriggerRun 创建一条工作流触发器运行记录。
+// CreateWorkflowTriggerRun creates a workflow trigger run record.
 func (s *Store) CreateWorkflowTriggerRun(ctx context.Context, params types.CreateWorkflowTriggerRunParams) (types.WorkflowTriggerRun, error) {
 	dbParams, err := FromDomainCreateWorkflowTriggerRunParams(params)
 	if err != nil {
@@ -24,7 +24,7 @@ func (s *Store) CreateWorkflowTriggerRun(ctx context.Context, params types.Creat
 	return ToDomainWorkflowTriggerRun(run)
 }
 
-// GetWorkflowTriggerRunByExternalKey 根据模板 ID 和外部去重键查询运行记录。
+// GetWorkflowTriggerRunByExternalKey queries a run record by template ID and external deduplication key.
 func (s *Store) GetWorkflowTriggerRunByExternalKey(ctx context.Context, templateID uuid.UUID, externalKey string) (types.WorkflowTriggerRun, error) {
 	run, err := s.q.GetWorkflowTriggerRunByExternalKey(ctx, db.GetWorkflowTriggerRunByExternalKeyParams{
 		WorkflowTemplateID: templateID,
@@ -36,7 +36,7 @@ func (s *Store) GetWorkflowTriggerRunByExternalKey(ctx context.Context, template
 	return ToDomainWorkflowTriggerRun(run)
 }
 
-// MarkWorkflowTriggerRunCompleted 将触发器运行记录标记为已完成。
+// MarkWorkflowTriggerRunCompleted marks a trigger run record as completed.
 func (s *Store) MarkWorkflowTriggerRunCompleted(ctx context.Context, params types.MarkWorkflowTriggerRunCompletedParams) (types.WorkflowTriggerRun, error) {
 	dbParams, err := FromDomainMarkWorkflowTriggerRunCompletedParams(params)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *Store) MarkWorkflowTriggerRunCompleted(ctx context.Context, params type
 	return ToDomainWorkflowTriggerRun(run)
 }
 
-// MarkWorkflowTriggerRunFailed 将触发器运行记录标记为已失败。
+// MarkWorkflowTriggerRunFailed marks a trigger run record as failed.
 func (s *Store) MarkWorkflowTriggerRunFailed(ctx context.Context, params types.MarkWorkflowTriggerRunFailedParams) (types.WorkflowTriggerRun, error) {
 	dbParams, err := FromDomainMarkWorkflowTriggerRunFailedParams(params)
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *Store) MarkWorkflowTriggerRunFailed(ctx context.Context, params types.M
 	return ToDomainWorkflowTriggerRun(run)
 }
 
-// ListDueScheduledWorkflowTemplates 查询所有到期的调度触发器模板。
+// ListDueScheduledWorkflowTemplates queries all due scheduled-trigger templates.
 func (s *Store) ListDueScheduledWorkflowTemplates(ctx context.Context, params types.ListDueScheduledWorkflowTemplatesParams) ([]types.WorkflowTemplate, error) {
 	dbParams, err := FromDomainListDueScheduledWorkflowTemplatesParams(params)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Store) ListDueScheduledWorkflowTemplates(ctx context.Context, params ty
 	return ToDomainWorkflowTemplateSlice(templates)
 }
 
-// ListGithubIssueWorkflowTemplatesByRepo 查询指定仓库的 GitHub Issue 触发器模板。
+// ListGithubIssueWorkflowTemplatesByRepo queries the GitHub Issue trigger templates for the specified repository.
 func (s *Store) ListGithubIssueWorkflowTemplatesByRepo(ctx context.Context, owner, repo string) ([]types.WorkflowTemplate, error) {
 	templates, err := s.q.ListGithubIssueWorkflowTemplatesByRepo(ctx, db.ListGithubIssueWorkflowTemplatesByRepoParams{
 		Lower:   owner,
@@ -87,7 +87,7 @@ func (s *Store) ListGithubIssueWorkflowTemplatesByRepo(ctx context.Context, owne
 	return ToDomainWorkflowTemplateSlice(templates)
 }
 
-// UpdateWorkflowTemplateTriggerSchedule 更新模板的触发调度时间。
+// UpdateWorkflowTemplateTriggerSchedule updates the trigger schedule time of a template.
 func (s *Store) UpdateWorkflowTemplateTriggerSchedule(ctx context.Context, params types.UpdateWorkflowTemplateTriggerScheduleParams) (types.WorkflowTemplate, error) {
 	dbParams, err := FromDomainUpdateWorkflowTemplateTriggerScheduleParams(params)
 	if err != nil {

@@ -1,4 +1,4 @@
-// market.go 实现社区工作流市场子命令，浏览和导入社区工作流。
+// market.go implements the community workflow marketplace subcommand for browsing and importing community workflows.
 package main
 
 import (
@@ -60,7 +60,7 @@ var marketPublishCmd = &cobra.Command{
 			return fmt.Errorf("--definition is required (workflow definition JSON, or @path/to/file.json)")
 		}
 
-		// 支持 @ 前缀从文件读取定义
+		// Support an @ prefix to read the definition from a file
 		if strings.HasPrefix(definitionRaw, "@") {
 			data, err := os.ReadFile(strings.TrimPrefix(definitionRaw, "@"))
 			if err != nil {
@@ -68,7 +68,7 @@ var marketPublishCmd = &cobra.Command{
 			}
 			definitionRaw = string(data)
 		}
-		// 校验定义是合法 JSON
+		// Validate that the definition is valid JSON
 		if !json.Valid([]byte(definitionRaw)) {
 			return fmt.Errorf("--definition is not valid JSON")
 		}

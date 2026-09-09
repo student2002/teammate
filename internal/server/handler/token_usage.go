@@ -1,11 +1,11 @@
-// token_usage.go 提供 AI 代理 Token 用量上报和查询的 HTTP API 端点。
+// token_usage.go provides HTTP API endpoints for AI agent token usage reporting and querying.
 //
-// 本文件提供以下 HTTP API 端点：
-//   - POST /tasks/{taskId}/token-usage: Agent 上报执行节点的 Token 用量数据（仅限 Agent 身份）
-//   - GET /tasks/{taskId}/token-usage: 查询指定任务的 Token 用量汇总
+// This file provides the following HTTP API endpoints:
+//   - POST /tasks/{taskId}/token-usage: an Agent reports token usage data for the executing node (Agent identity only)
+//   - GET /tasks/{taskId}/token-usage: query the token usage summary for the specified task
 //
-// 上报接口强制要求请求者为 Agent 身份，且必须是目标节点的 assignee。
-// Agent ID 从认证声明中提取，防止伪造。节点与任务的归属关系通过 URL 参数和数据库校验确保工作区隔离。
+// The reporting endpoint strictly requires the requester to be an Agent and to be the assignee of the target node.
+// The Agent ID is extracted from the auth claims to prevent forgery. The ownership relationship between the node and the task is verified through URL parameters and database checks to ensure workspace isolation.
 
 package handler
 
@@ -24,26 +24,26 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TokenUsageHandler 处理 Token 用量上报和查询的 HTTP 请求。
+// TokenUsageHandler handles HTTP requests for token usage reporting and querying.
 type TokenUsageHandler struct {
 	Svc *service.Service
 }
 
-// NewTokenUsageHandler 创建 TokenUsageHandler 实例。
+// NewTokenUsageHandler creates a TokenUsageHandler instance.
 //
-// 参数:
-//   - svc: 业务逻辑服务实例，提供 Token 用量管理能力
+// Parameters:
+//   - svc: business logic service instance, provides token usage management capabilities
 //
-// 返回:
-//   - *TokenUsageHandler: Token 用量处理器实例
+// Returns:
+//   - *TokenUsageHandler: token usage handler instance
 func NewTokenUsageHandler(svc *service.Service) *TokenUsageHandler {
 	return &TokenUsageHandler{Svc: svc}
 }
 
-// Routes 返回 Token 用量的路由表。
+// Routes returns the route table for token usage.
 //
-// 返回:
-//   - chi.Router: 包含 Token 用量上报和查询端点的路由
+// Returns:
+//   - chi.Router: routes containing token usage reporting and querying endpoints
 func (h *TokenUsageHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -52,14 +52,14 @@ func (h *TokenUsageHandler) Routes() chi.Router {
 	return r
 }
 
-// ReportTokenUsage 处理 POST /tasks/{taskId}/token-usage 端点，Agent 上报执行节点的 Token 用量数据。
+// ReportTokenUsage handles the POST /tasks/{taskId}/token-usage endpoint, where an Agent reports token usage data for the executing node.
 //
-// 参数:
-//   - w: HTTP 响应写入器
-//   - r: HTTP 请求，路径参数 taskId 为任务 ID，请求体包含 Token 用量数据
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID, request body contains token usage data
 //
-// 返回:
-//   - 无返回值，通过 w 写入 JSON 响应（201 Created），包含创建的用量记录或错误信息
+// Returns:
+//   - no return value, writes a JSON response via w (201 Created), containing the created usage record or an error message
 func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -67,8 +67,8 @@ func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// 只有 Agent 可以上报 Token 用量——Member 的 UUID 会违反
-	// token_usage.agent_id 外键约束（REFERENCES agents(id)）。
+	// Only Agents can report token usage - a Member UUID would violate the
+	// token_usage.agent_id foreign key constraint (REFERENCES agents(id)).
 	if claims.UserType != "agent" {
 		response.Forbidden(w, "only agents can report token usage")
 		return
@@ -80,10 +80,10 @@ func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// 从认证声明（而非请求体）中推导 agent_id，以防止伪造
+	// derive agent_id from auth claims (not the request body) to prevent forgery
 	agentID := claims.UserID
 
-	// 验证该 Agent 是否为节点的 assignee
+	// verify that this Agent is the assignee of the node
 	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), req.TaskNodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -98,7 +98,7 @@ func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// 验证节点是否属于 URL 中的任务（工作区隔离）
+	// verify the node belongs to the task in the URL (workspace isolation)
 	urlTaskIDStr := chi.URLParam(r, "taskId")
 	var urlTaskID int32
 	if _, err := fmt.Sscanf(urlTaskIDStr, "%d", &urlTaskID); err != nil || node.TaskID != urlTaskID {

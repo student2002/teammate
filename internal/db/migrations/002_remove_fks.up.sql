@@ -1,46 +1,46 @@
--- 002_remove_fks: 按 FK 策略移除软引用/冗余外键，补齐应用层显式置空
--- 设计依据: docs/数据存储设计.md "无外键（xxx 显式置空）" 标注 + docs/实现与设计偏差记录.md #4/#5
--- 完整性由应用层保证（各 Store 删除事务显式置空，见 store 层对应方法）。
+-- 002_remove_fks: Remove soft references / redundant foreign keys per FK strategy; application layer explicitly nulls them
+-- Design basis: docs/data-storage-design.md "no foreign key (xxx explicitly nulled)" annotation + docs/implementation-vs-design-deviations.md #4/#5
+-- Integrity is guaranteed by the application layer (each Store's delete transaction explicitly nulls them; see the corresponding store-layer methods).
 
--- 1) workflow_template_nodes.assignee_id — DeleteAgent 显式置空
+-- 1) workflow_template_nodes.assignee_id — DeleteAgent explicitly nulled
 ALTER TABLE workflow_template_nodes DROP CONSTRAINT IF EXISTS workflow_template_nodes_assignee_id_fkey;
 
--- 2) projects.default_workflow_id — DeleteWorkflowTemplate 显式置空
+-- 2) projects.default_workflow_id — DeleteWorkflowTemplate explicitly nulled
 ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_default_workflow_id_fkey;
 
--- 3) task_nodes.assignee_id / reserved_for_agent_id / completed_by — DeleteAgent 显式置空
+-- 3) task_nodes.assignee_id / reserved_for_agent_id / completed_by — DeleteAgent explicitly nulled
 ALTER TABLE task_nodes DROP CONSTRAINT IF EXISTS task_nodes_assignee_id_fkey;
 ALTER TABLE task_nodes DROP CONSTRAINT IF EXISTS task_nodes_reserved_for_agent_id_fkey;
 ALTER TABLE task_nodes DROP CONSTRAINT IF EXISTS task_nodes_completed_by_fkey;
 
--- 4) node_transitions.target_node_id — 冗余级联已移除（节点只随任务删除）
+-- 4) node_transitions.target_node_id — redundant cascade removed (nodes only deleted along with their task)
 ALTER TABLE node_transitions DROP CONSTRAINT IF EXISTS node_transitions_target_node_id_fkey;
 
--- 5) comments.node_id / source_node_id — 冗余级联/历史引用（随 task_id 级联覆盖）
+-- 5) comments.node_id / source_node_id — redundant cascade / historical reference (covered by task_id cascade)
 ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_node_id_fkey;
 ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_source_node_id_fkey;
 
--- 6) execution_sessions.runtime_id / agent_id — DeleteAgent 显式置空
+-- 6) execution_sessions.runtime_id / agent_id — DeleteAgent explicitly nulled
 ALTER TABLE execution_sessions DROP CONSTRAINT IF EXISTS execution_sessions_runtime_id_fkey;
 ALTER TABLE execution_sessions DROP CONSTRAINT IF EXISTS execution_sessions_agent_id_fkey;
 
--- 7) memories.source_task_id — DeleteProject 显式置空
+-- 7) memories.source_task_id — DeleteProject explicitly nulled
 ALTER TABLE memories DROP CONSTRAINT IF EXISTS memories_source_task_id_fkey;
 
--- 8) git_credentials.created_by — DeleteMember 显式置空
+-- 8) git_credentials.created_by — DeleteMember explicitly nulled
 ALTER TABLE git_credentials DROP CONSTRAINT IF EXISTS git_credentials_created_by_fkey;
 
--- 9) agent_permissions.granted_by — DeleteMember 显式置空
+-- 9) agent_permissions.granted_by — DeleteMember explicitly nulled
 ALTER TABLE agent_permissions DROP CONSTRAINT IF EXISTS agent_permissions_granted_by_fkey;
 
--- 10) invitations.invited_by — DeleteMember 显式置空
+-- 10) invitations.invited_by — DeleteMember explicitly nulled
 ALTER TABLE invitations DROP CONSTRAINT IF EXISTS invitations_invited_by_fkey;
 
--- 11) workflow_trigger_runs.task_id — DeleteProject 显式置空
+-- 11) workflow_trigger_runs.task_id — DeleteProject explicitly nulled
 ALTER TABLE workflow_trigger_runs DROP CONSTRAINT IF EXISTS workflow_trigger_runs_task_id_fkey;
 
--- 12) 偏差 #5: workflow_template_nodes 增加 UNIQUE(template_id, sort_order)，与 task_nodes 同构
--- （迁移前需确保无存量重复数据；存在重复时先由应用层清理）
+-- 12) deviation #5: add UNIQUE(template_id, sort_order) to workflow_template_nodes, isomorphic to task_nodes
+-- (Before migrating, ensure no existing duplicate data; clean duplicates via application layer first if any)
 DO $$
 BEGIN
     IF NOT EXISTS (

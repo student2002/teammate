@@ -1,4 +1,4 @@
-// runtime.go 实现运行时子命令，管理 Agent 守护进程运行时。
+// runtime.go implements the runtime subcommand, managing the agent daemon runtime.
 package main
 
 import (

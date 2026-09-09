@@ -1,4 +1,4 @@
--- 子任务查询
+-- Subtask queries
 
 -- name: CreateSubtask :one
 INSERT INTO tasks (

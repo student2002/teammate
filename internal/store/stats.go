@@ -1,7 +1,7 @@
-// stats.go 提供项目和 Agent 的统计数据查询操作。
+// stats.go provides query operations for project and agent statistics.
 //
-// 统计数据用于仪表盘展示，包括任务计数、节点完成率、
-// 平均完成时间、Token 用量等指标。
+// Statistics are used for dashboard display, including task counts, node completion rate,
+// average completion time, token usage, and other metrics.
 package store
 
 import (
@@ -13,48 +13,48 @@ import (
 	"github.com/google/uuid"
 )
 
-// ProjectStats 封装项目的统计信息。
+// ProjectStats encapsulates project statistics.
 //
-// 包含任务按状态分组计数、节点完成率、平均完成时间。
+// It includes task counts grouped by status, node completion rate, and average completion time.
 type ProjectStats struct {
-	TaskCounts         TaskCountsByStatus `json:"task_counts"`                // 按状态分组的任务计数
-	NodeCompletionRate float64            `json:"node_completion_rate"`       // 节点完成率（0-1）
-	AvgTimeToComplete  *float64           `json:"avg_time_to_complete_hours"` // 平均完成时间（小时）
+	TaskCounts         TaskCountsByStatus `json:"task_counts"`                // task counts grouped by status
+	NodeCompletionRate float64            `json:"node_completion_rate"`       // node completion rate (0-1)
+	AvgTimeToComplete  *float64           `json:"avg_time_to_complete_hours"` // average completion time (hours)
 }
 
-// TaskCountsByStatus 按状态分组的任务计数。
+// TaskCountsByStatus holds task counts grouped by status.
 type TaskCountsByStatus struct {
-	Active    int64 `json:"active"`    // 活跃任务数
-	Completed int64 `json:"completed"` // 已完成任务数
-	Cancelled int64 `json:"cancelled"` // 已取消任务数
+	Active    int64 `json:"active"`    // active task count
+	Completed int64 `json:"completed"` // completed task count
+	Cancelled int64 `json:"cancelled"` // cancelled task count
 }
 
-// AgentStats 封装 Agent 的统计信息。
+// AgentStats encapsulates agent statistics.
 //
-// 包含完成任务数、Token 用量（输入/输出）、平均完成时间。
+// It includes completed task count, token usage (input/output), and average completion time.
 type AgentStats struct {
-	TotalCompletedTasks int32     `json:"total_completed_tasks"`     // 总完成任务数
-	TotalTokens         int64     `json:"total_tokens"`              // 总 Token 用量
-	InputTokens         int64     `json:"input_tokens"`              // 输入 Token 用量
-	OutputTokens        int64     `json:"output_tokens"`             // 输出 Token 用量
-	AvgCompletionTime   *float64  `json:"avg_completion_time_hours"` // 平均完成时间（小时）
-	ComputedAt          time.Time `json:"computed_at"`               // 统计计算时间
+	TotalCompletedTasks int32     `json:"total_completed_tasks"`     // total completed task count
+	TotalTokens         int64     `json:"total_tokens"`              // total token usage
+	InputTokens         int64     `json:"input_tokens"`              // input token usage
+	OutputTokens        int64     `json:"output_tokens"`             // output token usage
+	AvgCompletionTime   *float64  `json:"avg_completion_time_hours"` // average completion time (hours)
+	ComputedAt          time.Time `json:"computed_at"`               // statistics computation time
 }
 
-// GetProjectStats 查询项目的统计数据（任务计数、节点完成率、平均完成时间）。
+// GetProjectStats queries project statistics (task counts, node completion rate, average completion time).
 //
-// 执行三步查询：
-//  1. 按状态分组统计任务数量
-//  2. 计算节点完成率（已完成节点数 / 总节点数）
-//  3. 计算已完成任务的平均完成时间
+// It performs three steps of queries:
+//  1. Count tasks grouped by status
+//  2. Calculate the node completion rate (completed node count / total node count)
+//  3. Calculate the average completion time of completed tasks
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - projectID: 项目 UUID
+// Parameters:
+//   - ctx: request context
+//   - projectID: project UUID
 //
-// 返回：
-//   - *ProjectStats: 项目统计数据
-//   - error: 查询失败时返回错误
+// Returns:
+//   - *ProjectStats: project statistics
+//   - error: error returned when the query fails
 func (s *Store) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*ProjectStats, error) {
 	var counts TaskCountsByStatus
 	err := s.db.QueryRowContext(ctx, `
@@ -106,19 +106,19 @@ func (s *Store) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*Proj
 	}, nil
 }
 
-// GetAgentStats 查询 Agent 的统计数据（完成任务数、Token 用量、平均完成时间）。
+// GetAgentStats queries agent statistics (completed task count, token usage, average completion time).
 //
-// 执行两步查询：
-//  1. 从 token_usage 表实时聚合 Token 用量，从 task_nodes 表统计完成任务数
-//  2. 关联 task_nodes 和 tasks 表计算平均完成时间
+// It performs two steps of queries:
+//  1. Aggregate token usage in real time from the token_usage table, and count completed tasks from the task_nodes table
+//  2. Join the task_nodes and tasks tables to calculate the average completion time
 //
-// 参数：
-//   - ctx: 请求上下文
-//   - agentID: Agent 的 UUID
+// Parameters:
+//   - ctx: request context
+//   - agentID: agent UUID
 //
-// 返回：
-//   - *AgentStats: Agent 统计数据
-//   - error: 查询失败时返回错误
+// Returns:
+//   - *AgentStats: agent statistics
+//   - error: error returned when the query fails
 func (s *Store) GetAgentStats(ctx context.Context, agentID uuid.UUID) (*AgentStats, error) {
 	var totalCompleted int32
 	var inputTokens, outputTokens, totalTokens int64

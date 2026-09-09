@@ -1,4 +1,4 @@
-// v4_features_test.go 覆盖 WS 层 v4 特性的测试。
+// v4_features_test.go covers tests for WS layer v4 features.
 package ws_test
 
 import (
@@ -13,7 +13,7 @@ import (
 	"github.com/teammate/server/internal/server/ws"
 )
 
-// TestIsControlEvent 验证五种控制事件类型能够被正确识别。
+// TestIsControlEvent verifies that the five control event types are correctly identified.
 func TestIsControlEvent(t *testing.T) {
 	controlEvents := []string{
 		ws.EventTaskInterrupt,
@@ -42,8 +42,9 @@ func TestIsControlEvent(t *testing.T) {
 	}
 }
 
-// TestControlEventPriorityDelivery 验证控制事件使用带超时的阻塞投递，而非控制事件使用尽最大努力投递。
-// 该测试通过订阅客户端并验证两种事件类型均被接收，来测试 Publish 方法的行为。
+// TestControlEventPriorityDelivery verifies that control events use blocking delivery with timeout,
+// while non-control events use best-effort delivery.
+// This tests the Publish method behavior by subscribing a client and verifying both event types are received.
 func TestControlEventPriorityDelivery(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -52,17 +53,17 @@ func TestControlEventPriorityDelivery(t *testing.T) {
 	runtimeID := "test-ctrl-" + uuid.New().String()
 	ctx := context.Background()
 
-	// 清理 Redis 键
+	// Clean up Redis keys
 	t.Cleanup(func() {
 		rdb.Del(ctx, ws.BufferKey(runtimeID))
 		rdb.Del(ctx, ws.RedisChannel(runtimeID))
 	})
 
-	// 订阅一个客户端
+	// Subscribe a client
 	ch, unsub := hub.Subscribe(runtimeID)
 	defer unsub()
 
-	// 发布一个控制事件 (task:interrupt)
+	// Publish a control event (task:interrupt)
 	controlEvent := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Event: ws.EventTaskInterrupt,
@@ -72,7 +73,7 @@ func TestControlEventPriorityDelivery(t *testing.T) {
 		t.Fatalf("publish control event: %v", err)
 	}
 
-	// 验证控制事件已被接收
+	// Verify the control event was received
 	select {
 	case evt := <-ch:
 		if evt.Event != ws.EventTaskInterrupt {
@@ -82,7 +83,7 @@ func TestControlEventPriorityDelivery(t *testing.T) {
 		t.Fatal("control event not received within timeout")
 	}
 
-	// 发布一个非控制事件 (node:pending)
+	// Publish a non-control event (node:pending)
 	nonControlEvent := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Event: ws.EventNodePending,
@@ -92,7 +93,7 @@ func TestControlEventPriorityDelivery(t *testing.T) {
 		t.Fatalf("publish non-control event: %v", err)
 	}
 
-	// 验证非控制事件已被接收
+	// Verify the non-control event was received
 	select {
 	case evt := <-ch:
 		if evt.Event != ws.EventNodePending {
@@ -103,7 +104,7 @@ func TestControlEventPriorityDelivery(t *testing.T) {
 	}
 }
 
-// TestBufferEventForOfflineRuntime 验证事件可以为没有活跃订阅者的运行时进行缓冲，并在之后被检索。
+// TestBufferEventForOfflineRuntime verifies that events can be buffered for a runtime with no active subscribers and retrieved later.
 func TestBufferEventForOfflineRuntime(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })
@@ -114,12 +115,12 @@ func TestBufferEventForOfflineRuntime(t *testing.T) {
 
 	t.Cleanup(func() { rdb.Del(ctx, ws.BufferKey(runtimeID)) })
 
-	// 验证无订阅者（离线）
+	// Verify no subscribers (offline)
 	if hub.ClientCount(runtimeID) != 0 {
 		t.Errorf("expected 0 subscribers for offline runtime, got %d", hub.ClientCount(runtimeID))
 	}
 
-	// 为离线运行时缓冲事件
+	// Buffer events for offline runtime
 	event1 := ws.SSEEvent{
 		ID:    fmt.Sprintf("%d", time.Now().Add(-1*time.Second).UnixNano()),
 		Event: ws.EventTaskInterrupt,
@@ -138,7 +139,7 @@ func TestBufferEventForOfflineRuntime(t *testing.T) {
 		t.Fatalf("buffer event2: %v", err)
 	}
 
-	// 验证事件已存储在 Redis 中
+	// Verify events are stored in Redis
 	count, err := rdb.ZCard(ctx, ws.BufferKey(runtimeID)).Result()
 	if err != nil {
 		t.Fatalf("zcard: %v", err)
@@ -147,7 +148,7 @@ func TestBufferEventForOfflineRuntime(t *testing.T) {
 		t.Errorf("expected 2 buffered events, got %d", count)
 	}
 
-	// 随后，当运行时上线时，重放 event1.ID 之后的事件
+	// Later, when the runtime comes online, replay events after event1.ID
 	replayed, err := hub.GetBufferedEvents(ctx, runtimeID, event1.ID)
 	if err != nil {
 		t.Fatalf("get buffered events: %v", err)
@@ -159,7 +160,7 @@ func TestBufferEventForOfflineRuntime(t *testing.T) {
 		t.Errorf("replayed event type = %q, want %q", replayed[0].Event, ws.EventPermissionChanged)
 	}
 
-	// 重放所有事件（无 Last-Event-ID = 不重放）
+	// Replay all events (no Last-Event-ID = no replay)
 	replayed, err = hub.GetBufferedEvents(ctx, runtimeID, "")
 	if err != nil {
 		t.Fatalf("get buffered events with empty ID: %v", err)
@@ -169,7 +170,7 @@ func TestBufferEventForOfflineRuntime(t *testing.T) {
 	}
 }
 
-// TestBufferEventTTL 验证缓冲的事件在 Redis 中设置了 TTL。
+// TestBufferEventTTL verifies that buffered events have a TTL set in Redis.
 func TestBufferEventTTL(t *testing.T) {
 	rdb := connectTestRedis(t)
 	t.Cleanup(func() { rdb.Close() })

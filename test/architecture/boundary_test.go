@@ -1,4 +1,4 @@
-// boundary_test.go 验证分层架构边界与依赖方向的约束。
+// boundary_test.go verifies layered architecture boundary and dependency direction constraints.
 package architecture_test
 
 import (
@@ -68,9 +68,9 @@ func TestHandlersDoNotImportStorePackage(t *testing.T) {
 	}
 }
 
-// isDTOFile 报告给定文件路径是否为 handler 包中的 DTO 映射文件。
-// DTO 文件包含可合法引用生成类型的映射辅助函数。
-// DTO 文件包含可合法引用生成类型的映射辅助函数。
+// isDTOFile reports whether the given file path is a DTO mapping file in the handler package.
+// DTO files contain mapping helper functions that may legitimately reference generated types.
+// DTO files contain mapping helper functions that may legitimately reference generated types.
 func isDTOFile(path string) bool {
 	clean := filepath.ToSlash(filepath.Clean(path))
 	return strings.HasSuffix(clean, "_dto.go")
@@ -103,13 +103,13 @@ func TestHandlersDoNotAccessStoreOrDB(t *testing.T) {
 			t.Fatalf("parse %s: %v", path, err)
 		}
 
-		// 构建导入包名集合，以排除类似 sql.DB 的类型引用。
+		// Build a set of imported package names to exclude package-qualified type references like sql.DB.
 		importedNames := make(map[string]bool)
 		for _, imp := range file.Imports {
 			if imp.Name != nil {
 				importedNames[imp.Name.Name] = true
 			} else {
-				// 提取导入路径的最后一段："database/sql" → "sql"
+				// Extract the last segment of the import path: "database/sql" → "sql"
 				p := strings.Trim(imp.Path.Value, `"`)
 				if i := strings.LastIndex(p, "/"); i >= 0 {
 					importedNames[p[i+1:]] = true
@@ -119,8 +119,8 @@ func TestHandlersDoNotAccessStoreOrDB(t *testing.T) {
 			}
 		}
 
-		// 收集作为结构体字段类型出现的选择器的位置，
-		// 例如 `DB *sql.DB`——选择器 `sql.DB` 是类型，而非访问。
+		// Collect positions of selectors that appear as struct field types,
+		// e.g. `DB *sql.DB` — the selector `sql.DB` is a type, not an access.
 		fieldTypePositions := make(map[token.Pos]bool)
 		for _, decl := range file.Decls {
 			gd, ok := decl.(*ast.GenDecl)
@@ -158,12 +158,12 @@ func TestHandlersDoNotAccessStoreOrDB(t *testing.T) {
 				return true
 			}
 
-			// 排除类似 sql.DB 的包限定类型引用。
+			// Exclude package-qualified type references like sql.DB.
 			if ident, ok := sel.X.(*ast.Ident); ok && importedNames[ident.Name] {
 				return true
 			}
 
-			// 排除作为结构体字段类型出现的选择器。
+			// Exclude selectors that appear as struct field types.
 			if fieldTypePositions[sel.Pos()] {
 				return true
 			}
@@ -177,10 +177,10 @@ func TestHandlersDoNotAccessStoreOrDB(t *testing.T) {
 	}
 }
 
-// TestServiceDoesNotAccessStoreQDirectly 确保服务层文件不会
-// 通过直接读取公共 Q 字段来绕过 Store 包装器。Q 字段
-// 将在后续任务中私有化；此测试用于防止回归
-// 一旦发生即可及时发现，并暴露现有的违规情况。
+// TestServiceDoesNotAccessStoreQDirectly ensures service layer files do not
+// bypass the Store wrapper by directly reading the public Q field. The Q field
+// will be privatised in a later task; this test prevents regressions
+// once that happens and surfaces existing violations.
 func TestServiceDoesNotAccessStoreQDirectly(t *testing.T) {
 	serviceRoot := filepath.Join("..", "..", "internal", "service")
 	fset := token.NewFileSet()
@@ -196,7 +196,7 @@ func TestServiceDoesNotAccessStoreQDirectly(t *testing.T) {
 			if !ok {
 				return true
 			}
-			// 匹配类似 `svc.Store.Q` 或 `s.svc.Store.Q` 的模式。
+			// Match patterns like `svc.Store.Q` or `s.svc.Store.Q`.
 			if sel.Sel.Name != "Q" {
 				return true
 			}
@@ -375,8 +375,8 @@ func TestStoreDoesNotExposeDBOrQueries(t *testing.T) {
 	}
 }
 
-// TestTypesDoesNotImportUpperLayers 确保共享的 types 包保持
-// 无依赖：它不得导入 service、handler 或 store 包。
+// TestTypesDoesNotImportUpperLayers ensures the shared types package stays
+// dependency-free: it must not import service, handler, or store packages.
 func TestTypesDoesNotImportUpperLayers(t *testing.T) {
 	for _, path := range goFiles(t, filepath.Join("..", "..", "internal", "types")) {
 		for _, imp := range importsOf(t, path) {
@@ -389,8 +389,8 @@ func TestTypesDoesNotImportUpperLayers(t *testing.T) {
 	}
 }
 
-// TestServiceLayerDoesNotImportDbGenerated 确保 service 层不直接 import sqlc 生成包。
-// service 必须通过 Store 的封装方法访问数据，类型用 internal/types 的 domain 类型。
+// TestServiceLayerDoesNotImportDbGenerated ensures the service layer does not directly import the sqlc generated package.
+// Services must access data through Store wrapper methods and use domain types from internal/types.
 func TestServiceLayerDoesNotImportDbGenerated(t *testing.T) {
 	for _, path := range goFiles(t, filepath.Join("..", "..", "internal", "service")) {
 		for _, imp := range importsOf(t, path) {
@@ -402,12 +402,12 @@ func TestServiceLayerDoesNotImportDbGenerated(t *testing.T) {
 	}
 }
 
-// TestHandlerDtoFilesDoNotImportDbGenerated 确保 handler 的 _dto.go 文件
-// 不再通过类型别名引入 sqlc 生成类型。domain 类型应来自 internal/types。
+// TestHandlerDtoFilesDoNotImportDbGenerated ensures handler _dto.go files
+// no longer introduce sqlc generated types via type aliases. Domain types should come from internal/types.
 func TestHandlerDtoFilesDoNotImportDbGenerated(t *testing.T) {
 	for _, path := range goFiles(t, filepath.Join("..", "..", "internal", "server", "handler")) {
 		if !isDTOFile(path) {
-			continue // 非 DTO 文件由 TestHandlersDoNotReachSqlcGeneratedDirectly 兜底
+			continue // Non-DTO files are covered by TestHandlersDoNotReachSqlcGeneratedDirectly
 		}
 		for _, imp := range importsOf(t, path) {
 			if strings.HasSuffix(imp, "/internal/db/generated") {
@@ -418,15 +418,15 @@ func TestHandlerDtoFilesDoNotImportDbGenerated(t *testing.T) {
 	}
 }
 
-// TestStoreMethodsReturnDomainTypes 确保 Store 的公共方法签名
-// 不再返回/接受 db.Xxx 类型，强制通过 domain 类型隔离。
-// 用 AST 解析 Store 的方法签名，检查返回值和参数类型不引用 db 包。
+// TestStoreMethodsReturnDomainTypes ensures Store public method signatures
+// no longer return/accept db.Xxx types, enforcing isolation through domain types.
+// Parses Store method signatures via AST and checks that return and parameter types do not reference the db package.
 func TestStoreMethodsReturnDomainTypes(t *testing.T) {
 	storeRoot := filepath.Join("..", "..", "internal", "store")
 	fset := token.NewFileSet()
 	for _, path := range goFiles(t, storeRoot) {
 		if strings.HasSuffix(path, "converter.go") {
-			continue // 转换层本就该用 db 类型，跳过
+			continue // The converter layer is expected to use db types; skip it
 		}
 		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
@@ -435,9 +435,9 @@ func TestStoreMethodsReturnDomainTypes(t *testing.T) {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Recv == nil || len(fn.Recv.List) == 0 {
-				continue // 只看方法
+				continue // Only inspect methods
 			}
-			// 检查 Recv 是否是 *Store（仅对 Store 的公共方法生效）
+			// Check whether Recv is *Store (applies only to Store public methods)
 			recv, ok := fn.Recv.List[0].Type.(*ast.StarExpr)
 			if !ok {
 				continue
@@ -446,7 +446,7 @@ func TestStoreMethodsReturnDomainTypes(t *testing.T) {
 			if !ok || recvIdent.Name != "Store" {
 				continue
 			}
-			// 检查返回值和参数类型不引用 db. selector
+			// Check that return and parameter types do not reference db. selectors
 			ast.Inspect(fn.Type, func(n ast.Node) bool {
 				sel, ok := n.(*ast.SelectorExpr)
 				if !ok {
