@@ -3,11 +3,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Bot, Mail, Lock, User, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const router = useRouter();
   const setUser = useAppStore((s) => s.setUser);
   const loadInitialData = useAppStore((s) => s.loadInitialData);
@@ -38,23 +40,23 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
-      setError("请填写邮箱和密码");
+      setError(t("errEmpty"));
       return;
     }
     if (mode === "register" && !name.trim()) {
-      setError("请填写用户名");
+      setError(t("errName"));
       return;
     }
     if (password.length < 8) {
-      setError("密码至少8位");
+      setError(t("errPwdMin"));
       return;
     }
     if (password.length > 128) {
-      setError("密码最多128位");
+      setError(t("errPwdMax"));
       return;
     }
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      setError("密码需包含大写字母、小写字母和数字");
+      setError(t("errPwdComplex"));
       return;
     }
     setError("");
@@ -80,7 +82,7 @@ export default function LoginPage() {
       await loadInitialData();
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      setError(err instanceof Error ? err.message : t("failed", { defaultValue: "操作失败" }));
     } finally {
       setLoading(false);
     }
@@ -123,26 +125,24 @@ export default function LoginPage() {
           </div>
           <div className="animate-fade-in" style={{ animationDelay: "100ms" }}>
             <h1 className="text-2xl font-bold text-white">Teammate</h1>
-            <p className="text-xs text-slate-500">AI 协作开发平台</p>
+            <p className="text-xs text-slate-500">{t("subtitle")}</p>
           </div>
         </div>
 
         {/* 表单卡片 */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8 shadow-2xl animate-scale-in" style={{ animationDelay: "150ms" }}>
           <h2 className="text-xl font-bold text-white mb-2">
-            {mode === "login" ? "登录" : "注册账号"}
+            {mode === "login" ? t("title") : t("titleRegister")}
           </h2>
           <p className="text-sm text-slate-400 mb-6">
-            {mode === "login"
-              ? "使用邮箱和密码登录你的工作区"
-              : "创建一个新账号并加入工作区"}
+            {mode === "login" ? t("desc") : t("descRegister")}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  用户名
+                  {t("username")}
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -150,7 +150,7 @@ export default function LoginPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors-fast"
-                    placeholder="你的名字"
+                    placeholder={t("usernamePlaceholder")}
                   />
                 </div>
               </div>
@@ -158,7 +158,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                邮箱
+                {t("email")}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -174,7 +174,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                密码
+                {t("password")}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -183,7 +183,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-10 py-3 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors-fast"
-                  placeholder="至少8位，含大小写和数字"
+                  placeholder={t("passwordPlaceholder")}
                 />
                 <button
                   type="button"
@@ -225,16 +225,16 @@ export default function LoginPage() {
                 <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
               )}
               {loading
-                ? "验证中..."
+                ? t("verifying")
                 : mode === "login"
-                  ? "登录"
-                  : "注册并创建账号"}
+                  ? t("submitLogin")
+                  : t("submitRegister")}
             </button>
           </form>
 
           {/* 切换模式 */}
           <p className="mt-6 text-center text-sm text-slate-500">
-            {mode === "login" ? "还没有账号？" : "已有账号？"}
+            {mode === "login" ? t("noAccount") : t("hasAccount")}
             <button
               type="button"
               onClick={() => {
@@ -243,7 +243,7 @@ export default function LoginPage() {
               }}
               className="ml-1 text-blue-400 hover:text-blue-300 font-medium transition-colors-fast"
             >
-              {mode === "login" ? "注册" : "登录"}
+              {mode === "login" ? t("register") : t("submitLogin")}
             </button>
           </p>
 

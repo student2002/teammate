@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import { useTranslations } from "next-intl";
 import type { MappedAgent, Skill, McpServer, AgentStatus } from "@/lib/types";
 import { mapAgentFromApi } from "@/lib/mappers";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
@@ -41,14 +42,15 @@ const STATUS_STYLES: Record<string, string> = {
   offline: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  online: "空闲在线",
-  busy: "忙碌中",
-  paused: "暂停接单",
-  offline: "离线",
+const STATUS_KEYS: Record<string, string> = {
+  online: "online",
+  busy: "busy",
+  paused: "paused",
+  offline: "offline",
 };
 
 function AgentStatusBadge({ status }: { status: AgentStatus | string }) {
+  const t = useTranslations("agents.status");
   const s = STATUS_STYLES[status] || STATUS_STYLES.offline;
   return (
     <div
@@ -63,7 +65,7 @@ function AgentStatusBadge({ status }: { status: AgentStatus | string }) {
       ) : (
         <PauseCircle className="w-3 h-3 mr-1 opacity-50" />
       )}
-      {STATUS_LABELS[status] || status}
+      {t(STATUS_KEYS[status] || "offline")}
     </div>
   );
 }
@@ -92,6 +94,7 @@ function MultiSelect({
   placeholder: string;
   accentColor?: string;
 }) {
+  const t = useTranslations("agents.multiSelect");
   const [isOpen, setIsOpen] = useState(false);
 
   const colorMap: Record<
@@ -179,7 +182,7 @@ function MultiSelect({
           >
             {options.length === 0 ? (
               <div className="px-3 py-2 text-sm text-slate-500">
-                暂无可选项
+                {t("noOptions")}
               </div>
             ) : (
               options.map((opt) => {
@@ -200,7 +203,7 @@ function MultiSelect({
                       <span>{opt.name}</span>
                       {!opt.enabled && (
                         <span className="text-[10px] text-slate-500">
-                          (已禁用)
+                          ({t("disabled")})
                         </span>
                       )}
                     </span>
@@ -234,6 +237,7 @@ function ConfirmDeleteModal({
   deleting: boolean;
   error: string | null;
 }) {
+  const t = useTranslations("agents.deleteDialog");
   return (
     <div
       className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center"
@@ -248,11 +252,14 @@ function ConfirmDeleteModal({
             <AlertTriangle className="w-5 h-5 text-red-400" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-white mb-1">删除代理</h3>
+            <h3 className="text-lg font-bold text-white mb-1">{t("title")}</h3>
             <p className="text-sm text-slate-400">
-              确定要删除代理{" "}
-              <span className="text-white font-medium">{agentName}</span>{" "}
-              吗？此操作不可恢复，关联的技能和 MCP 配置也将被清除。
+              {t.rich("confirm", {
+                name: agentName,
+                span: (chunks) => (
+                  <span className="text-white font-medium">{chunks}</span>
+                ),
+              })}
             </p>
             {error && (
               <p className="text-sm text-red-400 mt-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
@@ -267,7 +274,7 @@ function ConfirmDeleteModal({
             disabled={deleting}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast disabled:opacity-50"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={onConfirm}
@@ -279,7 +286,7 @@ function ConfirmDeleteModal({
             ) : (
               <Trash2 className="w-4 h-4 mr-2" />
             )}
-            确认删除
+            {t("confirmDelete")}
           </button>
         </div>
       </div>
@@ -315,6 +322,7 @@ function TokenRevealModal({
   workspaceId: string | null;
   onClose: () => void;
 }) {
+  const t = useTranslations("agents.tokenModal");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = (text: string) => {
@@ -350,7 +358,7 @@ workspace:
         <div className="p-5 border-b border-amber-500/20 flex justify-between items-center">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <span className="text-amber-400">&#9888;</span>{" "}
-            代理 API Token（仅显示一次）
+            {t("title")}
           </h2>
           <button
             onClick={onClose}
@@ -361,16 +369,15 @@ workspace:
         </div>
         <div className="p-5 space-y-5">
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
-            <p className="text-sm text-amber-300 font-medium mb-1">重要提示</p>
+            <p className="text-sm text-amber-300 font-medium mb-1">{t("importantTitle")}</p>
             <p className="text-xs text-amber-200/70">
-              此
-              Token 仅在创建时展示一次，关闭后无法再次查看。请立即复制并保存到安全位置。
+              {t("importantDesc")}
             </p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              守护进程配置（~/.teammate/config.yaml）
+              {t("configLabel")}
             </label>
             <div className="relative">
               <pre className="bg-slate-950 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre">
@@ -380,59 +387,71 @@ workspace:
                 onClick={() => handleCopy(configYaml)}
                 className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] text-slate-300 ${copied ? "bg-emerald-600 text-white" : "bg-slate-700 hover:bg-slate-600"}`}
               >
-                {copied ? "已复制" : "复制"}
+                {copied ? t("copied") : t("copy")}
               </button>
             </div>
           </div>
 
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              快速启动步骤
+              {t("stepsTitle")}
             </p>
             <ol className="space-y-2 text-sm text-slate-300">
               <li className="flex items-start gap-2">
                 <span className="text-blue-400 font-bold shrink-0">1.</span>
                 <span>
-                  在代理机器上安装{" "}
-                  <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                    teammate
-                  </code>{" "}
-                  CLI
+                  {t.rich("step1", {
+                    code: (chunks) => (
+                      <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-400 font-bold shrink-0">2.</span>
                 <span>
-                  运行{" "}
-                  <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                    teammate-agentd config init --profile {toolName}
-                  </code>{" "}
-                  生成配置文件
+                  {t.rich("step2", {
+                    profile: toolName,
+                    code: (chunks) => (
+                      <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-400 font-bold shrink-0">3.</span>
                 <span>
-                  将上方配置写入{" "}
-                  <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                    ~/.teammate/config-{toolName}.yaml
-                  </code>
+                  {t.rich("step3", {
+                    profile: toolName,
+                    code: (chunks) => (
+                      <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-400 font-bold shrink-0">4.</span>
                 <span>
-                  运行{" "}
-                  <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                    teammate-agentd --profile {toolName}
-                  </code>{" "}
-                  启动守护进程
+                  {t.rich("step4", {
+                    profile: toolName,
+                    code: (chunks) => (
+                      <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-400 font-bold shrink-0">5.</span>
                 <span>
-                  守护进程将自动连接服务端、认领任务节点并执行编码
+                  {t("step5")}
                 </span>
               </li>
             </ol>
@@ -443,7 +462,7 @@ workspace:
             onClick={onClose}
             className="btn-press px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium"
           >
-            我已保存 Token，关闭
+            {t("close")}
           </button>
         </div>
       </div>
@@ -475,6 +494,7 @@ function AgentRegisterForm({
   mcpServers: McpServer[];
   saving: boolean;
 }) {
+  const t = useTranslations("agents.register");
   const [name, setName] = useState("");
   const [tool, setTool] = useState("Claude Code");
   const [identity, setIdentity] = useState("");
@@ -492,7 +512,7 @@ function AgentRegisterForm({
       name: name.trim(),
       tool,
       identityInstruction:
-        identity.trim() || `你是 ${name.trim()}，一个 AI 代理。`,
+        identity.trim() || t("defaultIdentity", { name: name.trim() }),
       gitName: gitName.trim(),
       gitEmail: gitEmail.trim(),
       skills: selectedSkills,
@@ -510,7 +530,7 @@ function AgentRegisterForm({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-xl font-bold text-white">注册新 AI 代理</h2>
+          <h2 className="text-xl font-bold text-white">{t("title")}</h2>
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white"
@@ -522,18 +542,18 @@ function AgentRegisterForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                代理名称 <span className="text-red-400">*</span>
+                {t("nameLabel")} <span className="text-red-400">*</span>
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                placeholder="如: Code-Reviewer"
+                placeholder={t("namePlaceholder")}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                编码工具
+                {t("toolLabel")}
               </label>
               <select
                 value={tool}
@@ -545,52 +565,52 @@ function AgentRegisterForm({
                 <option>OpenCode</option>
                 <option>AtomCode</option>
                 <option>MiMoCode</option>
-                <option>自定义 CLI</option>
+                <option>{t("customCliOption")}</option>
               </select>
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              身份指令
+              {t("identityLabel")}
             </label>
             <textarea
               value={identity}
               onChange={(e) => setIdentity(e.target.value)}
               rows={3}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500 resize-none font-mono"
-              placeholder="例: 你是一个前端专家，擅长 React 和 TypeScript..."
+              placeholder={t("identityPlaceholder")}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Git 用户名 <span className="text-red-400">*</span>
+                {t("gitNameLabel")} <span className="text-red-400">*</span>
               </label>
               <input
                 value={gitName}
                 onChange={(e) => setGitName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                placeholder="如: Claude Worker"
+                placeholder={t("gitNamePlaceholder")}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Git 邮箱 <span className="text-red-400">*</span>
+                {t("gitEmailLabel")} <span className="text-red-400">*</span>
               </label>
               <input
                 value={gitEmail}
                 onChange={(e) => setGitEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                placeholder="如: worker@example.com"
+                placeholder={t("gitEmailPlaceholder")}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center">
-              <Zap className="w-4 h-4 mr-1.5 text-indigo-400" /> 关联技能
+              <Zap className="w-4 h-4 mr-1.5 text-indigo-400" /> {t("skillsLabel")}
             </label>
             <MultiSelect
               options={enabledSkills.map((s) => ({
@@ -600,20 +620,20 @@ function AgentRegisterForm({
               }))}
               selected={selectedSkills}
               onChange={setSelectedSkills}
-              placeholder="选择已配置的技能..."
+              placeholder={t("skillsPlaceholder")}
               accentColor="indigo"
             />
             {enabledSkills.length === 0 && (
               <p className="text-xs text-amber-400 mt-1.5">
-                请先在「Skill & MCP」菜单中配置技能
+                {t("skillsEmptyHint")}
               </p>
             )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center">
-              <Database className="w-4 h-4 mr-1.5 text-emerald-400" /> MCP
-              服务器
+              <Database className="w-4 h-4 mr-1.5 text-emerald-400" />{" "}
+              {t("mcpLabel")}
             </label>
             <MultiSelect
               options={enabledMcps.map((m) => ({
@@ -623,12 +643,12 @@ function AgentRegisterForm({
               }))}
               selected={selectedMcps}
               onChange={setSelectedMcps}
-              placeholder="选择已配置的 MCP 服务器..."
+              placeholder={t("mcpPlaceholder")}
               accentColor="emerald"
             />
             {enabledMcps.length === 0 && (
               <p className="text-xs text-amber-400 mt-1.5">
-                请先在「Skill & MCP」菜单中配置 MCP 服务器
+                {t("mcpEmptyHint")}
               </p>
             )}
           </div>
@@ -638,7 +658,7 @@ function AgentRegisterForm({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleSave}
@@ -650,7 +670,7 @@ function AgentRegisterForm({
             ) : (
               <Save className="w-4 h-4 mr-2" />
             )}
-            创建代理并生成 API Token
+            {t("submit")}
           </button>
         </div>
       </div>
@@ -700,6 +720,8 @@ function AgentEditForm({
   const availableSkills = enabledSkills;
   const availableMcps = enabledMcps;
 
+  const t = useTranslations("agents.edit");
+
   const handleSave = () => {
     onSave(agent.id, {
       identityInstruction: identity,
@@ -733,7 +755,7 @@ function AgentEditForm({
         <div className="p-5 space-y-5">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              身份指令
+              {t("identityLabel")}
             </label>
             <textarea
               value={identity}
@@ -745,30 +767,30 @@ function AgentEditForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Git 用户名
+                {t("gitNameLabel")}
               </label>
               <input
                 value={gitName}
                 onChange={(e) => setGitName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                placeholder="如: Claude Worker"
+                placeholder={t("gitNamePlaceholder")}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Git 邮箱
+                {t("gitEmailLabel")}
               </label>
               <input
                 value={gitEmail}
                 onChange={(e) => setGitEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                placeholder="如: worker@example.com"
+                placeholder={t("gitEmailPlaceholder")}
               />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center">
-              <Zap className="w-4 h-4 mr-1.5 text-indigo-400" /> 技能
+              <Zap className="w-4 h-4 mr-1.5 text-indigo-400" /> {t("skillsLabel")}
             </label>
             <MultiSelect
               options={availableSkills.map((s) => ({
@@ -778,14 +800,14 @@ function AgentEditForm({
               }))}
               selected={selectedSkills}
               onChange={setSelectedSkills}
-              placeholder="选择已配置的技能..."
+              placeholder={t("skillsPlaceholder")}
               accentColor="indigo"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center">
-              <Database className="w-4 h-4 mr-1.5 text-emerald-400" /> MCP
-              服务器
+              <Database className="w-4 h-4 mr-1.5 text-emerald-400" />{" "}
+              {t("mcpLabel")}
             </label>
             <MultiSelect
               options={availableMcps.map((m) => ({
@@ -795,7 +817,7 @@ function AgentEditForm({
               }))}
               selected={selectedMcps}
               onChange={setSelectedMcps}
-              placeholder="选择已配置的 MCP 服务器..."
+              placeholder={t("mcpPlaceholder")}
               accentColor="emerald"
             />
           </div>
@@ -805,7 +827,7 @@ function AgentEditForm({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleSave}
@@ -817,7 +839,7 @@ function AgentEditForm({
             ) : (
               <Save className="w-4 h-4 mr-2" />
             )}
-            保存配置
+            {t("save")}
           </button>
         </div>
       </div>
@@ -843,6 +865,7 @@ function AgentDetailModal({
   onClose: () => void;
   onEdit: (agent: MappedAgent) => void;
 }) {
+  const t = useTranslations("agents.detail");
   return (
     <div
       className="modal-overlay fixed inset-0 z-50 flex items-center justify-center"
@@ -882,7 +905,7 @@ function AgentDetailModal({
         <div className="p-6 space-y-6">
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              身份指令
+              {t("identityLabel")}
             </div>
             <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm text-slate-300 leading-relaxed font-mono">
               {agent.identityInstruction}
@@ -890,7 +913,7 @@ function AgentDetailModal({
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center">
-              <Zap className="w-3.5 h-3.5 mr-1 text-indigo-400" /> 关联技能
+              <Zap className="w-3.5 h-3.5 mr-1 text-indigo-400" /> {t("skillsLabel")}
             </div>
             <div className="flex flex-wrap gap-2">
               {(agent.skills || []).map((s) => (
@@ -905,8 +928,8 @@ function AgentDetailModal({
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center">
-              <Database className="w-3.5 h-3.5 mr-1 text-emerald-400" /> MCP
-              服务器
+              <Database className="w-3.5 h-3.5 mr-1 text-emerald-400" />{" "}
+              {t("mcpLabel")}
             </div>
             <div className="space-y-2">
               {(agent.mcpServers || []).map((m) => (
@@ -922,17 +945,17 @@ function AgentDetailModal({
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center">
-              <Cpu className="w-3.5 h-3.5 mr-1 text-blue-400" /> Token 用量
+              <Cpu className="w-3.5 h-3.5 mr-1 text-blue-400" /> {t("tokenUsageLabel")}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400 mb-1">输入 Token</div>
+                <div className="text-xs text-slate-400 mb-1">{t("inputToken")}</div>
                 <div className="text-lg font-bold text-white">
                   {(agent.tokenUsage || { input: 0, output: 0 }).input.toLocaleString()}
                 </div>
               </div>
               <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                <div className="text-xs text-slate-400 mb-1">输出 Token</div>
+                <div className="text-xs text-slate-400 mb-1">{t("outputToken")}</div>
                 <div className="text-lg font-bold text-white">
                   {(agent.tokenUsage || { input: 0, output: 0 }).output.toLocaleString()}
                 </div>
@@ -942,7 +965,7 @@ function AgentDetailModal({
           {((agent.history as HistoryItem[]) || []).length > 0 && (
             <div>
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center">
-                <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" /> 近期执行历史
+                <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" /> {t("historyLabel")}
               </div>
               <div className="space-y-2">
                 {(agent.history as HistoryItem[]).map((h, i) => (
@@ -967,10 +990,10 @@ function AgentDetailModal({
                       }`}
                     >
                       {h.status === "completed"
-                        ? "已完成"
+                        ? t("historyCompleted")
                         : h.status === "manual_intervention"
-                          ? "需介入"
-                          : "进行中"}
+                          ? t("historyIntervention")
+                          : t("historyInProgress")}
                     </span>
                   </div>
                 ))}
@@ -1048,6 +1071,7 @@ async function hydrateAgentBindings(workspaceId: string, agentList: MappedAgent[
 }
 
 export default function AgentsPage() {
+  const t = useTranslations("agents");
   const router = useRouter();
   const agents = useAppStore((s) => s.agents);
   const setAgents = useAppStore((s) => s.setAgents);
@@ -1126,7 +1150,7 @@ export default function AgentsPage() {
       const mapped: MappedAgent = {
         id: created.id,
         name: created.name,
-        tool: PROVIDER_MAP[created.provider] || created.provider || "自定义 CLI",
+        tool: PROVIDER_MAP[created.provider] || created.provider || t("customCli"),
         status: created.status || "offline",
         task: null,
         identityInstruction: created.instructions || "",
@@ -1213,7 +1237,7 @@ export default function AgentsPage() {
       setDeletingAgent(null);
     } catch (err) {
       setDeleteError(
-        err instanceof Error ? err.message : "删除失败，请重试"
+        err instanceof Error ? err.message : t("deleteFailed")
       );
     } finally {
       setDeleting(false);
@@ -1228,17 +1252,16 @@ export default function AgentsPage() {
     <div className="page-enter h-full flex flex-col p-8 overflow-y-auto">
       <div className="flex justify-between items-center mb-8 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">AI 代理集市</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">{t("title")}</h1>
           <p className="text-sm text-slate-400">
-            {agents.length} 个代理在线 ·
-            点击卡片查看详情，或编辑技能和 MCP 配置。
+            {t("subtitle", { count: agents.length })}
           </p>
         </div>
         <button
           onClick={() => setShowRegister(true)}
           className="btn-press flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors-fast shadow-lg shadow-blue-500/20"
         >
-          <Plus className="w-5 h-5 mr-2" /> 注册新代理
+          <Plus className="w-5 h-5 mr-2" /> {t("registerButton")}
         </button>
       </div>
 
@@ -1280,7 +1303,7 @@ export default function AgentsPage() {
               <div className="space-y-5 mb-6">
                 <div>
                   <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center">
-                    <Zap className="w-3.5 h-3.5 mr-1 text-indigo-400" /> 技能
+                    <Zap className="w-3.5 h-3.5 mr-1 text-indigo-400" /> {t("cardSkills")}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {(agent.skills || []).map((s) => (
@@ -1296,7 +1319,7 @@ export default function AgentsPage() {
                 <div>
                   <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center">
                     <Database className="w-3.5 h-3.5 mr-1 text-emerald-400" />{" "}
-                    MCP
+                    {t("cardMcp")}
                   </div>
                   <div className="flex flex-col gap-2">
                     {(agent.mcpServers || []).map((m) => (
@@ -1313,7 +1336,7 @@ export default function AgentsPage() {
                 <div>
                   <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center">
                     <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
-                    完成节点
+                    {t("completedNodes")}
                   </div>
                   <div className="text-lg font-bold text-emerald-400">
                     {completedCount}
@@ -1324,23 +1347,23 @@ export default function AgentsPage() {
               <div className="mt-auto pt-4 border-t border-slate-700/50 flex justify-between items-center bg-slate-800/20 -mx-6 -mb-6 px-6 pb-6 rounded-b-xl">
                 <div className="flex items-center gap-4">
                   <div className="text-xs text-slate-400">
-                    当前:{" "}
+                    {t("currentTask")}{" "}
                     <span className="text-white font-medium ml-1">
                       {currentTask?.title
                         ? currentTask.title.substring(0, 14) + "..."
-                        : agent.task || "空闲"}
+                        : agent.task || t("idle")}
                     </span>
                   </div>
                   <div className="text-xs flex items-center gap-1">
                     {agent.status === "online" || agent.status === "busy" ? (
                       <>
                         <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">SSE: 已连接</span>
+                        <span className="text-emerald-400">{t("sseConnected")}</span>
                       </>
                     ) : (
                       <>
                         <WifiOff className="w-3.5 h-3.5 text-red-400" />
-                        <span className="text-red-400">SSE: 离线</span>
+                        <span className="text-red-400">{t("sseOffline")}</span>
                       </>
                     )}
                   </div>
@@ -1353,7 +1376,7 @@ export default function AgentsPage() {
                     }}
                     className="text-slate-400 hover:text-white text-xs font-medium bg-slate-700/50 px-3 py-1.5 rounded-md border border-slate-600/50 transition-colors-fast"
                   >
-                    详情
+                    {t("detailButton")}
                   </button>
                   <button
                     onClick={(e) => {
@@ -1362,7 +1385,7 @@ export default function AgentsPage() {
                     }}
                     className="text-blue-400 hover:text-blue-300 text-xs font-medium bg-blue-500/10 px-3 py-1.5 rounded-md border border-blue-500/20 transition-colors-fast"
                   >
-                    配置能力
+                    {t("configButton")}
                   </button>
                   <button
                     onClick={(e) => {
@@ -1371,7 +1394,7 @@ export default function AgentsPage() {
                     }}
                     className="text-red-400 hover:text-red-300 text-xs font-medium bg-red-500/10 px-3 py-1.5 rounded-md border border-red-500/20 transition-colors-fast"
                   >
-                    删除
+                    {t("deleteButton")}
                   </button>
                 </div>
               </div>

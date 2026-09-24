@@ -2,6 +2,7 @@
 // 审查队列页：展示待审查任务及审查记录。
 
 import React, { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import {
   Shield,
   CheckCircle2,
@@ -33,6 +34,7 @@ function RejectReasonDialog({
   onConfirm,
   onClose,
 }: RejectReasonDialogProps) {
+  const t = useTranslations("reviews.rejectDialog");
   const [reason, setReason] = useState("");
 
   const handleSubmit = () => {
@@ -52,7 +54,7 @@ function RejectReasonDialog({
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white flex items-center">
-            <XCircle className="w-5 h-5 mr-2 text-orange-400" /> 退回任务
+            <XCircle className="w-5 h-5 mr-2 text-orange-400" /> {t("title")}
           </h3>
           <button
             onClick={onClose}
@@ -68,7 +70,7 @@ function RejectReasonDialog({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              退回原因 <span className="text-red-400">*</span>
+              {t("reasonLabel")} <span className="text-red-400">*</span>
             </label>
             <textarea
               value={reason}
@@ -76,7 +78,7 @@ function RejectReasonDialog({
               rows={3}
               autoFocus
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-300 focus:outline-none focus:border-orange-500 resize-none transition-colors-fast"
-              placeholder="请详细说明退回原因..."
+              placeholder={t("reasonPlaceholder")}
             />
           </div>
         </div>
@@ -85,14 +87,14 @@ function RejectReasonDialog({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleSubmit}
             disabled={!reason.trim()}
             className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
           >
-            <XCircle className="w-4 h-4 mr-2" /> 确认退回
+            <XCircle className="w-4 h-4 mr-2" /> {t("confirm")}
           </button>
         </div>
       </div>
@@ -129,6 +131,7 @@ interface SelfReviewBadgeProps {
 }
 
 function SelfReviewBadge({ task }: SelfReviewBadgeProps) {
+  const t = useTranslations("reviews");
   const [isSelfReview, setIsSelfReview] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -162,7 +165,7 @@ function SelfReviewBadge({ task }: SelfReviewBadgeProps) {
 
   return (
     <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-amber-500/10 text-amber-400 border-amber-500/30">
-      <AlertTriangle className="w-3 h-3" /> 自审风险
+      <AlertTriangle className="w-3 h-3" /> {t("selfReviewBadge")}
     </span>
   );
 }
@@ -171,6 +174,7 @@ function SelfReviewBadge({ task }: SelfReviewBadgeProps) {
 // 审查队列主视图 (Next.js Page)
 // ==========================================
 export default function ReviewsPage() {
+  const t = useTranslations("reviews");
   const tasks = useAppStore((s) => s.tasks);
   const currentProjectId = useAppStore((s) => s.currentProjectId);
   const loadProjectData = useAppStore((s) => s.loadProjectData);
@@ -231,9 +235,9 @@ export default function ReviewsPage() {
   });
 
   const filterLabels: Record<string, string> = {
-    all: "全部",
-    rejected: "已退回",
-    pending_review: "待审查",
+    all: t("filterAll"),
+    rejected: t("filterRejected"),
+    pending_review: t("filterPending"),
   };
 
   const handleApprove = async (taskId: number) => {
@@ -290,10 +294,10 @@ export default function ReviewsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white mb-2 flex items-center">
             <Shield className="w-7 h-7 mr-3 text-amber-400" />
-            审查队列
+            {t("title")}
           </h1>
           <p className="text-sm text-slate-400">
-            {reviewTasks.length} 个任务待审查 · 自动检测自我审查风险
+            {t("subtitle", { count: reviewTasks.length })}
           </p>
         </div>
 
@@ -344,9 +348,9 @@ export default function ReviewsPage() {
       {filteredTasks.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
           <Shield className="w-16 h-16 mb-4 text-slate-700" />
-          <div className="text-lg font-medium mb-1">暂无待审查任务</div>
+          <div className="text-lg font-medium mb-1">{t("emptyTitle")}</div>
           <div className="text-sm">
-            所有任务均已通过审查或无审查任务
+            {t("emptyDesc")}
           </div>
           <div className="mt-8 w-full max-w-2xl text-left">
             <EmptyStateGuide page="reviews" />
@@ -360,9 +364,9 @@ export default function ReviewsPage() {
               task.priorityState === "rejected" ||
               task.nodesStatus?.[task.currentNode] === "rejected";
             const currentNodeName =
-              task.nodeNames?.[task.currentNode] || "未知节点";
+              task.nodeNames?.[task.currentNode] || t("unknownNode");
             const currentAgent =
-              task.nodeAgents?.[task.currentNode] || "未分配";
+              task.nodeAgents?.[task.currentNode] || t("unassigned");
 
             return (
               <div
@@ -386,17 +390,16 @@ export default function ReviewsPage() {
                   <div className="flex items-center gap-2 shrink-0 ml-4">
                     {isRejected ? (
                       <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-orange-500/10 text-orange-400 border-orange-500/30">
-                        <XCircle className="w-3.5 h-3.5" /> 已退回
+                        <XCircle className="w-3.5 h-3.5" /> {t("statusRejected")}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-blue-500/10 text-blue-400 border-blue-500/30">
-                        <Clock className="w-3.5 h-3.5" /> 待审查
+                        <Clock className="w-3.5 h-3.5" /> {t("statusPending")}
                       </span>
                     )}
                     {task.rejectCount > 0 && (
                       <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-red-500/10 text-red-400 border-red-500/20">
-                        <AlertTriangle className="w-3 h-3" /> 退回{" "}
-                        {task.rejectCount} 次
+                        <AlertTriangle className="w-3 h-3" /> {t("rejectCount", { count: task.rejectCount })}
                       </span>
                     )}
                     <SelfReviewBadge task={task} />
@@ -407,7 +410,7 @@ export default function ReviewsPage() {
                 <div className="flex items-center gap-6 mb-4 text-sm">
                   <div className="flex items-center gap-2 text-slate-300">
                     <Eye className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-500">当前节点:</span>
+                    <span className="text-slate-500">{t("currentNode")}</span>
                     <span className="font-medium">{currentNodeName}</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
@@ -418,7 +421,7 @@ export default function ReviewsPage() {
                     ) : (
                       <User className="w-4 h-4 text-emerald-400" />
                     )}
-                    <span className="text-slate-500">审查者:</span>
+                    <span className="text-slate-500">{t("reviewer")}</span>
                     <span className="font-medium">{currentAgent}</span>
                   </div>
                   {task.message && (
@@ -436,11 +439,10 @@ export default function ReviewsPage() {
                   <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 mb-4">
                     <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                     <span className="text-sm text-amber-300 font-medium">
-                      {"\u26A0"} 自我审查风险: {selfReviewAgent}{" "}
-                      同时参与了编码和审查
+                      {"\u26A0"} {t("selfReviewRisk", { agent: selfReviewAgent })}
                     </span>
                     <span className="text-xs text-amber-400/70 ml-auto shrink-0">
-                      建议更换审查者
+                      {t("suggestChange")}
                     </span>
                   </div>
                 )}
@@ -451,22 +453,23 @@ export default function ReviewsPage() {
                     onClick={() => handleApprove(task.id)}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-sm font-medium border border-emerald-500/30 transition-colors-fast btn-press"
                   >
-                    <CheckCircle2 className="w-4 h-4" /> 通过
+                    <CheckCircle2 className="w-4 h-4" /> {t("approve")}
                   </button>
                   <button
                     onClick={() => setRejectingTask(task)}
                     className="flex items-center gap-2 px-4 py-2 bg-orange-600/10 hover:bg-orange-600/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30 transition-colors-fast btn-press"
                   >
-                    <XCircle className="w-4 h-4" /> 退回
+                    <XCircle className="w-4 h-4" /> {t("reject")}
                   </button>
                   <div className="flex-1" />
                   <div className="flex items-center gap-4 text-xs text-slate-500">
                     <span>
-                      进度{" "}
-                      {(task.nodesStatus || []).filter(
-                        (s) => s === "completed"
-                      ).length}
-                      /{task.nodeNames?.length || 0}
+                      {t("progress", {
+                        completed: (task.nodesStatus || []).filter(
+                          (s) => s === "completed"
+                        ).length,
+                        total: task.nodeNames?.length || 0,
+                      })}
                     </span>
                     {task.agent && (
                       <span className="flex items-center gap-1">

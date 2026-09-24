@@ -89,6 +89,8 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - **Frontend state:** single flat Zustand store in `web/lib/store.ts` — no slices, no React Query/SWR
 - **Frontend API:** plain `fetch` wrapper in `web/lib/api.ts`; auth via Bearer token from localStorage
 - **Data mapping:** `web/lib/mappers.ts` transforms snake_case API → camelCase frontend types
+- **注释只描述当前行为，不记录修改历史**——注释里禁止出现"修改记录 / change log / Added in vX / renamed from Y / 旧逻辑是 Z"之类的历史叙述；代码演进历史由 git 提交记录承载，注释只写代码现在是什么、为什么这样设计
+- **不做向后兼容**——接口/函数/配置破坏性变更时直接替换并同步更新所有调用方，禁止保留旧接口别名、deprecated 包装层、兼容分支或双路径共存；不写 `deprecated` 标记后长期保留旧实现
 - **Doc-code consistency:** reviewing docs against code — every inconsistency found must be recorded in `docs/实现与设计偏差记录.md` (format follows its header; fix the doc if it's the wrong side)
 
 ## sqlc type overrides

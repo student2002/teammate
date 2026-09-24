@@ -66,13 +66,10 @@ TEAMS_BASE_URL=https://api.your-domain.com
 TEAMS_DB_PASS=$(openssl rand -hex 16)
 EOF
 
-# 3. 启动所有服务
+# 3. 启动所有服务（app 容器启动时自动执行数据库迁移，成功后才启动服务）
 docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
 
-# 4. 执行数据库迁移
-docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm app migrate --path /app/migrations
-
-# 5. 验证服务状态
+# 4. 验证服务状态
 curl http://localhost:8080/health     # → {"status":"ok"}
 curl http://localhost:8080/ready      # → {"status":"ready"}
 ```
@@ -152,23 +149,21 @@ TEAMS_REDIS_URL=redis://redis:6379/0
 
 ## 3. 数据库迁移
 
-### 首次部署
+### 自动迁移（默认）
+
+app 容器每次启动时都会先执行数据库迁移、成功后再启动 HTTP 服务（`docker-compose.prod.yml` 中的 `entrypoint` 已内建），因此正常部署**无需手动迁移**。迁移是幂等的，且 golang-migrate 通过 Postgres advisory lock 保证多实例并发启动时只有一个实例真正执行迁移。
+
+### 手动迁移（排查问题用）
 
 ```bash
-docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm app migrate --path /app/migrations
+docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm --entrypoint teammate-server app migrate --path /app/migrations
 ```
 
-### 升级（修改迁移文件后）
+### 升级（源码更新后）
 
 ```bash
-# 拉取最新镜像
-docker compose --env-file product/.env -f product/docker-compose.prod.yml pull app
-
-# 重启前先跑迁移
-docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm app migrate --path /app/migrations
-
-# 重启服务
-docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
+# 重建镜像并重启，app 启动时会自动先跑迁移
+docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d --build
 ```
 
 ### 验证迁移状态

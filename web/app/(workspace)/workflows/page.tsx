@@ -25,6 +25,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useTranslations } from "next-intl";
 import api from "@/lib/api";
 import type {
   MappedTemplate,
@@ -56,6 +57,7 @@ function TemplateEditorView({
   projects,
   saving,
 }: TemplateEditorViewProps) {
+  const t = useTranslations("workflows.editor");
   const [formData, setFormData] = useState<MappedTemplate>(template);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -78,7 +80,7 @@ function TemplateEditorView({
   const addNode = () => {
     const newNode: WorkflowTemplateNode = {
       id: Date.now(),
-      name: "AI 加工处理",
+      name: t("defaultNodeName"),
       nodeType: "standard",
       assigneeType: "any_agent",
       assigneeId: "",
@@ -142,9 +144,9 @@ function TemplateEditorView({
   };
 
   const nodeTypeLabels: Record<string, string> = {
-    standard: "普通节点",
-    review: "审查节点",
-    manual: "人工操作",
+    standard: t("nodeTypeStandard"),
+    review: t("nodeTypeReview"),
+    manual: t("nodeTypeManual"),
   };
 
   return (
@@ -159,10 +161,10 @@ function TemplateEditorView({
           </button>
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">
-              设计工作流程模板
+              {t("title")}
             </h1>
             <p className="text-xs text-slate-400">
-              模板定义了加工作业的协同与流转规则，可在不同的工程中重复使用。
+              {t("subtitle")}
             </p>
           </div>
         </div>
@@ -180,7 +182,7 @@ function TemplateEditorView({
           ) : (
             <Save className="w-4 h-4 mr-2" />
           )}
-          {saving ? "保存中..." : "保存至模板库"}
+          {saving ? t("saving") : t("saveToLibrary")}
         </button>
       </div>
 
@@ -190,7 +192,7 @@ function TemplateEditorView({
           <div className="mb-10 bg-slate-800/40 border border-slate-700/60 rounded-xl p-6">
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-400 mb-2">
-                模板名称
+                {t("nameLabel")}
               </label>
               <input
                 type="text"
@@ -202,7 +204,7 @@ function TemplateEditorView({
             <div className="grid grid-cols-2 gap-5 mb-4">
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-2">
-                  模板描述
+                  {t("descLabel")}
                 </label>
                 <textarea
                   value={formData.description}
@@ -216,7 +218,7 @@ function TemplateEditorView({
 
           <div className="mb-10 bg-slate-800/40 border border-slate-700/60 rounded-xl p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-white">触发方式</h3>
+              <h3 className="text-lg font-bold text-white">{t("triggerTitle")}</h3>
               <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
@@ -224,13 +226,13 @@ function TemplateEditorView({
                   onChange={(e) => updateField("triggerEnabled", e.target.checked)}
                   className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-blue-600 focus:ring-blue-500"
                 />
-                启用
+                {t("triggerEnable")}
               </label>
             </div>
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[
-                { value: "manual", label: "人工输入", icon: User },
-                { value: "schedule", label: "定时触发", icon: Clock },
+                { value: "manual", label: t("triggerManual"), icon: User },
+                { value: "schedule", label: t("triggerSchedule"), icon: Clock },
                 { value: "github_issue", label: "GitHub Issue", icon: FolderGit2 },
               ].map((item) => {
                 const Icon = item.icon;
@@ -262,7 +264,7 @@ function TemplateEditorView({
                   onChange={(e) => updateTriggerConfig("projectId", e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 >
-                  <option value="">请选择项目</option>
+                  <option value="">{t("selectProject")}</option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
@@ -277,7 +279,7 @@ function TemplateEditorView({
                     updateTriggerConfig("intervalMinutes", parseInt(e.target.value) || 60)
                   }
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="间隔分钟"
+                  placeholder={t("intervalPlaceholder")}
                 />
                 <input
                   type="datetime-local"
@@ -295,14 +297,14 @@ function TemplateEditorView({
                   value={formData.triggerConfig.title || ""}
                   onChange={(e) => updateTriggerConfig("title", e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="任务标题"
+                  placeholder={t("taskTitlePlaceholder")}
                 />
                 <input
                   type="text"
                   value={formData.triggerConfig.description || ""}
                   onChange={(e) => updateTriggerConfig("description", e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="任务描述"
+                  placeholder={t("taskDescPlaceholder")}
                 />
               </div>
             )}
@@ -314,7 +316,7 @@ function TemplateEditorView({
                   onChange={(e) => updateTriggerConfig("projectId", e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 >
-                  <option value="">请选择项目</option>
+                  <option value="">{t("selectProject")}</option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
@@ -326,14 +328,14 @@ function TemplateEditorView({
                   value={formData.triggerConfig.repoOwner || ""}
                   onChange={(e) => updateTriggerConfig("repoOwner", e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="仓库 Owner"
+                  placeholder={t("repoOwnerPlaceholder")}
                 />
                 <input
                   type="text"
                   value={formData.triggerConfig.repoName || ""}
                   onChange={(e) => updateTriggerConfig("repoName", e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="仓库名称"
+                  placeholder={t("repoNamePlaceholder")}
                 />
                 <input
                   type="password"
@@ -347,7 +349,7 @@ function TemplateEditorView({
           </div>
 
           <h3 className="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2">
-            工作流节点编排
+            {t("nodeOrchestration")}
           </h3>
 
           <div className="relative pl-2">
@@ -397,11 +399,11 @@ function TemplateEditorView({
                         <div className="flex items-center mb-4">
                           <h3 className="text-xl font-bold text-indigo-100 flex items-center">
                             <User className="w-5 h-5 mr-2 text-indigo-400" />{" "}
-                            需求输入 (锁定)
+                            {t("firstNodeLocked")}
                           </h3>
                         </div>
                         <p className="text-sm text-slate-400">
-                          第一个节点固定为人工输入需求。
+                          {t("firstNodeHint")}
                         </p>
                       </div>
                     ) : (
@@ -410,7 +412,7 @@ function TemplateEditorView({
                           <div className="flex-1 flex items-start gap-2">
                             <div
                               className="mt-1 shrink-0 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400"
-                              title="拖拽排序"
+                              title={t("dragToSort")}
                             >
                               <GripVertical className="w-5 h-5" />
                             </div>
@@ -422,7 +424,7 @@ function TemplateEditorView({
                                   updateNode(node.id, "name", e.target.value)
                                 }
                                 className="bg-transparent text-white font-semibold text-lg focus:outline-none border-b border-dashed border-slate-600 focus:border-blue-500 px-1 w-2/3"
-                                placeholder="输入加工步骤名称..."
+                                placeholder={t("stepNamePlaceholder")}
                               />
                               <div className="mt-2 flex items-center gap-3">
                                 <span
@@ -434,13 +436,13 @@ function TemplateEditorView({
                                         : "bg-slate-500/10 text-slate-400 border border-slate-500/30"
                                   }`}
                                 >
-                                  {nodeTypeLabels[node.nodeType] || "普通节点"}
+                                  {nodeTypeLabels[node.nodeType] || t("nodeTypeStandard")}
                                 </span>
                                 <span className="text-[10px] text-slate-500">
-                                  超时: {node.timeout}min
+                                  {t("timeoutLabel", { minutes: node.timeout })}
                                 </span>
                                 <span className="text-[10px] text-slate-500">
-                                  驳回上限: {node.maxRejectCycles ?? 5}
+                                  {t("maxRejectLabel", { count: node.maxRejectCycles ?? 5 })}
                                 </span>
                               </div>
                             </div>
@@ -456,7 +458,7 @@ function TemplateEditorView({
                         <div className="grid grid-cols-2 gap-5">
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                              节点类型
+                              {t("nodeTypeLabel")}
                             </label>
                             <select
                               value={node.nodeType}
@@ -470,20 +472,20 @@ function TemplateEditorView({
                               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                             >
                               <option value="standard">
-                                {"\u2699"} 普通节点 (Standard)
+                                {"\u2699"} {t("optionStandard")}
                               </option>
                               <option value="review">
-                                {"\uD83D\uDD0D"} 审查节点 (Review)
+                                {"\uD83D\uDD0D"} {t("optionReview")}
                               </option>
                               <option value="manual">
-                                {"\uD83D\uDC68"} 人工操作 (Manual)
+                                {"\uD83D\uDC68"} {t("optionManual")}
                               </option>
                             </select>
                           </div>
 
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                              指派规则
+                              {t("assigneeLabel")}
                             </label>
                             <select
                               value={node.assigneeType}
@@ -513,13 +515,13 @@ function TemplateEditorView({
                               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                             >
                               <option value="any_agent">
-                                {"\uD83E\uDD16"} 任意空闲 AI 代理
+                                {"\uD83E\uDD16"} {t("optionAnyAgent")}
                               </option>
                               <option value="specific_agent">
-                                {"\uD83C\uDFAF"} 绑定特定 AI 代理
+                                {"\uD83C\uDFAF"} {t("optionSpecificAgent")}
                               </option>
                               <option value="human">
-                                {"\uD83D\uDC68"} 人类成员
+                                {"\uD83D\uDC68"} {t("optionHuman")}
                               </option>
                             </select>
                             {node.assigneeType === "specific_agent" && (
@@ -535,7 +537,7 @@ function TemplateEditorView({
                                 className="w-full mt-2 bg-slate-900 border border-blue-500/50 rounded text-sm text-blue-300 p-2 focus:outline-none"
                               >
                                 <option value="" disabled>
-                                  -- 选择 Agent --
+                                  {t("selectAgentPlaceholder")}
                                 </option>
                                 {agents.map((a) => (
                                   <option key={a.id} value={a.id}>
@@ -548,7 +550,7 @@ function TemplateEditorView({
 
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                              超时时间 (分钟)
+                              {t("timeoutMinutesLabel")}
                             </label>
                             <input
                               type="number"
@@ -568,7 +570,7 @@ function TemplateEditorView({
 
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                              最大驳回次数
+                              {t("maxRejectCyclesLabel")}
                             </label>
                             <input
                               type="number"
@@ -585,13 +587,13 @@ function TemplateEditorView({
                               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
                             />
                             <p className="text-[10px] text-slate-500 mt-1">
-                              驳回达到阈值后自动进入人工干预
+                              {t("maxRejectHint")}
                             </p>
                           </div>
 
                           <div className="col-span-2">
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                              步骤描述 (Markdown)
+                              {t("stepDescLabel")}
                             </label>
                             <textarea
                               value={node.description}
@@ -604,14 +606,14 @@ function TemplateEditorView({
                               }
                               rows={2}
                               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500 resize-none"
-                              placeholder="描述该节点需要做什么..."
+                              placeholder={t("stepDescPlaceholder")}
                             />
                           </div>
 
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
                               <FolderGit2 className="w-3.5 h-3.5 mr-1 text-amber-400" />{" "}
-                              只读目录
+                              {t("readonlyDirsLabel")}
                             </label>
                             <input
                               type="text"
@@ -624,17 +626,17 @@ function TemplateEditorView({
                                 )
                               }
                               className="w-full bg-slate-950 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-amber-500"
-                              placeholder="如 /docs,/README.md（逗号分隔）"
+                              placeholder={t("readonlyDirsPlaceholder")}
                             />
                             <p className="text-[10px] text-slate-500 mt-1">
-                              AI 代理可以读取但不能修改的目录/文件
+                              {t("readonlyDirsHint")}
                             </p>
                           </div>
 
                           <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
                               <FileOutput className="w-3.5 h-3.5 mr-1 text-emerald-500" />{" "}
-                              完全控制目录
+                              {t("fullControlDirsLabel")}
                             </label>
                             <input
                               type="text"
@@ -647,17 +649,17 @@ function TemplateEditorView({
                                 )
                               }
                               className="w-full bg-slate-950 border border-emerald-500/30 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-emerald-500"
-                              placeholder="如 /src（逗号分隔）"
+                              placeholder={t("fullControlDirsPlaceholder")}
                             />
                             <p className="text-[10px] text-slate-500 mt-1">
-                              AI 代理可以自由读写代码的目录
+                              {t("fullControlDirsHint")}
                             </p>
                           </div>
 
                           <div className="col-span-2">
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
                               <FileOutput className="w-3.5 h-3.5 mr-1 text-indigo-500" />{" "}
-                              产物约束
+                              {t("artifactLabel")}
                             </label>
                             <input
                               type="text"
@@ -702,7 +704,7 @@ function TemplateEditorView({
               </div>
               <div className="flex items-center h-14 pt-4">
                 <span className="text-sm text-slate-500 group-hover:text-blue-400 transition-colors-fast">
-                  添加加工步骤
+                  {t("addStep")}
                 </span>
               </div>
             </div>
@@ -739,6 +741,7 @@ function TemplateRunView({
   onTaskCreated,
   projects,
 }: TemplateRunViewProps) {
+  const t = useTranslations("workflows.run");
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [constraints, setConstraints] = useState("");
@@ -800,13 +803,13 @@ function TemplateRunView({
           </button>
           <div>
             <h1 className="text-2xl font-bold text-white mb-1 flex items-center">
-              发起工作流任务{" "}
+              {t("title")}{" "}
               <span className="ml-3 text-sm text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full font-normal">
-                基于: {template.name}
+                {t("basedOn", { name: template.name })}
               </span>
             </h1>
             <p className="text-xs text-slate-400">
-              填写需求信息后触发执行引擎，系统将自动驱动 AI 接管后续节点。
+              {t("subtitle")}
             </p>
           </div>
         </div>
@@ -824,7 +827,7 @@ function TemplateRunView({
           ) : (
             <Rocket className="w-5 h-5 mr-2" />
           )}
-          {isStarting ? "正在触发执行引擎..." : "触发执行引擎"}
+          {isStarting ? t("triggering") : t("triggerButton")}
         </button>
       </div>
 
@@ -837,27 +840,27 @@ function TemplateRunView({
                 <div className="w-8 h-8 rounded-full bg-indigo-900/50 border border-indigo-500 text-indigo-400 flex items-center justify-center mr-3 text-sm">
                   1
                 </div>
-                完成首个节点：需求输入
+                {t("stepOneHeader", { title: t("stepOneTitle") })}
               </h3>
 
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    任务标题 <span className="text-red-400">*</span>
+                    {t("titleLabel")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:border-indigo-500"
-                    placeholder="如 实现用户注册页面的前后端逻辑"
+                    placeholder={t("titlePlaceholder")}
                   />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      目标工程 <span className="text-red-400">*</span>
+                      {t("projectLabel")} <span className="text-red-400">*</span>
                     </label>
                     <select
                       value={selectedProject}
@@ -866,7 +869,7 @@ function TemplateRunView({
                     >
                       {!projects?.length && (
                         <option value="">
-                          暂无工程，请先在工程设置中创建
+                          {t("noProjects")}
                         </option>
                       )}
                       {projects?.map((p) => (
@@ -877,13 +880,13 @@ function TemplateRunView({
                     </select>
                     {!projects?.length && (
                       <p className="text-[10px] text-amber-400 mt-1">
-                        请先前往「工程设置」页创建工程
+                        {t("goCreateProject")}
                       </p>
                     )}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      任务类型
+                      {t("taskTypeLabel")}
                     </label>
                     <select
                       value={taskType}
@@ -891,17 +894,17 @@ function TemplateRunView({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
                     >
                       <option value="story">
-                        {"\uD83D\uDCD6"} Story (用户故事)
+                        {"\uD83D\uDCD6"} {t("typeStory")}
                       </option>
-                      <option value="bug">{"\uD83D\uDC1B"} Bug (缺陷)</option>
+                      <option value="bug">{"\uD83D\uDC1B"} {t("typeBug")}</option>
                       <option value="task">
-                        {"\uD83D\uDCCB"} Task (通用任务)
+                        {"\uD83D\uDCCB"} {t("typeTask")}
                       </option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      优先级
+                      {t("priorityLabel")}
                     </label>
                     <select
                       value={priority}
@@ -909,15 +912,15 @@ function TemplateRunView({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
                     >
                       <option value="urgent">
-                        {"\uD83D\uDD34"} 紧急 (Urgent)
+                        {"\uD83D\uDD34"} {t("prioUrgent")}
                       </option>
                       <option value="high">
-                        {"\uD83D\uDFE0"} 高 (High)
+                        {"\uD83D\uDFE0"} {t("prioHigh")}
                       </option>
                       <option value="medium">
-                        {"\uD83D\uDFE1"} 中 (Medium)
+                        {"\uD83D\uDFE1"} {t("prioMedium")}
                       </option>
-                      <option value="low">{"\uD83D\uDFE2"} 低 (Low)</option>
+                      <option value="low">{"\uD83D\uDFE2"} {t("prioLow")}</option>
                     </select>
                   </div>
                 </div>
@@ -925,7 +928,7 @@ function TemplateRunView({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      截止日期
+                      {t("dueDateLabel")}
                     </label>
                     <input
                       type="date"
@@ -936,47 +939,47 @@ function TemplateRunView({
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      标签（逗号分隔）：
+                      {t("labelsLabel")}
                     </label>
                     <input
                       type="text"
                       value={labels}
                       onChange={(e) => setLabels(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500"
-                      placeholder="如 前端, 认证, OAuth2"
+                      placeholder={t("labelsPlaceholder")}
                     />
                     <p className="text-[10px] text-slate-500 mt-1">
-                      最多 10 个标签
+                      {t("labelsHint")}
                     </p>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    约束与警告（红线要求）：
+                    {t("constraintsLabel")}
                   </label>
                   <textarea
                     value={constraints}
                     onChange={(e) => setConstraints(e.target.value)}
                     rows={3}
                     className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-200 text-sm focus:outline-none focus:border-amber-500 resize-none font-mono"
-                    placeholder="如 必须支持 OAuth2 标准协议；Token 必须加密存储..."
+                    placeholder={t("constraintsPlaceholder")}
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
-                    这些约束将作为红线要求注入到 AI 代理的 system prompt 中
+                    {t("constraintsHint")}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    详细需求说明<span className="text-red-400">*</span>
+                    {t("descRequiredLabel")}<span className="text-red-400">*</span>
                   </label>
                   <textarea
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
                     rows={10}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 text-sm focus:outline-none focus:border-indigo-500 resize-none font-mono"
-                    placeholder="在此输入详细的需求上下文。AI 代理将基于这份文档进行理解、架构设计和编码落地..."
+                    placeholder={t("descPlaceholder")}
                   />
                 </div>
               </div>
@@ -987,16 +990,16 @@ function TemplateRunView({
           <div className="col-span-12 lg:col-span-5">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 sticky top-0 space-y-4">
               <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center">
-                <Workflow className="w-4 h-4 mr-2" /> 即将驱动的执行链路
+                <Workflow className="w-4 h-4 mr-2" /> {t("executionChain")}
               </h4>
 
               <div className="flex gap-3 text-xs">
-                <span className="text-slate-400">{totalNodes} 节点</span>
+                <span className="text-slate-400">{t("nodesCount", { count: totalNodes })}</span>
                 <span className="text-slate-600">·</span>
-                <span className="text-amber-400">{humanNodes} 处需人工</span>
+                <span className="text-amber-400">{t("humanNodes", { count: humanNodes })}</span>
                 <span className="text-slate-600">·</span>
                 <span className="text-purple-400">
-                  {reviewNodes} 处需审查
+                  {t("reviewNodes", { count: reviewNodes })}
                 </span>
               </div>
 
@@ -1013,10 +1016,10 @@ function TemplateRunView({
                         : "\u2699";
                   const assigneeLabel =
                     node.assigneeType === "human"
-                      ? "需人类操作"
+                      ? t("assigneeHuman")
                       : node.assigneeType === "specific_agent"
-                        ? "指派特定 AI"
-                        : "任意 AI 代理";
+                        ? t("assigneeSpecific")
+                        : t("assigneeAny");
 
                   return (
                     <div
@@ -1043,7 +1046,7 @@ function TemplateRunView({
                         <div className="text-xs text-slate-500 mb-1 flex items-center gap-2">
                           <span>{assigneeLabel}</span>
                           {node.nodeType === "review" && (
-                            <span className="text-purple-400">审查节点</span>
+                            <span className="text-purple-400">{t("reviewNodeTag")}</span>
                           )}
                         </div>
                         {node.description && (
@@ -1073,6 +1076,7 @@ interface NodeGraphPreviewProps {
 }
 
 function NodeGraphPreview({ template, onClose }: NodeGraphPreviewProps) {
+  const t = useTranslations("workflows.preview");
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
@@ -1110,20 +1114,20 @@ function NodeGraphPreview({ template, onClose }: NodeGraphPreviewProps) {
                   >
                     <div className="text-xs text-slate-500 mb-1">
                       {node.nodeType === "review"
-                        ? "\uD83D\uDD0D 审查节点"
+                        ? `\uD83D\uDD0D ${t("nodeReview")}`
                         : node.nodeType === "manual"
-                          ? "\uD83D\uDC68 人工操作"
-                          : "\u2699 普通节点"}
+                          ? `\uD83D\uDC68 ${t("nodeManual")}`
+                          : `\u2699 ${t("nodeStandard")}`}
                     </div>
                     <div className="text-white font-bold text-lg">
                       {node.name}
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
                       {node.assigneeType === "human"
-                        ? "\uD83D\uDC68 人类"
+                        ? `\uD83D\uDC68 ${t("assigneeHumanShort")}`
                         : node.assigneeType === "specific_agent"
-                          ? "\uD83C\uDFAF 指定代理"
-                          : "\uD83E\uDD16 任意 AI"}
+                          ? `\uD83C\uDFAF ${t("assigneeSpecificShort")}`
+                          : `\uD83E\uDD16 ${t("assigneeAnyShort")}`}
                       {node.timeout > 0 && ` · ${node.timeout}min`}
                     </div>
                   </div>
@@ -1154,6 +1158,7 @@ function TemplateStatsDialog({
   template,
   onClose,
 }: TemplateStatsDialogProps) {
+  const t = useTranslations("workflows.stats");
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
@@ -1166,7 +1171,7 @@ function TemplateStatsDialog({
         <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
           <h2 className="text-lg font-bold text-white flex items-center">
             <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />{" "}
-            模板使用统计
+            {t("title")}
           </h2>
           <button
             onClick={onClose}
@@ -1192,31 +1197,31 @@ function TemplateStatsDialog({
 
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">引用次数</div>
+              <div className="text-xs text-slate-500 mb-1">{t("refCount")}</div>
               <div className="text-2xl font-bold text-white">-</div>
-              <div className="text-[10px] text-slate-500 mt-1">个任务</div>
+              <div className="text-[10px] text-slate-500 mt-1">{t("tasksUnit")}</div>
             </div>
             <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">平均完成时间</div>
+              <div className="text-xs text-slate-500 mb-1">{t("avgCompletion")}</div>
               <div className="text-2xl font-bold text-white flex items-center justify-center">
                 <Clock className="w-5 h-5 mr-1 text-blue-400" /> -
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">端到端</div>
+              <div className="text-[10px] text-slate-500 mt-1">{t("endToEnd")}</div>
             </div>
             <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">节点数</div>
+              <div className="text-xs text-slate-500 mb-1">{t("nodeCountLabel")}</div>
               <div className="text-2xl font-bold text-white">
                 {template.nodes.length}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">个步骤</div>
+              <div className="text-[10px] text-slate-500 mt-1">{t("stepsUnit")}</div>
             </div>
           </div>
 
           <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-6 text-center">
             <BarChart3 className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">暂无统计数据</p>
+            <p className="text-slate-400 text-sm">{t("noStats")}</p>
             <p className="text-slate-500 text-xs mt-1">
-              运行此模板的任务完成后，统计数据将自动生成
+              {t("noStatsHint")}
             </p>
           </div>
         </div>
@@ -1247,6 +1252,7 @@ function TemplateListView({
   defaultId,
   onSetDefault,
 }: TemplateListViewProps) {
+  const t = useTranslations("workflows.list");
   const builtIn = templates.filter((t) => t.isBuiltIn);
   const custom = templates.filter((t) => !t.isBuiltIn);
   const [previewTemplate, setPreviewTemplate] =
@@ -1268,7 +1274,7 @@ function TemplateListView({
         </h3>
         {template.isBuiltIn && (
           <span className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded border border-slate-600">
-            系统内置
+            {t("builtInTag")}
           </span>
         )}
       </div>
@@ -1278,18 +1284,16 @@ function TemplateListView({
 
       <div className="flex flex-wrap gap-2 mb-5">
         <span className="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-400 rounded">
-          {template.nodes.length} 个节点
+          {t("nodeCount", { count: template.nodes.length })}
         </span>
         {template.nodes.filter((n) => n.nodeType === "review").length > 0 && (
           <span className="text-[10px] px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">
-            审查{" "}
-            {template.nodes.filter((n) => n.nodeType === "review").length}
+            {t("reviewCount", { count: template.nodes.filter((n) => n.nodeType === "review").length })}
           </span>
         )}
         {template.nodes.filter((n) => n.nodeType === "manual").length > 0 && (
           <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded border border-amber-500/20">
-            需人工{" "}
-            {template.nodes.filter((n) => n.nodeType === "manual").length}
+            {t("manualCount", { count: template.nodes.filter((n) => n.nodeType === "manual").length })}
           </span>
         )}
       </div>
@@ -1300,13 +1304,13 @@ function TemplateListView({
             onClick={() => setPreviewTemplate(template)}
             className="flex items-center text-slate-400 hover:text-slate-300 transition-colors-fast"
           >
-            <Eye className="w-3.5 h-3.5 mr-1" /> 预览
+            <Eye className="w-3.5 h-3.5 mr-1" /> {t("preview")}
           </button>
           <button
             onClick={() => setStatsTemplate(template)}
             className="flex items-center text-slate-400 hover:text-emerald-400 transition-colors-fast"
           >
-            <BarChart3 className="w-3.5 h-3.5 mr-1" /> 统计
+            <BarChart3 className="w-3.5 h-3.5 mr-1" /> {t("stats")}
           </button>
           {!template.isBuiltIn && (
             <>
@@ -1314,33 +1318,33 @@ function TemplateListView({
                 onClick={() => onEdit(template)}
                 className="flex items-center text-slate-400 hover:text-blue-400 font-medium transition-colors-fast"
               >
-                <Edit2 className="w-3.5 h-3.5 mr-1" /> 编辑
+                <Edit2 className="w-3.5 h-3.5 mr-1" /> {t("edit")}
               </button>
               <button
                 onClick={() => onDelete(template.id)}
                 className="flex items-center text-slate-400 hover:text-red-400 transition-colors-fast"
               >
-                <Trash2 className="w-3.5 h-3.5 mr-1" /> 删除
+                <Trash2 className="w-3.5 h-3.5 mr-1" /> {t("delete")}
               </button>
             </>
           )}
           {defaultId === template.id ? (
             <span className="flex items-center px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg font-medium cursor-not-allowed">
-              <Star className="w-3.5 h-3.5 mr-1.5" /> 默认
+              <Star className="w-3.5 h-3.5 mr-1.5" /> {t("default")}
             </span>
           ) : (
             <button
               onClick={() => onSetDefault?.(template.id)}
               className="flex items-center px-3 py-1.5 bg-amber-500/5 hover:bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-lg font-medium transition-colors-fast"
             >
-              <Star className="w-3.5 h-3.5 mr-1.5" /> 设为默认
+              <Star className="w-3.5 h-3.5 mr-1.5" /> {t("setDefault")}
             </button>
           )}
           <button
             onClick={() => onRun(template)}
             className="flex items-center px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg font-medium transition-colors-fast btn-press"
           >
-            <Rocket className="w-3.5 h-3.5 mr-1.5" /> 运行
+            <Rocket className="w-3.5 h-3.5 mr-1.5" /> {t("run")}
           </button>
         </div>
       </div>
@@ -1352,25 +1356,27 @@ function TemplateListView({
       <div className="flex justify-between items-center mb-10 shrink-0">
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">
-            工作流模板管理
+            {t("page.title")}
           </h1>
           <p className="text-sm text-slate-400">
-            管理工作区级的工作流标准。共 {templates.length} 个模板，
-            {builtIn.length} 个内置可用。
+            {t("page.subtitle", {
+              total: templates.length,
+              builtIn: builtIn.length,
+            })}
           </p>
         </div>
         <button
           onClick={onCreate}
           className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors-normal shadow-lg shadow-blue-500/20 btn-press"
         >
-          <Plus className="w-5 h-5 mr-2" /> 新建自定义模板
+          <Plus className="w-5 h-5 mr-2" /> {t("page.createButton")}
         </button>
       </div>
 
       {/* 自定义模板*/}
       <div className="mb-10">
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
-          <LayoutTemplate className="w-4 h-4 mr-2" /> 自定义模板
+          <LayoutTemplate className="w-4 h-4 mr-2" /> {t("customTemplates")}
         </h2>
         {custom.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1382,13 +1388,13 @@ function TemplateListView({
           <div className="bg-slate-900/50 border border-dashed border-slate-700 rounded-xl p-10 text-center">
             <LayoutTemplate className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <p className="text-slate-400 mb-4">
-              当前工作区暂时没有自定义模板。
+              {t("noCustomTemplates")}
             </p>
             <button
               onClick={onCreate}
               className="text-blue-400 hover:text-blue-300 font-medium text-sm"
             >
-              点击创建第一个模板
+              {t("createFirst")}
             </button>
           </div>
         )}
@@ -1397,7 +1403,7 @@ function TemplateListView({
       {/* 内置模板 */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
-          <Database className="w-4 h-4 mr-2" /> 系统内置模板
+          <Database className="w-4 h-4 mr-2" /> {t("builtInTemplates")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {builtIn.map((t) => (
@@ -1438,6 +1444,7 @@ export default function WorkflowsPage() {
   const [defaultTemplateId, setDefaultTemplateId] = useState("tpl_builtin_1");
   const [editingTemplate, setEditingTemplate] =
     useState<MappedTemplate | null>(null);
+  const t = useTranslations("workflows.page");
   const [runTemplate, setRunTemplate] = useState<MappedTemplate | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1446,8 +1453,8 @@ export default function WorkflowsPage() {
   const handleCreateNew = () => {
     const newTemplate: MappedTemplate = {
       id: "",
-      name: "新建自定义模板",
-      description: "在此输入模板描述...",
+      name: t("newTemplateName"),
+      description: t("newTemplateDesc"),
       isBuiltIn: false,
       triggerType: "manual",
       triggerConfig: {},
@@ -1455,7 +1462,7 @@ export default function WorkflowsPage() {
       nodes: [
         {
           id: Date.now(),
-          name: "AI 加工处理",
+          name: t("defaultNodeName"),
           nodeType: "standard",
           assigneeType: "any_agent",
           assigneeId: "",

@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   Bot,
@@ -26,34 +27,25 @@ import { mapAgentFromApi } from "@/lib/mappers";
 // ==========================================
 // 状态配置
 // ==========================================
-const STATUS_CONFIG: Record<
-  string,
-  {
-    label: string;
-    icon: typeof Activity;
-    badge: string;
-  }
-> = {
-  running: {
-    label: "运行中",
-    icon: Activity,
-    badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  },
-  idle: {
-    label: "空闲",
-    icon: Clock,
-    badge: "bg-slate-500/20 text-slate-400 border-slate-500/30",
-  },
-  error: {
-    label: "异常",
-    icon: AlertTriangle,
-    badge: "bg-red-500/20 text-red-400 border-red-500/30",
-  },
-  completed: {
-    label: "已完成",
-    icon: CheckCircle2,
-    badge: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  },
+const STATUS_ICON: Record<string, typeof Activity> = {
+  running: Activity,
+  idle: Clock,
+  error: AlertTriangle,
+  completed: CheckCircle2,
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  running: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  idle: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  error: "bg-red-500/20 text-red-400 border-red-500/30",
+  completed: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+};
+
+const STATUS_KEY: Record<string, string> = {
+  running: "statusRunning",
+  idle: "statusIdle",
+  error: "statusError",
+  completed: "statusCompleted",
 };
 
 interface HistoryItem {
@@ -72,14 +64,16 @@ const HISTORY_STATUS_ICON: Record<string, React.ReactNode> = {
 // 子组件
 // ==========================================
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
-  const Icon = config.icon;
+  const t = useTranslations("agentDetail");
+  const Icon = STATUS_ICON[status] || STATUS_ICON.idle;
+  const badge = STATUS_BADGE[status] || STATUS_BADGE.idle;
+  const key = STATUS_KEY[status] || STATUS_KEY.idle;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.badge}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badge}`}
     >
       <Icon className="w-3 h-3" />
-      {config.label}
+      {t(key)}
     </span>
   );
 }
@@ -119,6 +113,7 @@ function TokenBar({
 // 主页面组件
 // ==========================================
 export default function AgentDetailPage() {
+  const t = useTranslations("agentDetail");
   const router = useRouter();
   const params = useParams();
   const agentId = params.id as string;
@@ -179,7 +174,7 @@ export default function AgentDetailPage() {
       <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-slate-400">加载代理信息...</span>
+          <span className="text-sm text-slate-400">{t("loading")}</span>
         </div>
       </div>
     );
@@ -188,7 +183,7 @@ export default function AgentDetailPage() {
   if (!agent) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-slate-500 text-lg">未找到该代理</p>
+        <p className="text-slate-500 text-lg">{t("notFound")}</p>
       </div>
     );
   }
@@ -204,7 +199,7 @@ export default function AgentDetailPage() {
         className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-6 self-start group"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-        <span className="text-sm font-medium">返回列表</span>
+        <span className="text-sm font-medium">{t("backToList")}</span>
       </button>
 
       {/* 代理头部 */}
@@ -242,11 +237,11 @@ export default function AgentDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <BookOpen className="w-4 h-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                身份指令
+                {t("identity")}
               </h2>
             </div>
             <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-              {agent.identityInstruction || "未设置身份指令"}
+              {agent.identityInstruction || t("identityEmpty")}
             </p>
           </div>
 
@@ -255,7 +250,7 @@ export default function AgentDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <Database className="w-4 h-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                知识库
+                {t("knowledge")}
               </h2>
             </div>
 
@@ -264,7 +259,7 @@ export default function AgentDetailPage() {
               <div className="flex items-center gap-2 mb-2.5">
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                  技能
+                  {t("skills")}
                 </span>
               </div>
               {agent.skills && agent.skills.length > 0 ? (
@@ -279,7 +274,7 @@ export default function AgentDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-slate-500 text-xs">暂无技能</p>
+                <p className="text-slate-500 text-xs">{t("skillsEmpty")}</p>
               )}
             </div>
 
@@ -288,7 +283,7 @@ export default function AgentDetailPage() {
               <div className="flex items-center gap-2 mb-2.5">
                 <Cpu className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                  MCP 服务
+                  {t("mcp")}
                 </span>
               </div>
               {agent.mcpServers && agent.mcpServers.length > 0 ? (
@@ -303,7 +298,7 @@ export default function AgentDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-slate-500 text-xs">暂无 MCP 服务</p>
+                <p className="text-slate-500 text-xs">{t("mcpEmpty")}</p>
               )}
             </div>
           </div>
@@ -316,7 +311,7 @@ export default function AgentDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <BarChart3 className="w-4 h-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                Token 用量
+                {t("tokenUsage")}
               </h2>
             </div>
 
@@ -324,18 +319,18 @@ export default function AgentDetailPage() {
               <span className="text-3xl font-bold text-white">
                 {totalTokens.toLocaleString()}
               </span>
-              <span className="text-slate-500 text-sm">tokens 总计</span>
+              <span className="text-slate-500 text-sm">{t("tokensTotal")}</span>
             </div>
 
             <div className="space-y-4">
               <TokenBar
-                label="输入 Token"
+                label={t("inputTokens")}
                 value={input}
                 total={totalTokens}
                 color="bg-blue-500"
               />
               <TokenBar
-                label="输出 Token"
+                label={t("outputTokens")}
                 value={output}
                 total={totalTokens}
                 color="bg-indigo-500"
@@ -348,7 +343,7 @@ export default function AgentDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                执行历史
+                {t("history")}
               </h2>
             </div>
 
@@ -358,13 +353,13 @@ export default function AgentDetailPage() {
                   <thead>
                     <tr className="border-b border-slate-700/60">
                       <th className="text-left text-slate-400 font-medium pb-3 pr-4">
-                        任务
+                        {t("thTask")}
                       </th>
                       <th className="text-left text-slate-400 font-medium pb-3 pr-4">
-                        节点
+                        {t("thNode")}
                       </th>
                       <th className="text-left text-slate-400 font-medium pb-3">
-                        状态
+                        {t("thStatus")}
                       </th>
                     </tr>
                   </thead>
@@ -396,7 +391,7 @@ export default function AgentDetailPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-slate-500 text-sm">暂无执行记录</p>
+              <p className="text-slate-500 text-sm">{t("historyEmpty")}</p>
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@
 // 历史任务页：分页展示已完成/已取消任务。
 
 import { useEffect, useCallback, useState } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { useAppStore } from "@/lib/store";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
 import type { MappedTask, TaskType, Priority } from "@/lib/types";
@@ -15,20 +16,27 @@ import {
 
 const PAGE_SIZE = 20;
 
-const typeBadge: Record<TaskType, { label: string; cls: string }> = {
-  story: { label: "需求", cls: "bg-blue-500/20 text-blue-400" },
-  bug: { label: "缺陷", cls: "bg-red-500/20 text-red-400" },
-  task: { label: "任务", cls: "bg-green-500/20 text-green-400" },
+const typeCls: Record<TaskType, string> = {
+  story: "bg-blue-500/20 text-blue-400",
+  bug: "bg-red-500/20 text-red-400",
+  task: "bg-green-500/20 text-green-400",
 };
 
-const priorityBadge: Record<Priority, { label: string; cls: string }> = {
-  urgent: { label: "紧急", cls: "bg-red-500/20 text-red-400" },
-  high: { label: "高", cls: "bg-orange-500/20 text-orange-400" },
-  medium: { label: "中", cls: "bg-yellow-500/20 text-yellow-400" },
-  low: { label: "低", cls: "bg-gray-500/20 text-gray-400" },
+const typeKeys: Record<TaskType, string> = {
+  story: "typeStory",
+  bug: "typeBug",
+  task: "typeTask",
+};
+
+const priorityCls: Record<Priority, string> = {
+  urgent: "bg-red-500/20 text-red-400",
+  high: "bg-orange-500/20 text-orange-400",
+  medium: "bg-yellow-500/20 text-yellow-400",
+  low: "bg-gray-500/20 text-gray-400",
 };
 
 export default function HistoryPage() {
+  const t = useTranslations("history");
   const currentProjectId = useAppStore((s) => s.currentProjectId);
   const projects = useAppStore((s) => s.projects);
   const historyTasks = useAppStore((s) => s.historyTasks);
@@ -96,12 +104,12 @@ export default function HistoryPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <FileCheck className="w-5 h-5 text-slate-400" />
-          <h1 className="text-lg font-semibold text-white">历史任务</h1>
+          <h1 className="text-lg font-semibold text-white">{t("title")}</h1>
           {projectName && (
             <span className="text-sm text-slate-400">— {projectName}</span>
           )}
           {historyTotal > 0 && (
-            <span className="text-xs text-slate-500">共 {historyTotal} 条</span>
+            <span className="text-xs text-slate-500">{t("total", { count: historyTotal })}</span>
           )}
         </div>
 
@@ -129,7 +137,7 @@ export default function HistoryPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="搜索历史任务..."
+              placeholder={t("searchPlaceholder")}
               className="h-8 pl-8 pr-3 text-sm rounded-md border border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500 w-56 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
@@ -145,7 +153,7 @@ export default function HistoryPage() {
         ) : historyTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-slate-500">
             <FileCheck className="w-12 h-12 mb-3 opacity-30" />
-            <p className="text-sm">暂无已完成的历史任务</p>
+            <p className="text-sm">{t("empty")}</p>
             <div className="mt-8 w-full max-w-2xl text-left">
               <EmptyStateGuide page="history" />
             </div>
@@ -154,12 +162,12 @@ export default function HistoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400">
-                <th className="text-left px-6 py-3 font-medium w-20">编号</th>
-                <th className="text-left px-4 py-3 font-medium">标题</th>
-                <th className="text-left px-4 py-3 font-medium w-20">类型</th>
-                <th className="text-left px-4 py-3 font-medium w-20">优先级</th>
-                <th className="text-left px-4 py-3 font-medium w-32">工作流</th>
-                <th className="text-left px-4 py-3 font-medium w-40">完成时间</th>
+                <th className="text-left px-6 py-3 font-medium w-20">{t("thRef")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("thTitle")}</th>
+                <th className="text-left px-4 py-3 font-medium w-20">{t("thType")}</th>
+                <th className="text-left px-4 py-3 font-medium w-20">{t("thPriority")}</th>
+                <th className="text-left px-4 py-3 font-medium w-32">{t("thWorkflow")}</th>
+                <th className="text-left px-4 py-3 font-medium w-40">{t("thCompletedAt")}</th>
               </tr>
             </thead>
             <tbody>
@@ -175,9 +183,11 @@ export default function HistoryPage() {
       {historyTotal > PAGE_SIZE && (
         <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800/80">
           <span className="text-xs text-slate-500">
-            第 {(historyPage - 1) * PAGE_SIZE + 1}-
-            {Math.min(historyPage * PAGE_SIZE, historyTotal)} 条，共{" "}
-            {historyTotal} 条
+            {t("pageRange", {
+              from: (historyPage - 1) * PAGE_SIZE + 1,
+              to: Math.min(historyPage * PAGE_SIZE, historyTotal),
+              count: historyTotal,
+            })}
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -203,8 +213,10 @@ export default function HistoryPage() {
 }
 
 function TaskRow({ task }: { task: MappedTask }) {
-  const tb = typeBadge[task.type] || typeBadge.task;
-  const pb = priorityBadge[task.priority] || priorityBadge.medium;
+  const t = useTranslations("history");
+  const locale = useLocale();
+  const tbCls = typeCls[task.type] || typeCls.task;
+  const pbCls = priorityCls[task.priority] || priorityCls.medium;
 
   // 从 _rawNodes 获取完成时间
   const rawNodes = task._rawNodes as
@@ -224,20 +236,20 @@ function TaskRow({ task }: { task: MappedTask }) {
         <span className="text-slate-200">{task.title}</span>
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${tb.cls}`}>
-          {tb.label}
+        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${tbCls}`}>
+          {t(typeKeys[task.type] || "typeTask")}
         </span>
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${pb.cls}`}>
-          {pb.label}
+        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${pbCls}`}>
+          {t(`priority.${task.priority}`)}
         </span>
       </td>
       <td className="px-4 py-3 text-slate-400 text-xs">
         {task.workflowName || "-"}
       </td>
       <td className="px-4 py-3 text-slate-400 text-xs">
-        {completedAt ? new Date(completedAt).toLocaleString("zh-CN") : "-"}
+        {completedAt ? new Date(completedAt).toLocaleString(locale) : "-"}
       </td>
     </tr>
   );

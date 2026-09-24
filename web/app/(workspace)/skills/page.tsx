@@ -2,6 +2,7 @@
 // 技能管理页：技能的创建、编辑与删除。
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Zap,
   Database,
@@ -58,6 +59,23 @@ const categoryColors: Record<string, string> = {
 const getCategoryColor = (cat: string) =>
   categoryColors[cat] || "bg-slate-500/10 text-slate-400 border-slate-500/20";
 
+// 分类数据值为中文（存库），显示层通过此映射转为翻译 key
+const categoryKeyMap: Record<string, string> = {
+  "前端": "frontend",
+  "后端": "backend",
+  "数据": "data",
+  "安全": "security",
+  "运维": "ops",
+  "文档": "docs",
+  "性能": "performance",
+  "质量": "quality",
+  "设计": "design",
+  "存储": "storage",
+  "代码": "code",
+  "数据库": "database",
+  "服务": "service",
+};
+
 // ==========================================
 // Skill 编辑/新增弹窗
 // ==========================================
@@ -70,6 +88,8 @@ function SkillEditModal({
   onSave: (data: LocalSkill) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useTranslations("skills.skillModal");
+  const tCat = useTranslations("skills.category");
   const [name, setName] = useState(skill?.name || "");
   const [category, setCategory] = useState(skill?.category || "前端");
   const [description, setDescription] = useState(skill?.description || "");
@@ -117,7 +137,7 @@ function SkillEditModal({
         <div className="p-5 border-b border-slate-700/50 flex justify-between items-center">
           <h2 className="text-lg font-bold text-white flex items-center">
             <Zap className="w-5 h-5 mr-2 text-indigo-400" />
-            {skill ? "编辑技能" : "新增技能"}
+            {skill ? t("editTitle") : t("addTitle")}
           </h2>
           <button
             onClick={onClose}
@@ -129,18 +149,18 @@ function SkillEditModal({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              技能名称 <span className="text-red-400">*</span>
+              {t("nameLabel")} <span className="text-red-400">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
-              placeholder="如: React 组件开发"
+              placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              分类
+              {t("categoryLabel")}
             </label>
             <select
               value={category}
@@ -149,33 +169,33 @@ function SkillEditModal({
             >
               {categories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {tCat(categoryKeyMap[c] || c)}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              描述
+              {t("descLabel")}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 resize-none"
-              placeholder="描述该技能的用途和范围"
+              placeholder={t("descPlaceholder")}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Prompt 模板
+              {t("promptLabel")}
             </label>
             <textarea
               value={promptTemplate}
               onChange={(e) => setPromptTemplate(e.target.value)}
               rows={5}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 resize-y font-mono"
-              placeholder="写入 agent 使用该技能时需要注入的具体说明"
+              placeholder={t("promptPlaceholder")}
             />
           </div>
         </div>
@@ -184,14 +204,14 @@ function SkillEditModal({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim() || saving}
             className="flex items-center px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
-            <Save className="w-4 h-4 mr-2" /> {saving ? "保存中" : "保存"}
+            <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
           </button>
         </div>
       </div>
@@ -211,6 +231,7 @@ function McpEditModal({
   onSave: (data: LocalMcpServer) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useTranslations("skills.mcpModal");
   const [name, setName] = useState(mcp?.name || "");
   const [url, setUrl] = useState(mcp?.url || "");
   const [type, setType] = useState<McpServerType>(mcp?.type || "sse");
@@ -228,12 +249,12 @@ function McpEditModal({
     try {
       const parsed = envVarsText.trim() ? JSON.parse(envVarsText) : {};
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        setError("环境变量必须是 JSON 对象");
+        setError(t("errEnvObject"));
         return;
       }
       envVars = parsed as Record<string, unknown>;
     } catch {
-      setError("环境变量不是合法 JSON");
+      setError(t("errEnvJson"));
       return;
     }
 
@@ -268,7 +289,7 @@ function McpEditModal({
         <div className="p-5 border-b border-slate-700/50 flex justify-between items-center">
           <h2 className="text-lg font-bold text-white flex items-center">
             <Database className="w-5 h-5 mr-2 text-emerald-400" />
-            {mcp ? "编辑 MCP 服务器" : "新增 MCP 服务器"}
+            {mcp ? t("editTitle") : t("addTitle")}
           </h2>
           <button
             onClick={onClose}
@@ -280,18 +301,18 @@ function McpEditModal({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              服务器名称 <span className="text-red-400">*</span>
+              {t("nameLabel")} <span className="text-red-400">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
-              placeholder="如: 文档检索 MCP"
+              placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              端点 URL <span className="text-red-400">*</span>
+              {t("urlLabel")} <span className="text-red-400">*</span>
             </label>
             <input
               value={url}
@@ -303,7 +324,7 @@ function McpEditModal({
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                协议类型
+                {t("typeLabel")}
               </label>
               <select
                 value={type}
@@ -317,35 +338,35 @@ function McpEditModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                认证方式
+                {t("authLabel")}
               </label>
               <select
                 value={authType}
                 onChange={(e) => setAuthType(e.target.value as McpAuthType)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="none">无</option>
+                <option value="none">{t("authNone")}</option>
                 <option value="api_key">API Key</option>
                 <option value="oauth">OAuth</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                状态
+                {t("statusLabel")}
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="active">启用</option>
-                <option value="inactive">禁用</option>
+                <option value="active">{t("statusActive")}</option>
+                <option value="inactive">{t("statusInactive")}</option>
               </select>
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              环境变量 JSON
+              {t("envLabel")}
             </label>
             <textarea
               value={envVarsText}
@@ -362,14 +383,14 @@ function McpEditModal({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim() || !url.trim() || saving}
             className="flex items-center px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
-            <Save className="w-4 h-4 mr-2" /> {saving ? "保存中" : "保存"}
+            <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
           </button>
         </div>
       </div>
@@ -381,6 +402,8 @@ function McpEditModal({
 // 主页面组件
 // ==========================================
 export default function SkillsPage() {
+  const t = useTranslations("skills");
+  const tCat = useTranslations("skills.category");
   const skills = useAppStore((s) => s.skills) as unknown as LocalSkill[];
   const setSkills = useAppStore((s) => s.setSkills) as unknown as (
     v: LocalSkill[] | ((prev: LocalSkill[]) => LocalSkill[])
@@ -425,7 +448,7 @@ export default function SkillsPage() {
           : [...prev, mapped];
       });
     } catch (err) {
-      alert("保存技能失败: " + (err instanceof Error ? err.message : String(err)));
+      alert(t("errSaveSkill") + (err instanceof Error ? err.message : String(err)));
       throw err;
     }
   };
@@ -451,7 +474,7 @@ export default function SkillsPage() {
           : [...prev, mapped];
       });
     } catch (err) {
-      alert("保存 MCP 服务器失败: " + (err instanceof Error ? err.message : String(err)));
+      alert(t("errSaveMcp") + (err instanceof Error ? err.message : String(err)));
       throw err;
     }
   };
@@ -474,7 +497,7 @@ export default function SkillsPage() {
       await api.deleteSkill(workspaceId, id);
       setSkills((prev: LocalSkill[]) => prev.filter((s) => s.id !== id));
     } catch (err) {
-      alert("删除技能失败: " + (err instanceof Error ? err.message : String(err)));
+      alert(t("errDeleteSkill") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -496,7 +519,7 @@ export default function SkillsPage() {
       await api.deleteMcpServer(workspaceId, id);
       setMcpServers((prev: LocalMcpServer[]) => prev.filter((m) => m.id !== id));
     } catch (err) {
-      alert("删除 MCP 服务器失败: " + (err instanceof Error ? err.message : String(err)));
+      alert(t("errDeleteMcp") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -511,7 +534,7 @@ export default function SkillsPage() {
         prev.map((m) => (m.id === mapped.id ? mapped : m))
       );
     } catch (err) {
-      alert("更新 MCP 状态失败: " + (err instanceof Error ? err.message : String(err)));
+      alert(t("errToggleMcp") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -537,11 +560,10 @@ export default function SkillsPage() {
       <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">
-            Skill &amp; MCP 配置
+            {t("title")}
           </h1>
           <p className="text-sm text-slate-400">
-            管理工作区可用的技能和 MCP 服务器，AI
-            代理只能关联已配置的 Skill 和 MCP。
+            {t("subtitle")}
           </p>
         </div>
       </div>
@@ -551,11 +573,11 @@ export default function SkillsPage() {
         <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
             <Zap className="w-5 h-5 text-indigo-400" />
-            <span className="text-xs text-slate-500">技能</span>
+            <span className="text-xs text-slate-500">{t("skillsLabel")}</span>
           </div>
           <div className="text-2xl font-bold text-white">{skills.length}</div>
           <div className="text-xs text-slate-500 mt-1">
-            {skillCategories.length} 个分类
+            {t("categoryCount", { count: skillCategories.length })}
           </div>
         </div>
         <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
@@ -567,30 +589,30 @@ export default function SkillsPage() {
             {mcpServers.length}
           </div>
           <div className="text-xs text-slate-500 mt-1">
-            {mcpServers.filter((m) => m.status === "active").length} 已启用
+            {t("enabledCount", { count: mcpServers.filter((m) => m.status === "active").length })}
           </div>
         </div>
         <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
             <Wifi className="w-5 h-5 text-blue-400" />
-            <span className="text-xs text-slate-500">MCP 状态</span>
+            <span className="text-xs text-slate-500">{t("mcpStatusLabel")}</span>
           </div>
           <div className="text-2xl font-bold text-white">
             {mcpServers.filter((m) => m.status === "active").length}
           </div>
           <div className="text-xs text-slate-500 mt-1">
-            {mcpServers.filter((m) => m.status !== "active").length} 已禁用
+            {t("disabledCount", { count: mcpServers.filter((m) => m.status !== "active").length })}
           </div>
         </div>
         <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
             <Tag className="w-5 h-5 text-amber-400" />
-            <span className="text-xs text-slate-500">分类</span>
+            <span className="text-xs text-slate-500">{t("categoryTab")}</span>
           </div>
           <div className="text-2xl font-bold text-white">
             {skillCategories.length + mcpTypes.length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">技能 + MCP 类型</div>
+          <div className="text-xs text-slate-500 mt-1">{t("skillPlusMcpTypes")}</div>
         </div>
       </div>
 
@@ -605,7 +627,7 @@ export default function SkillsPage() {
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <Zap className="w-4 h-4 mr-2" /> 技能 ({skills.length})
+            <Zap className="w-4 h-4 mr-2" /> {t("tabSkills", { count: skills.length })}
           </button>
           <button
             onClick={() => setActiveTab("mcp")}
@@ -615,8 +637,7 @@ export default function SkillsPage() {
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <Database className="w-4 h-4 mr-2" /> MCP 服务器 (
-            {mcpServers.length})
+            <Database className="w-4 h-4 mr-2" /> {t("tabMcp", { count: mcpServers.length })}
           </button>
         </div>
 
@@ -628,8 +649,8 @@ export default function SkillsPage() {
             className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-slate-500"
             placeholder={
               activeTab === "skills"
-                ? "搜索技能名称或分类..."
-                : "搜索 MCP 名称或类型..."
+                ? t("searchSkillsPlaceholder")
+                : t("searchMcpPlaceholder")
             }
           />
         </div>
@@ -641,7 +662,7 @@ export default function SkillsPage() {
           className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors-fast btn-press shadow-lg shadow-blue-500/20 text-sm shrink-0"
         >
           <Plus className="w-4 h-4 mr-2" />
-          {activeTab === "skills" ? "新增技能" : "新增 MCP"}
+          {activeTab === "skills" ? t("addSkill") : t("addMcp")}
         </button>
       </div>
 
@@ -673,11 +694,11 @@ export default function SkillsPage() {
                         <span
                           className={`px-2 py-0.5 text-[10px] rounded-full border ${getCategoryColor(skill.category)}`}
                         >
-                          {skill.category}
+                          {tCat(categoryKeyMap[skill.category] || skill.category)}
                         </span>
                         {isUsed && (
                           <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            {usingAgentCount} 个代理使用
+                            {t("usedByAgents", { count: usingAgentCount })}
                           </span>
                         )}
                       </div>
@@ -708,7 +729,7 @@ export default function SkillsPage() {
             <div>
               <div className="text-center py-8 text-slate-500">
                 <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p>没有找到匹配的技能</p>
+                <p>{t("noSkillMatch")}</p>
               </div>
               <EmptyStateGuide page="skills" />
             </div>
@@ -752,16 +773,16 @@ export default function SkillsPage() {
                         </span>
                         {mcp.status === "active" ? (
                           <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <Wifi className="w-3 h-3" /> 启用
+                            <Wifi className="w-3 h-3" /> {t("statusActive")}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-slate-500/10 text-slate-500 border border-slate-500/20">
-                            <WifiOff className="w-3 h-3" /> 禁用
+                            <WifiOff className="w-3 h-3" /> {t("statusInactive")}
                           </span>
                         )}
                         {isUsed && (
                           <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            {usingAgentCount} 个代理使用
+                            {t("usedByAgents", { count: usingAgentCount })}
                           </span>
                         )}
                       </div>
@@ -779,7 +800,7 @@ export default function SkillsPage() {
                     <button
                       onClick={() => handleToggleMcp(mcp.id)}
                       className={`p-1.5 rounded-lg transition-colors-fast ${mcp.status === "active" ? "text-emerald-400 hover:bg-emerald-500/10" : "text-slate-500 hover:bg-slate-700"}`}
-                      title={mcp.status === "active" ? "点击禁用" : "点击启用"}
+                      title={mcp.status === "active" ? t("clickToDisable") : t("clickToEnable")}
                     >
                       {mcp.status === "active" ? (
                         <ToggleRight className="w-6 h-6" />
@@ -807,7 +828,7 @@ export default function SkillsPage() {
           {filteredMcps.length === 0 && (
             <div className="text-center py-12 text-slate-500">
               <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>没有找到匹配的 MCP 服务器</p>
+              <p>{t("noMcpMatch")}</p>
             </div>
           )}
         </div>
@@ -825,14 +846,14 @@ export default function SkillsPage() {
           >
             <div className="p-5 border-b border-slate-700/50 flex items-center">
               <AlertTriangle className="w-5 h-5 text-amber-400 mr-2" />
-              <h2 className="text-lg font-bold text-white">无法删除</h2>
+              <h2 className="text-lg font-bold text-white">{t("cannotDelete")}</h2>
             </div>
             <div className="p-5">
               <p className="text-sm text-slate-300 mb-3">
                 <span className="font-medium text-white">
                   {deleteConfirm.item.name}
                 </span>{" "}
-                正在被以下代理使用，请先移除代理的关联后再删除：
+                {t("inUseByAgents")}
               </p>
               <div className="space-y-2">
                 {deleteConfirm.usingAgents.map((a) => (
@@ -855,7 +876,7 @@ export default function SkillsPage() {
                 onClick={() => setDeleteConfirm(null)}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
               >
-                知道了
+                {t("acknowledge")}
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useTranslations, useLocale } from "next-intl";
 import {
   Plus,
   X,
@@ -47,6 +48,7 @@ function InviteMemberDialog({
   onInvited: (member: Member) => void;
   workspaceId: string;
 }) {
+  const t = useTranslations("members.invite");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("member");
@@ -66,7 +68,7 @@ function InviteMemberDialog({
       setName("");
     } catch (err) {
       alert(
-        "邀请成员失败: " + (err instanceof Error ? err.message : String(err))
+        t("errInvite") + (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setSending(false);
@@ -84,7 +86,7 @@ function InviteMemberDialog({
       >
         <div className="p-5 border-b border-slate-800 flex items-center">
           <Mail className="w-5 h-5 text-blue-400 mr-3" />
-          <h2 className="text-lg font-bold text-white flex-1">邀请成员</h2>
+          <h2 className="text-lg font-bold text-white flex-1">{t("title")}</h2>
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-700 rounded-lg"
@@ -95,7 +97,7 @@ function InviteMemberDialog({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              邮箱地址 <span className="text-red-400">*</span>
+              {t("emailLabel")} <span className="text-red-400">*</span>
             </label>
             <input
               type="email"
@@ -108,24 +110,24 @@ function InviteMemberDialog({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              姓名
+              {t("nameLabel")}
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors-fast"
-              placeholder="可选，默认取邮箱前缀"
+              placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              角色
+              {t("roleLabel")}
             </label>
             <div className="flex gap-2">
               {[
-                { id: "admin", desc: "管理所有配置" },
-                { id: "member", desc: "创建和编辑任务" },
-                { id: "viewer", desc: "只读访问" },
+                { id: "admin", desc: t("roleAdminDesc") },
+                { id: "member", desc: t("roleMemberDesc") },
+                { id: "viewer", desc: t("roleViewerDesc") },
               ].map((r) => (
                 <button
                   key={r.id}
@@ -148,7 +150,7 @@ function InviteMemberDialog({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleInvite}
@@ -160,7 +162,7 @@ function InviteMemberDialog({
             ) : (
               <Mail className="w-4 h-4 mr-2" />
             )}
-            添加成员
+            {t("submit")}
           </button>
         </div>
       </div>
@@ -184,6 +186,7 @@ function ChangeRoleDialog({
   workspaceId: string;
   currentUserLevel: number;
 }) {
+  const t = useTranslations("members.changeRole");
   const [role, setRole] = useState(member.role);
   const [saving, setSaving] = useState(false);
 
@@ -199,7 +202,7 @@ function ChangeRoleDialog({
       onClose();
     } catch (err) {
       alert(
-        "修改角色失败: " + (err instanceof Error ? err.message : String(err))
+        t("errChange") + (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setSaving(false);
@@ -223,7 +226,7 @@ function ChangeRoleDialog({
       >
         <div className="p-5 border-b border-slate-800 flex items-center">
           <Shield className="w-5 h-5 text-blue-400 mr-3" />
-          <h2 className="text-lg font-bold text-white flex-1">修改角色</h2>
+          <h2 className="text-lg font-bold text-white flex-1">{t("title")}</h2>
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-700 rounded-lg"
@@ -233,11 +236,10 @@ function ChangeRoleDialog({
         </div>
         <div className="p-5 space-y-4">
           <p className="text-sm text-slate-300">
-            修改 <span className="text-white font-medium">{member.name}</span>{" "}
-            的角色
+            {t("desc", { name: member.name })}
           </p>
           {availableRoles.length === 0 ? (
-            <p className="text-sm text-slate-500">无可用的角色选项</p>
+            <p className="text-sm text-slate-500">{t("noRoles")}</p>
           ) : (
             <div className="flex gap-2">
               {availableRoles.map((r) => (
@@ -261,7 +263,7 @@ function ChangeRoleDialog({
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             onClick={handleChange}
@@ -269,7 +271,7 @@ function ChangeRoleDialog({
             className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            确认
+            {t("confirm")}
           </button>
         </div>
       </div>
@@ -281,6 +283,8 @@ function ChangeRoleDialog({
 // 成员管理页面
 // ==========================================
 export default function MembersPage() {
+  const t = useTranslations("members");
+  const locale = useLocale();
   const currentWorkspaceId = useAppStore((s) => s.currentWorkspaceId);
   const { canManageMembers, level: currentUserLevel, isViewer } = usePermission();
 
@@ -313,7 +317,7 @@ export default function MembersPage() {
         setMembers(list as Member[]);
       })
       .catch((err: Error) => {
-        alert("加载成员列表失败: " + err.message);
+        alert(t("errLoad") + err.message);
       })
       .finally(() => setLoading(false));
   }, [currentWorkspaceId]);
@@ -325,13 +329,13 @@ export default function MembersPage() {
   const handleRemove = async (id: string) => {
     const m = members.find((m) => m.id === id);
     if (!m || m.role === "owner") return;
-    if (!confirm(`确定移除成员 ${m.name} 吗？`)) return;
+    if (!confirm(t("confirmRemove", { name: m.name }))) return;
     try {
       await api.deleteMember(currentWorkspaceId!, id);
       setMembers((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
       alert(
-        "移除成员失败: " + (err instanceof Error ? err.message : String(err))
+        t("errRemove") + (err instanceof Error ? err.message : String(err))
       );
     }
   };
@@ -362,10 +366,10 @@ export default function MembersPage() {
           </Link>
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center">
-              <User className="w-6 h-6 mr-2 text-blue-400" /> 成员管理
+              <User className="w-6 h-6 mr-2 text-blue-400" /> {t("title")}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              {members.length} 位成员
+              {t("memberCount", { count: members.length })}
             </p>
           </div>
         </div>
@@ -374,7 +378,7 @@ export default function MembersPage() {
             onClick={() => setShowInvite(true)}
             className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
           >
-            <Plus className="w-4 h-4 mr-1.5" /> 添加成员
+            <Plus className="w-4 h-4 mr-1.5" /> {t("add")}
           </button>
         )}
       </div>
@@ -383,15 +387,15 @@ export default function MembersPage() {
       <div className="flex-1 space-y-2">
         {loading ? (
           <div className="flex items-center justify-center py-12 text-slate-400">
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" /> 加载中...
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" /> {t("loading")}
           </div>
         ) : (
           <>
             <div className="grid grid-cols-12 gap-3 text-xs text-slate-500 uppercase tracking-wider px-4 py-2">
-              <div className="col-span-4">姓名</div>
-              <div className="col-span-4">邮箱</div>
-              <div className="col-span-2">角色</div>
-              <div className="col-span-1">加入时间</div>
+              <div className="col-span-4">{t("thName")}</div>
+              <div className="col-span-4">{t("thEmail")}</div>
+              <div className="col-span-2">{t("thRole")}</div>
+              <div className="col-span-1">{t("thJoinedAt")}</div>
               <div className="col-span-1" />
             </div>
             {members.map((m) => (
@@ -424,7 +428,7 @@ export default function MembersPage() {
                 </div>
                 <div className="col-span-1">
                   <span className="text-[10px] text-slate-400">
-                    {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString("zh-CN") : "-"}
+                    {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString(locale) : "-"}
                   </span>
                 </div>
                 <div className="col-span-1 text-right">
@@ -446,11 +450,11 @@ export default function MembersPage() {
       <div className="mt-6 pt-4 border-t border-slate-800 text-[10px] text-slate-500 flex items-center">
         {isViewer ? (
           <>
-            <Shield className="w-3 h-3 mr-1" /> 只读模式 · Viewer 无法管理成员
+            <Shield className="w-3 h-3 mr-1" /> {t("footerViewer")}
           </>
         ) : (
           <>
-            <Shield className="w-3 h-3 mr-1" /> Owner 不可移除 · 点击角色标签可修改角色
+            <Shield className="w-3 h-3 mr-1" /> {t("footerManage")}
           </>
         )}
       </div>

@@ -131,97 +131,73 @@ Teammate 是一个专为 AI 代理（Agent）设计的多代理协作平台。�
 
 ## 快速开始
 
+Teammate 支持两种启动方式：
+
+| 启动方式                        | Docker 范围                                            | 适用场景                                       |
+| --------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| **方式一：完整 Docker 部署**（推荐） | 后端主程序 + 前端 + PostgreSQL + Redis **全部容器化**          | 快速体验、服务器部署；只需 Docker，无需本地 Go/Node 环境      |
+| **方式二：本地开发模式**            | 仅 PostgreSQL / Redis 容器化，主程序和前端在本地运行（`go run` / `pnpm dev`） | 二次开发，支持热重载调试                               |
+
+> 方式二属于**部分 Docker 部署**——主程序 `teammate-server` 与前端不在容器中运行；需要完整容器化部署时请使用方式一。
+
 ### 环境依赖
 
-- Go 1.26+
-- Node.js 18+
-- pnpm 10+
-- PostgreSQL 17+
-- Redis 7+
-- sqlc 1.31+（数据库代码生成）
-- Docker + Docker Compose（可选，用于启动基础设施）
+- **方式一（完整 Docker 部署）**：Docker Engine 24+ 和 Docker Compose v2；`openssl`（用于生成密钥，Windows 可用下方 PowerShell 命令替代）
+- **方式二（本地开发模式）**：除 Docker 外另需 Go 1.26+、Node.js 18+、pnpm 10+、sqlc 1.31+（数据库代码生成）；PostgreSQL 17+ 与 Redis 7+ 由 Docker Compose 提供，无需单独安装
 
 > **Windows 注意**：如果启用了 Hyper-V 或 WSL2，Windows 会保留 3000\~3010 左右的端口段供 Hyper-V 使用。遇到 `EACCES` 错误时，将前端端口改为 4000 即可。
 
-### 1. 启动基础设施
+### 方式一：完整 Docker 部署（推荐）
+
+后端主程序（`app`）、前端（`web`）、PostgreSQL、Redis 四个服务全部以容器方式运行，统一归属 `teammate` Compose 项目（容器名形如 `teammate-app-1`）。
+
+**Linux / macOS：**
 
 ```bash
-docker compose -f product/docker-compose.yml up -d
+# 1. 创建 product/.env（生成随机密钥）
+cat > product/.env << EOF
+TEAMS_JWT_SECRET=$(openssl rand -hex 32)
+TEAMMATE_ENCRYPTION_KEY_BASE64=$(openssl rand 32 | base64 -w0)
+TEAMS_ALLOWED_ORIGINS=http://localhost:3000
+TEAMS_BASE_URL=http://localhost:8080
+TEAMS_DB_PASS=$(openssl rand -hex 16)
+EOF
+
+# 2. 构建镜像并启动全部服务（app 容器会先自动执行数据库迁移，成功后才启动服务）
+docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
+
+# 3. 验证服务状态
+curl http://localhost:8080/health    # → {"status":"ok"}
+curl http://localhost:8080/ready     # → {"status":"ready"}
 ```
 
-### 2. 加载环境变量
+浏览器打开 `http://localhost:3000`，注册账号后即可开始使用。
 
-```bash
-# Linux / macOS
-source product/use-env.sh
-```
-
-```powershell
-# Windows (PowerShell)
-. .\product\use-env.ps1
-```
-
-首次运行会自动生成 JWT Secret 和 Encryption Key，持久化到 `product/.jwt_secret` 和 `product/.encryption_key`，后续复用。
-
-### 3. 初始化数据库
-
-```bash
-# Linux / macOS
-sudo docker compose -f product/docker-compose.yml exec postgres psql -U postgres -c "CREATE DATABASE teammate;"
-```
-
-```powershell
-# Windows (PowerShell)
-docker compose -f product/docker-compose.yml exec postgres psql -U postgres -c "CREATE DATABASE teammate;"
-```
-
-```bash
-# 执行迁移（所有平台通用）
-go run ./cmd/teammate-server migrate ./internal/db/migrations
-```
-
-### 4. 启动 Server
-
-启动前确保环境变量已加载（参见步骤 2），否则会因缺少 JWT 密钥报错。
-
-```bash
-# Linux / macOS
-source product/use-env.sh && go run ./cmd/teammate-server
-```
-
-```powershell
-# Windows (PowerShell)
-. .\product\use-env.ps1; go run .\cmd\teammate-server
-```
-
-Server 默认监听 `http://localhost:8080`。
-
-### 5. 启动前端
-
-```bash
-cd web
-pnpm install
-pnpm dev
-```
-
-> **Windows 注意**：如果遇到 `listen EACCES: permission denied 0.0.0.0:3000` 错误，说明 3000 端口被 Hyper-V 保留。改用 4000 端口：
+> 数据库迁移已内建到 app 容器的启动流程中（先迁移后服务，幂等可重复执行）。如需手动执行迁移排查问题：
 >
-> ```powershell
-> cd web
-> pnpm dev -H 127.0.0.1 --port 4000
+> ```bash
+> docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm --entrypoint teammate-server app migrate --path /app/migrations
 > ```
 
-前端开发服务器运行在 `http://localhost:3000`（或 `http://localhost:4000`），自动将 `/api` 请求代理到后端。
+代码更新后重新部署，需加 `--build` 重建镜像：
 
-### 6. 访问应用
+```bash
+docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d --build
+```
 
-浏览器打开 `http://localhost:3000`（或 `http://localhost:4000`），注册账号后即可开始使用。
+停止服务：
 
-### 7. 生产部署（Docker Compose）
+```bash
+docker compose --env-file product/.env -f product/docker-compose.prod.yml down
+```
 
-完整部署指南详见 [`product/deployment-guide.md`](product/deployment-guide.md)。以下是 Windows 快速部署要点：
+> **没有** **`.env`** **文件时临时跑命令**，可以手动给变量赋值：
+>
+> ```powershell
+> $env:TEAMS_DB_PASS="temp"; docker compose -f .\product\docker-compose.prod.yml down -v
+> ```
 
-**创建** **`.env`** **文件（PowerShell 方式，无需** **`openssl`）：**
+**Windows（PowerShell）生成** **`.env`**（无需** **`openssl`）：**
 
 ```powershell
 # 生成密钥并写入 .env
@@ -238,29 +214,89 @@ TEAMS_DB_PASS=$pass
 "@ | Out-File -Encoding UTF8 product\.env
 ```
 
-**启动服务：**
+后续命令与 Linux/macOS 版本一致（路径分隔符换成 `\`）：
 
 ```powershell
 docker compose --env-file product\.env -f product\docker-compose.prod.yml up -d
-```
-
-**执行数据库迁移：**
-
-```powershell
-docker compose --env-file product\.env -f product\docker-compose.prod.yml run --rm app migrate --path /app/migrations
-```
-
-**停止服务：**
-
-```powershell
 docker compose --env-file product\.env -f product\docker-compose.prod.yml down
 ```
 
-> **没有** **`.env`** **文件时临时跑命令**，可以手动给变量赋值：
+域名与 TLS 反向代理、环境变量清单、备份恢复、监控日志、故障排除、国内镜像加速等完整生产部署内容，详见 [`product/deployment-guide.md`](product/deployment-guide.md)。
+
+### 方式二：本地开发模式（部分 Docker）
+
+> 仅基础设施（PostgreSQL / Redis）运行在 Docker 容器中；主程序通过 `go run` 本地运行、前端通过 `pnpm dev` 本地运行，便于热重载调试。Server 默认连接 `localhost:15432`（PostgreSQL）和 `localhost:16379`（Redis），与 `product/docker-compose.yml` 的端口映射对应。
+
+#### 1. 启动基础设施
+
+```bash
+docker compose -f product/docker-compose.yml up -d
+```
+
+#### 2. 初始化数据库
+
+```bash
+# Linux / macOS
+sudo docker compose -f product/docker-compose.yml exec postgres psql -U postgres -c "CREATE DATABASE teammate;"
+```
+
+```powershell
+# Windows (PowerShell)
+docker compose -f product/docker-compose.yml exec postgres psql -U postgres -c "CREATE DATABASE teammate;"
+```
+
+```bash
+# 执行迁移（所有平台通用）
+go run ./cmd/teammate-server migrate ./internal/db/migrations
+```
+
+#### 3. 启动 Server
+
+本地开发推荐使用开发模式，自动放宽 JWT 密钥、CORS 等安全检查，无需手动生成密钥：
+
+```bash
+# Linux / macOS
+TEAMMATE_DEV=true go run ./cmd/teammate-server
+```
+
+```powershell
+# Windows (PowerShell)
+$env:TEAMMATE_DEV="true"; go run .\cmd\teammate-server
+```
+
+如需在本地模拟生产配置，可改为设置真实密钥后启动：
+
+```bash
+export TEAMS_JWT_SECRET=$(openssl rand -hex 32)
+export TEAMMATE_ENCRYPTION_KEY_BASE64=$(openssl rand 32 | base64 -w0)
+export TEAMS_ALLOWED_ORIGINS=http://localhost:3000
+go run ./cmd/teammate-server
+```
+
+> 开发模式使用临时加密密钥，其中加密存储的数据（如 Git 凭据）在密钥更换后无法解密，仅限本地调试使用。
+
+Server 默认监听 `http://localhost:8080`。
+
+#### 4. 启动前端
+
+```bash
+cd web
+pnpm install
+pnpm dev
+```
+
+> **Windows 注意**：如果遇到 `listen EACCES: permission denied 0.0.0.0:3000` 错误，说明 3000 端口被 Hyper-V 保留。改用 4000 端口：
 >
 > ```powershell
-> $env:TEAMS_DB_PASS="temp"; docker compose -f .\product\docker-compose.prod.yml down -v
+> cd web
+> pnpm dev -H 127.0.0.1 --port 4000
 > ```
+
+前端开发服务器运行在 `http://localhost:3000`（或 `http://localhost:4000`），自动将 `/api` 请求代理到后端。
+
+#### 5. 访问应用
+
+浏览器打开 `http://localhost:3000`（或 `http://localhost:4000`），注册账号后即可开始使用。
 
 ***
 
@@ -515,9 +551,12 @@ teammate/
 │   └── lib/                   # API 客户端 / 类型 / zustand 状态管理 / hooks
 │
 ├── product/                   # 部署相关
-│   ├── docker-compose.yml     # 基础设施 Docker Compose
-│   ├── use-env.sh             # 环境变量设置脚本
-│   └── ENV_SETUP.md           # 环境配置文档
+│   ├── docker-compose.yml     # 基础设施 Docker Compose（本地开发，部分容器化）
+│   ├── docker-compose.prod.yml # 完整部署 Docker Compose（主程序+前端+基础设施）
+│   ├── Dockerfile             # 后端主程序镜像
+│   ├── Dockerfile.web         # 前端镜像
+│   ├── .env.example           # 环境变量示例
+│   └── deployment-guide.md    # 生产部署指南
 │
 ├── test/                      # 集成测试
 │   ├── agent/                 # Agentd 集成测试

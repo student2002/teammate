@@ -4,8 +4,11 @@
 # Start:
 #   docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
 #
-# First-time deployment requires database migration:
-#   docker compose --env-file product/.env -f product/docker-compose.prod.yml run --rm app migrate --path /app/migrations
+# The app container runs database migrations automatically before starting the
+# server (idempotent; concurrent instances are safe via advisory lock), so no
+# separate migrate step is needed. To run migrations manually instead:
+#   docker compose --env-file product/.env -f product/docker-compose.prod.yml \
+#     run --rm --entrypoint teammate-server app migrate --path /app/migrations
 #
 # Environment file (.env) must contain:
 #   TEAMS_JWT_SECRET=<random 64-char hex>
@@ -25,6 +28,8 @@
 #     -f product/docker-compose.prod.yml up -d
 # ==============================================================
 
+name: teammate
+
 services:
   # ---- PostgreSQL (pgvector extension) ----
   postgres:
@@ -38,7 +43,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # -d teammate：等待目标库真正可用，避免 initdb 临时阶段健康检查提前放行
+      test: ["CMD-SHELL", "pg_isready -U postgres -d teammate"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,6 +72,10 @@ services:
         ALPINE_REPO: ${ALPINE_REPO:-}
         GO_IMAGE: ${DOCKER_REGISTRY:-}golang:1.26-alpine
         RUNTIME_IMAGE: ${DOCKER_REGISTRY:-}alpine:3.21
+    # 先迁移后服务：容器启动时自动执行数据库迁移（幂等，golang-migrate 自带
+    # Postgres advisory lock，多实例并发安全），成功后才启动 HTTP 服务，
+    # 消除"服务已上线但表未建好"的窗口期。手动迁移命令见文件头部注释。
+    entrypoint: ["sh", "-c", "teammate-server migrate --path /app/migrations && exec teammate-server"]
     ports:
       - "${TEAMS_PORT:-8080}:8080"
     environment:
@@ -99,7 +109,7 @@ services:
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
         NODE_IMAGE: ${DOCKER_REGISTRY:-}node:22-alpine
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_PORT:-3333}:3000"
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://app:8080}
     depends_on:

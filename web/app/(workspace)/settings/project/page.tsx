@@ -17,6 +17,7 @@ import {
   EyeOff,
   Pencil,
 } from "lucide-react";
+import { useTranslations, useFormatter } from "next-intl";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import type { GitCredential } from "@/lib/types";
@@ -53,6 +54,7 @@ interface ProjectReviewerRecord {
 }
 
 export default function ProjectSettingsPage() {
+  const t = useTranslations("settings.project");
   const projects = useAppStore((s) => s.projects) as unknown as LocalProject[];
   const setProjects = useAppStore((s) => s.setProjects) as unknown as (
     v: LocalProject[] | ((prev: LocalProject[]) => LocalProject[])
@@ -161,7 +163,7 @@ export default function ProjectSettingsPage() {
   const handleCreateProject = async () => {
     if (!newProjectName.trim() || !newRepoUrl.trim() || !newPat.trim()) return;
     if (!workspaceId) {
-      setError("请先选择工作空间");
+      setError(t("noWorkspace"));
       return;
     }
     try {
@@ -192,7 +194,7 @@ export default function ProjectSettingsPage() {
       setNewGitUsername("git");
       setNewPat("");
     } catch (err) {
-      setError("创建工程失败: " + (err instanceof Error ? err.message : "未知错误"));
+      setError(t("createFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
     } finally {
       setCreatingProject(false);
     }
@@ -212,7 +214,7 @@ export default function ProjectSettingsPage() {
       }
       setDeletingProject(null);
     } catch (err) {
-      setError("删除工程失败: " + (err instanceof Error ? err.message : "未知错误"));
+      setError(t("deleteFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
     }
   };
 
@@ -220,15 +222,15 @@ export default function ProjectSettingsPage() {
     return (
       <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
         <Settings className="w-12 h-12 mb-4 text-slate-600" />
-        <p className="text-lg font-medium text-slate-300 mb-2">暂无工程</p>
+        <p className="text-lg font-medium text-slate-300 mb-2">{t("noProjects")}</p>
         <p className="text-sm text-slate-500 mb-6">
-          请先创建一个工程来管理项目设置
+          {t("noProjectsDesc")}
         </p>
         <button
           onClick={() => setShowNewProject(true)}
           className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors-fast btn-press"
         >
-          <Plus className="w-4 h-4 mr-2" /> 新建工程
+          <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
         </button>
         <div className="mt-8 w-full max-w-2xl">
           <EmptyStateGuide page="project" />
@@ -244,23 +246,23 @@ export default function ProjectSettingsPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-5 border-b border-slate-800">
-                <h3 className="text-lg font-bold text-white">新建工程</h3>
+                <h3 className="text-lg font-bold text-white">{t("newProject")}</h3>
               </div>
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    工程名称 <span className="text-red-400">*</span>
+                    {t("projectName")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     value={newProjectName}
                     onChange={(e) => setNewProjectName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                    placeholder="如: 支付中心"
+                    placeholder={t("projectNamePlaceholder")}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Git 仓库地址 <span className="text-red-400">*</span>
+                    {t("repoUrl")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     value={newRepoUrl}
@@ -271,7 +273,7 @@ export default function ProjectSettingsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Git 用户名
+                    {t("gitUsername")}
                   </label>
                   <input
                     value={newGitUsername}
@@ -307,7 +309,7 @@ export default function ProjectSettingsPage() {
                   onClick={() => setShowNewProject(false)}
                   className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
                 >
-                  取消
+                  {t("cancel")}
                 </button>
                 <button
                   onClick={handleCreateProject}
@@ -319,7 +321,7 @@ export default function ProjectSettingsPage() {
                   }
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
                 >
-                  {creatingProject ? "创建中..." : "创建"}
+                  {creatingProject ? t("creating") : t("create")}
                 </button>
               </div>
             </div>
@@ -339,7 +341,7 @@ export default function ProjectSettingsPage() {
 
   const handleSave = async () => {
     if (!workspaceId || !draft) {
-      setError("请先选择工作空间");
+      setError(t("noWorkspace"));
       return;
     }
     try {
@@ -406,7 +408,7 @@ export default function ProjectSettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      setError(err instanceof Error ? err.message : t("saveFailed"));
     }
   };
 
@@ -477,7 +479,7 @@ export default function ProjectSettingsPage() {
         await api.updateGitCredential(selectedProjectId, editingCred.id, data);
       } else {
         if (!credForm.pat) {
-          setError("创建凭据时必须填写 PAT");
+          setError(t("patRequired"));
           setSavingCred(false);
           return;
         }
@@ -493,7 +495,7 @@ export default function ProjectSettingsPage() {
       setGitCredentials(Array.isArray(creds) ? creds : []);
       setShowCredModal(false);
     } catch (err) {
-      setError("保存凭据失败: " + (err instanceof Error ? err.message : "未知错误"));
+      setError(t("saveCredFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
     } finally {
       setSavingCred(false);
     }
@@ -508,9 +510,9 @@ export default function ProjectSettingsPage() {
             <Settings className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">工程设置</h1>
+            <h1 className="text-xl font-bold text-white">{t("title")}</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              管理工程的默认模板、成员和审查策略
+              {t("subtitle")}
             </p>
           </div>
         </div>
@@ -519,7 +521,7 @@ export default function ProjectSettingsPage() {
             onClick={() => setShowNewProject(true)}
             className="flex items-center px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors-fast border border-slate-700"
           >
-            <Plus className="w-4 h-4 mr-2" /> 新建工程
+            <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
           </button>
           <button
             onClick={handleSave}
@@ -530,7 +532,7 @@ export default function ProjectSettingsPage() {
             }`}
           >
             <Save className="w-4 h-4 mr-2" />
-            {saved ? "已保存" : "保存设置"}
+            {saved ? t("saved") : t("saveSettings")}
           </button>
         </div>
       </div>
@@ -545,14 +547,14 @@ export default function ProjectSettingsPage() {
       <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-medium text-slate-300">
-            当前工程
+            {t("currentProject")}
           </label>
           {currentProject && (
             <button
               onClick={() => setDeletingProject(selectedProjectId)}
               className="flex items-center px-2.5 py-1 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors-fast"
             >
-              <Trash2 className="w-3 h-3 mr-1" /> 删除此工程
+              <Trash2 className="w-3 h-3 mr-1" /> {t("deleteProject")}
             </button>
           )}
         </div>
@@ -563,7 +565,7 @@ export default function ProjectSettingsPage() {
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name?.trim() ? p.name : "(未命名)"}
+              {p.name?.trim() ? p.name : t("unnamed")}
             </option>
           ))}
         </select>
@@ -573,7 +575,7 @@ export default function ProjectSettingsPage() {
       <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center gap-2 mb-4">
           <FileOutput className="w-4 h-4 text-blue-400" />
-          <h2 className="text-sm font-bold text-white">默认工作流模板</h2>
+          <h2 className="text-sm font-bold text-white">{t("defaultTemplate")}</h2>
         </div>
         <select
           value={draft.defaultTemplateId}
@@ -587,14 +589,14 @@ export default function ProjectSettingsPage() {
           }}
           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
         >
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} {t.isBuiltIn ? "(内置)" : ""}
+          {templates.map((tpl) => (
+            <option key={tpl.id} value={tpl.id}>
+              {tpl.name} {tpl.isBuiltIn ? t("builtIn") : ""}
             </option>
           ))}
         </select>
         <p className="text-[10px] text-slate-500 mt-2">
-          新建任务时将自动使用此模板，可在任务创建后手动切换
+          {t("defaultTemplateHint")}
         </p>
       </div>
 
@@ -603,7 +605,7 @@ export default function ProjectSettingsPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-bold text-white">工程成员</h2>
+            <h2 className="text-sm font-bold text-white">{t("members")}</h2>
             <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
               {draft.members.length} / {agents.length}
             </span>
@@ -613,21 +615,21 @@ export default function ProjectSettingsPage() {
               onClick={addAllMembers}
               className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
             >
-              <Plus className="w-3 h-3 mr-1" /> 全部添加
+              <Plus className="w-3 h-3 mr-1" /> {t("addAll")}
             </button>
             <button
               onClick={clearMembers}
               className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
             >
-              <X className="w-3 h-3 mr-1" /> 清空
+              <X className="w-3 h-3 mr-1" /> {t("clear")}
             </button>
           </div>
         </div>
         {loadingMembers ? (
-          <p className="text-sm text-slate-500 py-4 text-center">加载成员中...</p>
+          <p className="text-sm text-slate-500 py-4 text-center">{t("loadingMembers")}</p>
         ) : agents.length === 0 ? (
           <p className="text-sm text-slate-500 py-4 text-center">
-            暂无 AI 代理，请先在「AI 代理」页面创建
+            {t("noAgentsHint")}
           </p>
         ) : (
           <div className="space-y-2">
@@ -658,7 +660,7 @@ export default function ProjectSettingsPage() {
                       </span>
                       {isMember && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          已加入
+                          {t("joined")}
                         </span>
                       )}
                     </div>
@@ -673,12 +675,12 @@ export default function ProjectSettingsPage() {
                     }`}
                   >
                     {agent.status === "online"
-                      ? "在线"
+                      ? t("statusOnline")
                       : agent.status === "busy"
-                        ? "忙碌"
+                        ? t("statusBusy")
                         : agent.status === "paused"
-                          ? "暂停"
-                          : "离线"}
+                          ? t("statusPaused")
+                          : t("statusOffline")}
                   </span>
                 </label>
               );
@@ -691,9 +693,9 @@ export default function ProjectSettingsPage() {
       <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center gap-2 mb-4">
           <Shield className="w-4 h-4 text-amber-400" />
-          <h2 className="text-sm font-bold text-white">审查员</h2>
+          <h2 className="text-sm font-bold text-white">{t("reviewers")}</h2>
           <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
-            {draft.reviewers.length} 位
+            {t("reviewerCount", { count: draft.reviewers.length })}
           </span>
         </div>
 
@@ -702,8 +704,8 @@ export default function ProjectSettingsPage() {
           <div className="flex items-start gap-2 mb-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-300">
-              <span className="font-medium">自我审查风险：</span>
-              以下代理同时为工程成员和审查员，可能导致自我审查：{" "}
+              <span className="font-medium">{t("selfReviewRisk")}</span>
+              {t("selfReviewDesc")}{" "}
               {selfReviewAgents
                 .map((id) => agents.find((a) => a.id === id)?.name)
                 .filter(Boolean)
@@ -714,7 +716,7 @@ export default function ProjectSettingsPage() {
 
         {agents.length === 0 ? (
           <p className="text-sm text-slate-500 py-4 text-center">
-            暂无 AI 代理，请先在「AI 代理」页面创建
+            {t("noAgentsHint")}
           </p>
         ) : (
           <div className="space-y-2">
@@ -745,7 +747,7 @@ export default function ProjectSettingsPage() {
                       {isSelfReview && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                           <AlertTriangle className="w-3 h-3" />
-                          自我审查风险
+                          {t("selfReviewBadge")}
                         </span>
                       )}
                     </div>
@@ -762,29 +764,29 @@ export default function ProjectSettingsPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-violet-400" />
-            <h2 className="text-sm font-bold text-white">Git 仓库凭据</h2>
+            <h2 className="text-sm font-bold text-white">{t("gitCredentials")}</h2>
             <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
-              {gitCredentials.length} 个
+              {t("credCount", { count: gitCredentials.length })}
             </span>
           </div>
           <button
             onClick={openNewCred}
             className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
           >
-            <Plus className="w-3 h-3 mr-1" /> 添加凭据
+            <Plus className="w-3 h-3 mr-1" /> {t("addCredential")}
           </button>
         </div>
         <p className="text-[10px] text-slate-500 mb-4">
-          配置 Git 仓库地址和访问令牌，AI 代理执行任务时将自动克隆仓库并在任务分支上工作
+          {t("gitCredHint")}
         </p>
 
         {loadingCreds ? (
-          <p className="text-sm text-slate-500 py-4 text-center">加载中...</p>
+          <p className="text-sm text-slate-500 py-4 text-center">{t("loading")}</p>
         ) : gitCredentials.length === 0 ? (
           <div className="py-8 text-center">
             <GitBranch className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-            <p className="text-sm text-slate-400 mb-1">尚未配置 Git 仓库</p>
-            <p className="text-xs text-slate-500">添加凭据后，AI 代理将能自动同步代码</p>
+            <p className="text-sm text-slate-400 mb-1">{t("noRepoYet")}</p>
+            <p className="text-xs text-slate-500">{t("noRepoDesc")}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -802,10 +804,10 @@ export default function ProjectSettingsPage() {
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-[10px] text-slate-500">
-                      用户: {cred.username}
+                      {t("credUser", { username: cred.username })}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      令牌: {cred.pat_masked || "****"}
+                      {t("credToken", { token: cred.pat_masked || "****" })}
                     </span>
                   </div>
                 </div>
@@ -813,7 +815,7 @@ export default function ProjectSettingsPage() {
                   <button
                     onClick={() => openEditCred(cred)}
                     className="p-1.5 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors-fast"
-                    title="编辑"
+                    title={t("edit")}
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
@@ -835,23 +837,23 @@ export default function ProjectSettingsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-5 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white">新建工程</h3>
+              <h3 className="text-lg font-bold text-white">{t("newProject")}</h3>
             </div>
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  工程名称 <span className="text-red-400">*</span>
+                  {t("projectName")} <span className="text-red-400">*</span>
                 </label>
                 <input
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                  placeholder="如: 支付中心"
+                  placeholder={t("projectNamePlaceholder")}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Git 仓库地址 <span className="text-red-400">*</span>
+                  {t("repoUrl")} <span className="text-red-400">*</span>
                 </label>
                 <input
                   value={newRepoUrl}
@@ -862,7 +864,7 @@ export default function ProjectSettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Git 用户名
+                  {t("gitUsername")}
                 </label>
                 <input
                   value={newGitUsername}
@@ -898,7 +900,7 @@ export default function ProjectSettingsPage() {
                 onClick={() => setShowNewProject(false)}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
               >
-                取消
+                {t("cancel")}
               </button>
               <button
                 onClick={handleCreateProject}
@@ -910,7 +912,7 @@ export default function ProjectSettingsPage() {
                 }
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
               >
-                {creatingProject ? "创建中..." : "创建"}
+                {creatingProject ? t("creating") : t("create")}
               </button>
             </div>
           </div>
@@ -929,16 +931,16 @@ export default function ProjectSettingsPage() {
           >
             <div className="p-5 border-b border-slate-800">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-400" /> 确认删除
+                <AlertTriangle className="w-5 h-5 text-red-400" /> {t("deleteConfirmTitle")}
               </h3>
             </div>
             <div className="p-5">
               <p className="text-sm text-slate-300">
-                确定要删除工程{" "}
+                {t("deleteConfirmPrefix")}{" "}
                 <span className="text-white font-medium">
                   {projects.find((p) => p.id === deletingProject)?.name}
                 </span>{" "}
-                吗？此操作不可撤销，工程下的所有任务数据将被删除。
+                {t("deleteConfirmSuffix")}
               </p>
             </div>
             <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
@@ -946,13 +948,13 @@ export default function ProjectSettingsPage() {
                 onClick={() => setDeletingProject(null)}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
               >
-                取消
+                {t("cancel")}
               </button>
               <button
                 onClick={handleDeleteProject}
                 className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium btn-press"
               >
-                删除
+                {t("delete")}
               </button>
             </div>
           </div>
@@ -971,27 +973,27 @@ export default function ProjectSettingsPage() {
           >
             <div className="p-5 border-b border-slate-800">
               <h3 className="text-lg font-bold text-white">
-                {editingCred ? "编辑 Git 凭据" : "添加 Git 凭据"}
+                {editingCred ? t("editCredTitle") : t("addCredTitle")}
               </h3>
             </div>
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  仓库地址 <span className="text-red-400">*</span>
+                  {t("credRepoUrl")} <span className="text-red-400">*</span>
                 </label>
                 <input
                   value={credForm.repo_url}
                   onChange={(e) => setCredForm((f) => ({ ...f, repo_url: e.target.value }))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-                  placeholder="如: https://github.com/org/repo.git"
+                  placeholder="https://github.com/org/repo.git"
                 />
                 <p className="text-[10px] text-slate-500 mt-1.5">
-                  支持 HTTP/HTTPS 协议的 Git 仓库地址
+                  {t("credRepoHint")}
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  用户名
+                  {t("credUsername")}
                 </label>
                 <input
                   value={credForm.username}
@@ -1002,10 +1004,10 @@ export default function ProjectSettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Personal Access Token{" "}
+                  {t("patLabel")}{" "}
                   {!editingCred && <span className="text-red-400">*</span>}
                   {editingCred && (
-                    <span className="text-slate-500 font-normal">（留空则不修改）</span>
+                    <span className="text-slate-500 font-normal">{t("patUnchanged")}</span>
                   )}
                 </label>
                 <div className="relative">
@@ -1014,7 +1016,7 @@ export default function ProjectSettingsPage() {
                     value={credForm.pat}
                     onChange={(e) => setCredForm((f) => ({ ...f, pat: e.target.value }))}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 pr-10"
-                    placeholder={editingCred ? "输入新令牌以替换" : "ghp_xxxxxxxxxxxx"}
+                    placeholder={editingCred ? t("patNewPlaceholder") : "ghp_xxxxxxxxxxxx"}
                   />
                   <button
                     type="button"
@@ -1025,7 +1027,7 @@ export default function ProjectSettingsPage() {
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1.5">
-                  在 GitHub/GitLab 的 Settings → Developer Settings → Personal Access Tokens 中生成
+                  {t("patHelp")}
                 </p>
               </div>
             </div>
@@ -1034,14 +1036,14 @@ export default function ProjectSettingsPage() {
                 onClick={() => setShowCredModal(false)}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
               >
-                取消
+                {t("cancel")}
               </button>
               <button
                 onClick={handleSaveCred}
                 disabled={!credForm.repo_url.trim() || savingCred || (!editingCred && !credForm.pat)}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
               >
-                {savingCred ? "保存中..." : editingCred ? "更新" : "添加"}
+                {savingCred ? t("saving") : editingCred ? t("update") : t("add")}
               </button>
             </div>
           </div>

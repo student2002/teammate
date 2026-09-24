@@ -2,6 +2,7 @@
 // 社区工作流市场页：浏览并导入社区工作流模板。
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import {
   Download,
   Search,
@@ -66,6 +67,7 @@ function PublishDialog({
   skills: Skill[];
   mcpServers: McpServer[];
 }) {
+  const t = useTranslations("market.publish");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -137,7 +139,7 @@ function PublishDialog({
       skills: selectedSkills,
       mcps: selectedMcps,
       nodes,
-      author: "我",
+      author: t("defaultAuthor"),
       downloads: 0,
     });
   };
@@ -155,7 +157,7 @@ function PublishDialog({
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
           <h2 className="text-lg font-bold text-white flex items-center">
-            <Upload className="w-5 h-5 mr-2 text-blue-400" /> 发布工作流到社区
+            <Upload className="w-5 h-5 mr-2 text-blue-400" /> {t("title")}
           </h2>
           <button
             onClick={onClose}
@@ -170,7 +172,7 @@ function PublishDialog({
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               <Workflow className="w-3.5 h-3.5 inline mr-1 text-blue-400" />
-              选择工作流模板 <span className="text-red-400">*</span>
+              {t("templateLabel")} <span className="text-red-400">*</span>
             </label>
             <select
               value={selectedTemplateId}
@@ -178,12 +180,12 @@ function PublishDialog({
               className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors-fast cursor-pointer animate-scale-in"
             >
               <option value="" className="bg-slate-800">
-                -- 请选择要发布的工作流模板 --
+                {t("templatePlaceholder")}
               </option>
               {templates.map((tpl) => (
                 <option key={tpl.id} value={tpl.id} className="bg-slate-800">
-                  {tpl.name} {tpl.isBuiltIn ? "(内置)" : "(自定义)"} —{" "}
-                  {tpl.nodes.length} 个节点
+                  {tpl.name} {tpl.isBuiltIn ? t("builtIn") : t("custom")} —{" "}
+                  {t("nodeCount", { count: tpl.nodes.length })}
                 </option>
               ))}
             </select>
@@ -192,12 +194,12 @@ function PublishDialog({
           {/* 工作流名称 */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              工作流名称 <span className="text-red-400">*</span>
+              {t("nameLabel")} <span className="text-red-400">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="输入工作流名称"
+              placeholder={t("namePlaceholder")}
               className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors-fast"
             />
           </div>
@@ -205,12 +207,12 @@ function PublishDialog({
           {/* 描述 */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              描述
+              {t("descLabel")}
             </label>
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
-              placeholder="描述你的工作流..."
+              placeholder={t("descPlaceholder")}
               rows={3}
               className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors-fast resize-none"
             />
@@ -219,7 +221,7 @@ function PublishDialog({
           {/* 版本 */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              版本
+              {t("versionLabel")}
             </label>
             <input
               value={version}
@@ -233,7 +235,7 @@ function PublishDialog({
           {nodes.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                节点流程
+                {t("nodeFlowLabel")}
               </label>
               <div className="flex items-center gap-2 flex-wrap">
                 {nodes.map((n, i) => (
@@ -254,17 +256,17 @@ function PublishDialog({
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               <Zap className="w-3.5 h-3.5 inline mr-1 text-indigo-400" />
-              依赖技能{" "}
+              {t("skillsLabel")}{" "}
               {selectedTemplate && (
                 <span className="text-blue-400 normal-case tracking-normal font-normal">
-                  （已自动识别，可手动调整）
+                  {t("autoDetected")}
                 </span>
               )}
             </label>
             <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-3 max-h-40 overflow-y-auto">
               {skills.length === 0 ? (
                 <div className="text-xs text-slate-500 text-center py-2">
-                  暂无已配置的技能
+                  {t("noSkills")}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -287,7 +289,7 @@ function PublishDialog({
             </div>
             {selectedSkills.length > 0 && (
               <div className="mt-2 text-xs text-slate-500">
-                已选 {selectedSkills.length} 个技能
+                {t("skillsSelected", { count: selectedSkills.length })}
               </div>
             )}
           </div>
@@ -296,17 +298,17 @@ function PublishDialog({
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               <Database className="w-3.5 h-3.5 inline mr-1 text-emerald-400" />
-              依赖 MCP 服务器{" "}
+              {t("mcpsLabel")}{" "}
               {selectedTemplate && (
                 <span className="text-blue-400 normal-case tracking-normal font-normal">
-                  （已自动识别，可手动调整）
+                  {t("autoDetected")}
                 </span>
               )}
             </label>
             <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-3 max-h-40 overflow-y-auto">
               {mcpServers.length === 0 ? (
                 <div className="text-xs text-slate-500 text-center py-2">
-                  暂无已配置的 MCP 服务器
+                  {t("noMcps")}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -329,7 +331,7 @@ function PublishDialog({
             </div>
             {selectedMcps.length > 0 && (
               <div className="mt-2 text-xs text-slate-500">
-                已选 {selectedMcps.length} 个 MCP 服务器
+                {t("mcpsSelected", { count: selectedMcps.length })}
               </div>
             )}
           </div>
@@ -338,7 +340,7 @@ function PublishDialog({
           {selectedTemplate && (
             <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
               <Cpu className="w-3.5 h-3.5 inline mr-1" />
-              技能和 MCP 已根据模板中分配的代理自动识别。你可以在上方手动增减。
+              {t("autoDetectHint")}
             </div>
           )}
 
@@ -348,14 +350,14 @@ function PublishDialog({
               onClick={onClose}
               className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
             >
-              取消
+              {t("cancel")}
             </button>
             <button
               onClick={handlePublish}
               disabled={!isValid}
               className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
             >
-              <Save className="w-4 h-4 mr-2" /> 发布
+              <Save className="w-4 h-4 mr-2" /> {t("publish")}
             </button>
           </div>
         </div>
@@ -376,6 +378,7 @@ function ImportDialog({
   onClose: () => void;
   workspaceId: string;
 }) {
+  const t = useTranslations("market.import");
   const [step, setStep] = useState<"preview" | "importing" | "done">(
     "preview"
   );
@@ -389,7 +392,7 @@ function ImportDialog({
         setStep("done");
       })
       .catch((err: Error) => {
-        setError(err.message || "导入失败");
+        setError(err.message || t("failed"));
         setStep("preview");
       });
   };
@@ -404,7 +407,7 @@ function ImportDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-lg font-bold text-white">导入工作流</h2>
+          <h2 className="text-lg font-bold text-white">{t("title")}</h2>
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-700 rounded-lg"
@@ -429,8 +432,11 @@ function ImportDialog({
                   {workflow.name}
                 </h3>
                 <div className="text-xs text-slate-400 mt-1">
-                  作者: {workflow.author} · 版本: {workflow.version} ·{" "}
-                  {workflow.downloads} 次下载
+                  {t("authorVersion", {
+                    author: workflow.author,
+                    version: workflow.version,
+                    downloads: workflow.downloads,
+                  })}
                 </div>
                 <p className="text-sm text-slate-300 mt-3">{workflow.desc}</p>
               </div>
@@ -439,7 +445,7 @@ function ImportDialog({
             {/* 节点序列 */}
             <div>
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                节点序列
+                {t("nodeSequenceLabel")}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {workflow.nodes.map((n, i) => (
@@ -459,7 +465,7 @@ function ImportDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
                 <div className="text-xs font-semibold text-slate-500 mb-3">
-                  所需技能
+                  {t("requiredSkills")}
                 </div>
                 <ul className="space-y-2">
                   {workflow.skills.map((s) => (
@@ -469,7 +475,7 @@ function ImportDialog({
                     >
                       <span className="text-slate-300">{s}</span>
                       <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                        未安装
+                        {t("notInstalled")}
                       </span>
                     </li>
                   ))}
@@ -477,7 +483,7 @@ function ImportDialog({
               </div>
               <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
                 <div className="text-xs font-semibold text-slate-500 mb-3">
-                  所需 MCP
+                  {t("requiredMcps")}
                 </div>
                 <ul className="space-y-2">
                   {workflow.mcps.map((m) => (
@@ -487,7 +493,7 @@ function ImportDialog({
                     >
                       <span className="text-slate-300">{m}</span>
                       <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                        占位符
+                        {t("placeholder")}
                       </span>
                     </li>
                   ))}
@@ -500,7 +506,7 @@ function ImportDialog({
               <div className="bg-slate-800/30 border border-indigo-500/20 rounded-xl p-4">
                 <div className="text-xs font-semibold text-slate-500 mb-3 flex items-center">
                   <BookOpen className="w-3.5 h-3.5 mr-1 text-indigo-400" />{" "}
-                  推荐的代理身份指令
+                  {t("recommendedInstructions")}
                 </div>
                 <div className="space-y-2">
                   {Object.entries(workflow.recommendedAgentInstructions).map(
@@ -524,7 +530,7 @@ function ImportDialog({
 
             <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4 text-xs text-slate-400">
               <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-amber-400" />
-              MCP 服务器仅创建占位符配置（URL 和凭据置空），需导入后手动填写。
+              {t("mcpPlaceholderHint")}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -532,13 +538,13 @@ function ImportDialog({
                 onClick={onClose}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
               >
-                取消
+                {t("cancel")}
               </button>
               <button
                 onClick={handleImport}
                 className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
               >
-                <Download className="w-4 h-4 mr-2" /> 确认导入
+                <Download className="w-4 h-4 mr-2" /> {t("confirmImport")}
               </button>
             </div>
           </div>
@@ -547,9 +553,9 @@ function ImportDialog({
         {step === "importing" && (
           <div className="p-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">正在导入</h3>
+            <h3 className="text-lg font-bold text-white mb-2">{t("importingTitle")}</h3>
             <p className="text-sm text-slate-400 mb-6">
-              创建工作流模板、检测缺失依赖...
+              {t("importingDesc")}
             </p>
           </div>
         )}
@@ -559,17 +565,17 @@ function ImportDialog({
             <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-4">
               <CheckCircle2 className="w-8 h-8 text-emerald-400" />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">导入成功</h3>
+            <h3 className="text-lg font-bold text-white mb-2">{t("successTitle")}</h3>
             <div className="text-sm text-slate-400 text-center mb-6">
-              工作流模板「{workflow.name}」已添加到工作区。
+              {t("successDesc", { name: workflow.name })}
               <br />
-              技能与 MCP 服务器未自动创建，请在工作流模板中按需配置。
+              {t("successHint")}
             </div>
             <button
               onClick={onClose}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
             >
-              完成
+              {t("finish")}
             </button>
           </div>
         )}
@@ -582,6 +588,7 @@ function ImportDialog({
 // 市场主页
 // ==========================================
 export default function MarketPage() {
+  const t = useTranslations("market");
   const templates = useAppStore((s) => s.templates);
   const agents = useAppStore((s) => s.agents);
   const skills = useAppStore((s) => s.skills);
@@ -637,7 +644,7 @@ export default function MarketPage() {
         return {
           id: w.id as string,
           name: w.name as string,
-          author: (w.author as string) || "未知",
+          author: (w.author as string) || t("unknownAuthor"),
           version: (w.version as string) || "v1.0.0",
           downloads: (w.downloads as number) || 0,
           desc: (w.description as string) || "",
@@ -687,7 +694,7 @@ export default function MarketPage() {
       await loadCommunityWorkflows();
     } catch (err) {
       console.error("Publish community workflow failed:", err);
-      alert("发布失败，请检查服务端日志");
+      alert(t("publishFailed"));
     }
     setPublishing(false);
   };
@@ -697,11 +704,10 @@ export default function MarketPage() {
       <div className="flex justify-between items-center mb-8 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white mb-2">
-            社区工作流市场
+            {t("title")}
           </h1>
           <p className="text-sm text-slate-400">
-            导入社区分享的工作流模板。导入时自动创建缺失的 Skills 与 MCP
-            占位符。
+            {t("subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -710,7 +716,7 @@ export default function MarketPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索工作流..."
+              placeholder={t("searchPlaceholder")}
               className="bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 w-64 transition-colors-fast"
             />
           </div>
@@ -718,7 +724,7 @@ export default function MarketPage() {
             onClick={() => setPublishing(true)}
             className="flex items-center px-4 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
           >
-            <Upload className="w-4 h-4 mr-1.5" /> 发布工作流
+            <Upload className="w-4 h-4 mr-1.5" /> {t("publishButton")}
           </button>
         </div>
       </div>
@@ -729,7 +735,7 @@ export default function MarketPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-slate-500">
-          未找到匹配的工作流
+          {t("noMatch")}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -752,13 +758,13 @@ export default function MarketPage() {
               <div className="flex items-center gap-2 mb-4 text-[10px]">
                 {wf.nodes && (
                   <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                    {wf.nodes.length} 个节点
+                    {t("nodeCount", { count: wf.nodes.length })}
                   </span>
                 )}
                 {wf.recommendedAgentInstructions && (
                   <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 flex items-center">
                     <BookOpen className="w-3 h-3 mr-0.5" />{" "}
-                    {Object.keys(wf.recommendedAgentInstructions).length} 个身份指令
+                    {t("instructionCount", { count: Object.keys(wf.recommendedAgentInstructions).length })}
                   </span>
                 )}
               </div>
@@ -780,7 +786,7 @@ export default function MarketPage() {
               <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <div className="text-slate-500 mb-2 font-semibold">
-                    依赖技能
+                    {t("dependentSkills")}
                   </div>
                   <ul className="space-y-1">
                     {wf.skills.map((s) => (
@@ -796,7 +802,7 @@ export default function MarketPage() {
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <div className="text-slate-500 mb-2 font-semibold">
-                    依赖 MCP
+                    {t("dependentMcps")}
                   </div>
                   <ul className="space-y-1">
                     {wf.mcps.map((m) => (
@@ -822,7 +828,7 @@ export default function MarketPage() {
                   onClick={() => setImporting(wf)}
                   className="flex items-center px-4 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
                 >
-                  <Download className="w-4 h-4 mr-1.5" /> 导入
+                  <Download className="w-4 h-4 mr-1.5" /> {t("import")}
                 </button>
               </div>
             </div>

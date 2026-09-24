@@ -27,9 +27,11 @@ test/
 web/node_modules/
 web/.next/
 web/out/
-web/.env.local
+web/.env*
 
 # Docker
+# product/.env 含全部生产密钥，严禁进入构建上下文（运行时通过 --env-file 注入）
+product/.env
 product/.jwt_secret
 product/.encryption_key
 

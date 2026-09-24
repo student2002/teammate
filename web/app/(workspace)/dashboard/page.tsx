@@ -41,6 +41,7 @@ import {
   AtSign,
   X,
 } from "lucide-react";
+import { useTranslations, useFormatter } from "next-intl";
 
 
 // ==========================================
@@ -62,6 +63,8 @@ interface ReassignDialogProps {
 }
 
 function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [selectedAgentId, setSelectedAgentId] = useState("");
 
   return (
@@ -75,7 +78,7 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white flex items-center">
-            <ArrowRight className="w-5 h-5 mr-2 text-indigo-400" /> 重新分配节点
+            <ArrowRight className="w-5 h-5 mr-2 text-indigo-400" /> {t('reassignDialog.title')}
           </h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors-fast">
             <X className="w-4 h-4" />
@@ -83,11 +86,11 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
         </div>
         <div className="p-5">
           <p className="text-sm text-slate-400 mb-4">
-            选择要接管此节点的 AI 代理。节点将重置为待认领并保留给所选代理。
+            {t('reassignDialog.description')}
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {agents.length === 0 ? (
-              <div className="py-8 text-center text-sm text-slate-500">当前项目暂无 AI 代理</div>
+              <div className="py-8 text-center text-sm text-slate-500">{t('reassignDialog.noAgents')}</div>
             ) : (
               agents.map((a) => (
                 <button
@@ -104,7 +107,7 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                     a.status === "online" ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-500/15 text-slate-400"
                   }`}>
-                    {a.status === "online" ? "在线" : a.status === "busy" ? "忙碌" : "离线"}
+                    {a.status === "online" ? t('agentStatus.online') : a.status === "busy" ? t('agentStatus.busy') : t('agentStatus.offline')}
                   </span>
                 </button>
               ))
@@ -116,14 +119,14 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
             onClick={onClose}
             className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={() => onConfirm(selectedAgentId)}
             disabled={!selectedAgentId}
             className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
-            重新分配
+            {t('reassignDialog.confirm')}
           </button>
         </div>
       </div>
@@ -132,6 +135,8 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
 }
 
 function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [targetNode, setTargetNode] = useState(Math.max(0, task.currentNode - 1));
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -155,7 +160,7 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white flex items-center">
-            <ArrowRight className="w-5 h-5 mr-2 text-orange-400 rotate-180" /> 退回节点
+            <ArrowRight className="w-5 h-5 mr-2 text-orange-400 rotate-180" /> {t('rejectDialog.title')}
           </h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
             <XCircle className="w-5 h-5 text-slate-400" />
@@ -163,7 +168,7 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
         </div>
         <div className="p-5 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">选择退回目标节点</label>
+            <label className="block text-sm font-medium text-slate-300 mb-3">{t('rejectDialog.selectTarget')}</label>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {(task.nodeNames || [])
                 .slice(0, task.currentNode + 1)
@@ -193,7 +198,7 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
                       <div className="flex-1">
                         <div className="text-sm font-medium">{name}</div>
                         <div className="text-xs text-slate-500 mt-0.5">
-                          {task.nodeAgents?.[idx] || "未分配"}
+                          {task.nodeAgents?.[idx] || t('common.unassigned')}
                         </div>
                       </div>
                       {s === "completed" && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
@@ -205,7 +210,7 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              退回原因 <span className="text-red-400">*</span>
+              {t('rejectDialog.reasonLabel')} <span className="text-red-400">*</span>
             </label>
             <textarea
               value={reason}
@@ -213,13 +218,13 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
               rows={3}
               autoFocus
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-300 focus:outline-none focus:border-orange-500 resize-none"
-              placeholder="请详细说明退回原因..."
+              placeholder={t('rejectDialog.reasonPlaceholder')}
             />
           </div>
         </div>
         <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg">
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -231,7 +236,7 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
             ) : (
               <ArrowRight className="w-4 h-4 mr-2 rotate-180" />
             )}
-            确认退回至第 {targetNode + 1} 节点
+            {t('rejectDialog.confirmTo', { targetNode: targetNode + 1 })}
           </button>
         </div>
       </div>
@@ -249,6 +254,8 @@ interface EditTaskDialogProps {
 }
 
 function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description || "");
   const [priority, setPriority] = useState<string>(task.priority || "medium");
@@ -274,14 +281,14 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">编辑任务</h3>
+          <h3 className="text-lg font-bold text-white">{t('editTask.title')}</h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
             <XCircle className="w-5 h-5 text-slate-400" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">标题</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.titleLabel')}</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -289,20 +296,20 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">优先级</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.priorityLabel')}</label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
             >
-              <option value="urgent">🔴 紧急</option>
-              <option value="high">🟠 高</option>
-              <option value="medium">🟡 中</option>
-              <option value="low">🟢 低</option>
+              <option value="urgent">{t('priority.urgent')}</option>
+              <option value="high">{t('priority.high')}</option>
+              <option value="medium">{t('priority.medium')}</option>
+              <option value="low">{t('priority.low')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">描述</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.descriptionLabel')}</label>
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -313,7 +320,7 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
         </div>
         <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg">
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -321,7 +328,7 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
             className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            保存修改
+            {t('editTask.save')}
           </button>
         </div>
       </div>
@@ -347,6 +354,8 @@ interface SubTaskPanelProps {
 }
 
 function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
 
@@ -357,7 +366,7 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
       title: title.trim(),
       status: "in_progress",
       gitBranch: `teammate/${parentId}/sub/${Date.now().toString(36)}`,
-      createdAt: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+      createdAt: dateTime(new Date(), { hour: "2-digit", minute: "2-digit" }),
     };
     onAddSubTask(parentId, st);
     setTitle("");
@@ -369,13 +378,13 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
       <div className="px-5 py-3 border-b border-slate-700/60 flex items-center justify-between">
         <div className="flex items-center">
           <GitBranch className="w-4 h-4 mr-2 text-indigo-400" />
-          <span className="text-sm font-medium text-slate-300">子任务 ({subTasks.length})</span>
+          <span className="text-sm font-medium text-slate-300">{t('subTasks.header', { count: subTasks.length })}</span>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center text-xs text-indigo-400 hover:text-indigo-300 transition-colors-fast"
         >
-          <Plus className="w-3.5 h-3.5 mr-1" /> 新建子任务
+          <Plus className="w-3.5 h-3.5 mr-1" /> {t('subTasks.new')}
         </button>
       </div>
       {showForm && (
@@ -385,14 +394,14 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-            placeholder="子任务标题..."
+            placeholder={t('subTasks.titlePlaceholder')}
           />
           <button
             onClick={handleAdd}
             disabled={!title.trim()}
             className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs disabled:opacity-50 btn-press"
           >
-            创建
+            {t('subTasks.create')}
           </button>
         </div>
       )}
@@ -415,10 +424,10 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
           ))}
         </div>
       ) : (
-        <div className="px-5 py-4 text-center text-xs text-slate-500">暂无子任务</div>
+        <div className="px-5 py-4 text-center text-xs text-slate-500">{t('subTasks.empty')}</div>
       )}
       <div className="px-5 py-2 border-t border-slate-700/30 text-[10px] text-slate-600">
-        Git 隔离: 子任务在独立分支上开发，完成后通过 PR 合并回父任务分支
+        {t('subTasks.gitIsolationInfo')}
       </div>
     </div>
   );
@@ -450,6 +459,8 @@ interface CommentPanelProps {
 }
 
 function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loading }: CommentPanelProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -479,7 +490,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
       <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
         <div className="flex items-center">
           <MessageSquare className="w-4 h-4 mr-2 text-slate-400" />
-          <span className="text-sm font-medium text-slate-300">评论</span>
+          <span className="text-sm font-medium text-slate-300">{t('comments.header')}</span>
         </div>
         <div className="mt-3 space-y-2">
           <div className="skeleton h-4 w-3/4 rounded" />
@@ -493,7 +504,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
     <div className="border border-slate-700/60 rounded-xl bg-slate-800/30">
       <div className="px-5 py-3 border-b border-slate-700/60 flex items-center">
         <MessageSquare className="w-4 h-4 mr-2 text-slate-400" />
-        <span className="text-sm font-medium text-slate-300">评论 ({comments.length})</span>
+        <span className="text-sm font-medium text-slate-300">{t('comments.headerWithCount', { count: comments.length })}</span>
       </div>
 
       {comments.length > 0 && (
@@ -501,7 +512,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
           {comments.map((c) => {
             const isAgent = c.author_type === "agent";
             const authorName = isAgent ? `🤖 ${c.author_id?.slice(0, 8) || "Agent"}` : `👤 ${c.author_id?.slice(0, 8) || "User"}`;
-            const time = c.created_at ? new Date(c.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "";
+            const time = c.created_at ? dateTime(new Date(c.created_at), { hour: "2-digit", minute: "2-digit" }) : "";
             return (
               <div key={c.id} className="bg-slate-950 border border-slate-800 rounded-lg p-3">
                 <div className="flex items-start gap-2">
@@ -541,7 +552,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                       onClick={() => setReplyTo(c.id)}
                       className="text-[10px] text-blue-400 hover:text-blue-300 mt-1"
                     >
-                      回复
+                      {t('comments.reply')}
                     </button>
                   </div>
                 </div>
@@ -565,7 +576,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                   <button
                     onClick={() => toggleMention(id)}
                     className="hover:text-white"
-                    aria-label="移除提及"
+                    aria-label={t('comments.removeMention')}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -581,7 +592,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
             onKeyDown={(e) =>
               e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())
             }
-            placeholder="输入评论... (Enter 发送)"
+            placeholder={t('comments.inputPlaceholder')}
             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500 placeholder-slate-600"
           />
           <div className="relative">
@@ -592,7 +603,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                   ? "bg-blue-500/15 border-blue-500/40 text-blue-400"
                   : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
               }`}
-              title="提及 AI 代理"
+              title={t('comments.mentionAgent')}
             >
               <AtSign className="w-4 h-4" />
             </button>
@@ -601,11 +612,11 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                 <div className="fixed inset-0 z-40" onClick={() => setShowAgentPicker(false)} />
                 <div className="absolute right-0 bottom-full mb-1 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
                   <div className="px-3 py-2 text-[10px] text-slate-500 border-b border-slate-700/60">
-                    提及 AI 代理（将触发其查看任务）
+                    {t('comments.mentionAgentTooltip')}
                   </div>
                   <div className="max-h-48 overflow-y-auto">
                     {agents.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-slate-500">暂无代理</div>
+                      <div className="px-3 py-4 text-center text-xs text-slate-500">{t('comments.noAgents')}</div>
                     ) : (
                       agents.map((a) => {
                         const selected = mentions.includes(a.id);
@@ -641,12 +652,12 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
         </div>
         {replyTo && (
           <div className="flex items-center gap-2 mt-2 pl-4 border-l-2 border-blue-500/30">
-            <span className="text-xs text-blue-400">回复中...</span>
+            <span className="text-xs text-blue-400">{t('comments.replying')}</span>
             <input
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
               className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-              placeholder="输入回复..."
+              placeholder={t('comments.replyPlaceholder')}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && replyText.trim()) {
                   onAddComment(taskId, replyText.trim());
@@ -674,12 +685,14 @@ interface NodeSummaryPanelProps {
 }
 
 function NodeSummaryPanel({ summary, nodeName }: NodeSummaryPanelProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   if (!summary) return null;
   return (
     <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
       <div className="flex items-center mb-3">
         <Bot className="w-4 h-4 mr-2 text-blue-400" />
-        <span className="text-sm font-medium text-slate-300">节点总结 — {nodeName}</span>
+        <span className="text-sm font-medium text-slate-300">{t('nodeSummary.header', { nodeName })}</span>
       </div>
       <div className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">
         {summary}
@@ -698,12 +711,14 @@ interface NodeDataFlowPanelProps {
 }
 
 function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   if (loading) {
     return (
       <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
         <div className="flex items-center">
           <History className="w-4 h-4 mr-2 text-slate-400" />
-          <span className="text-sm font-medium text-slate-300">数据传递</span>
+          <span className="text-sm font-medium text-slate-300">{t('dataFlow.header')}</span>
         </div>
         <div className="mt-3 space-y-2">
           <div className="skeleton h-4 w-3/4 rounded" />
@@ -716,11 +731,11 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
   if (transitions.length === 0 && !task.gitBranch) return null;
 
   const actionLabels: Record<string, { label: string; cls: string; icon: string }> = {
-    approve: { label: "通过", cls: "text-emerald-400 bg-emerald-500/10", icon: "✅" },
-    reject: { label: "退回", cls: "text-orange-400 bg-orange-500/10", icon: "❌" },
-    manual: { label: "人工介入", cls: "text-red-400 bg-red-500/10", icon: "🚩" },
-    reclaim: { label: "续作", cls: "text-blue-400 bg-blue-500/10", icon: "🔄" },
-    timeout: { label: "超时", cls: "text-amber-400 bg-amber-500/10", icon: "⏰" },
+    approve: { label: t('dataFlow.action.approve'), cls: "text-emerald-400 bg-emerald-500/10", icon: "✅" },
+    reject: { label: t('dataFlow.action.reject'), cls: "text-orange-400 bg-orange-500/10", icon: "❌" },
+    manual: { label: t('dataFlow.action.manual'), cls: "text-red-400 bg-red-500/10", icon: "🚩" },
+    reclaim: { label: t('dataFlow.action.reclaim'), cls: "text-blue-400 bg-blue-500/10", icon: "🔄" },
+    timeout: { label: t('dataFlow.action.timeout'), cls: "text-amber-400 bg-amber-500/10", icon: "⏰" },
   };
 
   // 将节点 ID 映射为名称
@@ -736,24 +751,24 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
     <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
       <div className="flex items-center mb-4">
         <History className="w-4 h-4 mr-2 text-slate-400" />
-        <span className="text-sm font-medium text-slate-300">数据传递</span>
+        <span className="text-sm font-medium text-slate-300">{t('dataFlow.header')}</span>
       </div>
 
       {/* 节点流转时间线 */}
       {transitions.length > 0 && (
         <div className="space-y-3 mb-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">节点流转</div>
-          {transitions.map((t, i) => {
-            const act = actionLabels[t.action] || { label: t.action, cls: "text-slate-400 bg-slate-500/10", icon: "•" };
-            const nodeName = nodeMap[t.taskNodeId] || `节点 #${nodeIdxMap[t.taskNodeId] || "?"}`;
-            const targetName = t.targetNodeId ? (nodeMap[t.targetNodeId] || `节点 #${nodeIdxMap[t.targetNodeId] || "?"}`) : null;
-            const time = t.createdAt ? new Date(t.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "";
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.transitionTitle')}</div>
+          {transitions.map((tr, i) => {
+            const act = actionLabels[tr.action] || { label: tr.action, cls: "text-slate-400 bg-slate-500/10", icon: "•" };
+            const nodeName = nodeMap[tr.taskNodeId] || t('dataFlow.nodeFallback', { index: nodeIdxMap[tr.taskNodeId] || "?" });
+            const targetName = tr.targetNodeId ? (nodeMap[tr.targetNodeId] || t('dataFlow.nodeFallback', { index: nodeIdxMap[tr.targetNodeId] || "?" })) : null;
+            const time = tr.createdAt ? dateTime(new Date(tr.createdAt), { hour: "2-digit", minute: "2-digit" }) : "";
             return (
-              <div key={t.id || i} className="flex gap-3">
+              <div key={tr.id || i} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div className={`w-3 h-3 rounded-full border-2 ${
-                    t.action === "approve" ? "border-emerald-500 bg-emerald-500/30"
-                    : t.action === "reject" ? "border-orange-500 bg-orange-500/30"
+                    tr.action === "approve" ? "border-emerald-500 bg-emerald-500/30"
+                    : tr.action === "reject" ? "border-orange-500 bg-orange-500/30"
                     : "border-red-500 bg-red-500/30"
                   }`} />
                   {i < transitions.length - 1 && <div className="w-0.5 flex-1 bg-slate-700 my-1" />}
@@ -772,9 +787,9 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
                     )}
                     <span className="text-[10px] text-slate-500">{time}</span>
                   </div>
-                  {t.comment && <div className="text-xs text-slate-400 mt-1">{t.comment}</div>}
+                  {tr.comment && <div className="text-xs text-slate-400 mt-1">{tr.comment}</div>}
                   <div className="text-[10px] text-slate-500 mt-0.5">
-                    {t.operatorType === "agent" ? "🤖 Agent" : "👤 Human"}
+                    {tr.operatorType === "agent" ? "🤖 Agent" : "👤 Human"}
                   </div>
                 </div>
               </div>
@@ -786,7 +801,7 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
       {/* Git 代码传递 */}
       {task.gitBranch && (
         <div className="mb-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Git 传递</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.gitTransfer')}</div>
           <div className="flex items-center gap-2 text-sm text-blue-300 font-mono">
             <GitBranch className="w-3.5 h-3.5" />
             <span className="truncate">{task.gitBranch}</span>
@@ -815,10 +830,10 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
       {/* 续作权 */}
       {task.reservedForAgent && (
         <div>
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">续作权</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.continuationRight')}</div>
           <div className="flex items-center text-xs text-indigo-400 bg-indigo-500/10 p-2 rounded border border-indigo-500/30">
             <Lock className="w-3.5 h-3.5 mr-1.5 shrink-0" />
-            <span>已保留给 <span className="font-semibold text-indigo-300">{task.reservedForAgent}</span></span>
+            <span>{t('dataFlow.reservedFor')} <span className="font-semibold text-indigo-300">{task.reservedForAgent}</span></span>
           </div>
         </div>
       )}
@@ -836,6 +851,8 @@ interface ClaimButtonProps {
 }
 
 function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   if (task.nodesStatus[nodeIndex] !== "pending") return null;
   if (
     task.reservedForAgent &&
@@ -857,7 +874,7 @@ function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
       onClick={() => onClaim(task.id, nodeIndex)}
       className="absolute -top-2 right-2 px-2 py-0.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-[10px] rounded-full font-bold transition-colors-fast shadow-lg shadow-indigo-500/30 cursor-pointer"
     >
-      + 认领此节点
+      {t('claimButton.claimNode')}
     </button>
   );
 }
@@ -906,6 +923,8 @@ function WorkflowDetailsPanel({
   onDeleteTask,
   agents,
 }: WorkflowDetailsPanelProps) {
+  const t = useTranslations("dashboard");
+  const { dateTime } = useFormatter();
   const [activeTerminalNode, setActiveTerminalNode] = useState(task.currentNode);
   const [userSelectedNode, setUserSelectedNode] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -1028,7 +1047,7 @@ function WorkflowDetailsPanel({
     onAddReviewRecord(task.id, {
       action: "reject",
       reviewer: "Admin User",
-      time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+      time: dateTime(new Date(), { hour: "2-digit", minute: "2-digit" }),
       comment: reason,
       targetNode,
     });
@@ -1040,8 +1059,8 @@ function WorkflowDetailsPanel({
     onAddReviewRecord(task.id, {
       action: "approve",
       reviewer: "Admin User",
-      time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-      comment: "节点通过",
+      time: dateTime(new Date(), { hour: "2-digit", minute: "2-digit" }),
+      comment: t('reviewComment.nodeApproved'),
     });
   };
 
@@ -1061,8 +1080,8 @@ function WorkflowDetailsPanel({
       onAddReviewRecord(task.id, {
         action: "manual",
         reviewer: "Admin User",
-        time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-        comment: action === "interrupt" ? "管理员强制中断" : "标记需人工介入",
+        time: dateTime(new Date(), { hour: "2-digit", minute: "2-digit" }),
+        comment: action === "interrupt" ? t('reviewComment.adminInterrupt') : t('reviewComment.markManual'),
       });
     }
   };
@@ -1075,11 +1094,11 @@ function WorkflowDetailsPanel({
     in_progress: "bg-blue-500/10 text-blue-400 border-blue-500/30",
   };
   const badgeLabelMap: Record<string, string> = {
-    completed: "已完成",
-    cancelled: "已取消",
-    manual_intervention: "需人工介入",
-    rejected: "待返工",
-    in_progress: "进行中",
+    completed: t('status.completed'),
+    cancelled: t('status.cancelled'),
+    manual_intervention: t('status.manualIntervention'),
+    rejected: t('status.rejected'),
+    in_progress: t('status.inProgress'),
   };
 
   const totalNodes = nodeNames.length;
@@ -1112,14 +1131,14 @@ function WorkflowDetailsPanel({
             >
               <Calendar className="w-3 h-3" />
               {task.dueDate}
-              {isOverdue ? " 已逾期" : ""}
+              {isOverdue ? ` ${t('overdue')}` : ""}
             </span>
           )}
           {/* 退回计数 */}
           {task.rejectCount > 0 && (
             <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">
               <AlertOctagon className="w-3 h-3 inline mr-0.5" />
-              退回 {task.rejectCount} 次
+              {t('rejectCount', { count: task.rejectCount })}
             </span>
           )}
         </div>
@@ -1138,7 +1157,7 @@ function WorkflowDetailsPanel({
                   className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg transition-colors-fast flex items-center"
                 >
                   <Ban className="w-3.5 h-3.5 mr-1" />
-                  取消任务
+                  {t('actions.cancelTask')}
                 </button>
               )}
             </>
@@ -1152,7 +1171,7 @@ function WorkflowDetailsPanel({
               className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg transition-colors-fast flex items-center"
             >
               <Trash2 className="w-3.5 h-3.5 mr-1" />
-              删除任务
+              {t('actions.deleteTask')}
             </button>
           )}
           <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
@@ -1168,14 +1187,14 @@ function WorkflowDetailsPanel({
             {/* 子任务标记 */}
             {task.parentTask && (
               <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 text-xs text-indigo-300 flex items-center">
-                <Bot className="w-3.5 h-3.5 mr-2" /> 子任务 — 所属父任务: {task.parentTask}
+                <Bot className="w-3.5 h-3.5 mr-2" /> {t('subTasks.parentInfo', { parentTask: task.parentTask })}
               </div>
             )}
 
             {/* 工作流进度条 */}
             <div className="overflow-x-auto max-w-full">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center justify-between">
-                <span>工作流进度</span>
+                <span>{t('workflow.progress')}</span>
                 <div className="w-1/3 h-1.5 bg-slate-800 rounded-full overflow-hidden shrink-0 ml-4">
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all"
@@ -1210,17 +1229,17 @@ function WorkflowDetailsPanel({
                       >
                         {status === "in_progress" && (
                           <div className="absolute -top-2 px-2 py-0.5 bg-blue-500 text-white text-[10px] rounded-full font-bold">
-                            活跃中
+                            {t('nodeStatus.active')}
                           </div>
                         )}
                         {status === "rejected" && (
                           <div className="absolute -top-2 px-2 py-0.5 bg-orange-500 text-white text-[10px] rounded-full font-bold">
-                            待返工
+                            {t('nodeStatus.needsRework')}
                           </div>
                         )}
                         {status === "manual_intervention" && (
                           <div className="absolute -top-2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-bold">
-                            阻断
+                            {t('nodeStatus.blocked')}
                           </div>
                         )}
                         <div className="mb-2">{icon}</div>
@@ -1236,7 +1255,7 @@ function WorkflowDetailsPanel({
                         {(task.nodeTimeouts as Record<string, number>)?.[index] &&
                           (task.nodeTimeouts as Record<string, number>)[index] > 0 && (
                             <span className="text-[8px] text-slate-600 mt-0.5">
-                              超时: {(task.nodeTimeouts as Record<string, number>)[index]}min
+                              {t('nodeStatus.timeout', { minutes: (task.nodeTimeouts as Record<string, number>)[index] })}
                             </span>
                           )}
                         <ClaimButton task={task} nodeIndex={index} onClaim={onClaim} />
@@ -1255,7 +1274,7 @@ function WorkflowDetailsPanel({
             {/* 人工介入原因提示 */}
             {task.interrupted && (() => {
               const manualTransitions = nodeTransitions.filter(
-                (t) => t.toStatus === "manual_intervention" && t.comment
+                (tr) => tr.toStatus === "manual_intervention" && tr.comment
               );
               if (manualTransitions.length === 0) return null;
               const latest = manualTransitions[manualTransitions.length - 1];
@@ -1265,7 +1284,7 @@ function WorkflowDetailsPanel({
                 <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldAlert className="w-4 h-4 text-red-400" />
-                    <span className="text-sm font-semibold text-red-400">需人工介入</span>
+                    <span className="text-sm font-semibold text-red-400">{t('manualIntervention.title')}</span>
                     {nodeName && <span className="text-xs text-red-300/70">— {nodeName}</span>}
                   </div>
                   <div className="text-sm text-red-200 whitespace-pre-wrap leading-relaxed">
@@ -1279,7 +1298,7 @@ function WorkflowDetailsPanel({
             {task.description && (
               <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                  任务描述
+                  {t('taskDescription')}
                 </div>
                 <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
                   {task.description}
@@ -1317,12 +1336,12 @@ function WorkflowDetailsPanel({
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-600 font-mono w-16 text-right">
-                  节点 #{activeTerminalNode + 1}
+                  {t('terminal.nodeLabel', { index: activeTerminalNode + 1 })}
                 </span>
               </div>
               <div ref={terminalRef} className="p-5 h-52 overflow-y-auto font-mono text-[13px] leading-relaxed relative selection:bg-blue-500/30">
                 {(logsByIndex[activeTerminalNode] || [
-                  "> 暂无该节点的执行日志记录...",
+                  `> ${t('terminal.noLogs')}`,
                 ]).map((log: string, i: number) => {
                   let cls = "text-slate-300";
                   let prompt = false;
@@ -1377,11 +1396,11 @@ function WorkflowDetailsPanel({
             {/* 当前节点操作面板 */}
             <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                当前节点操作
+                {t('nodeActions.title')}
               </div>
               <div className="space-y-2">
                 <div className="text-sm text-slate-300 flex items-center">
-                  <span className="text-slate-400">状态:</span>
+                  <span className="text-slate-400">{t('nodeActions.status')}</span>
                   <span
                     className={`ml-2 text-xs px-2 py-0.5 rounded-full border font-medium ${badgeMap[task.priorityState] || "bg-slate-500/10 text-slate-400"}`}
                   >
@@ -1403,13 +1422,13 @@ function WorkflowDetailsPanel({
                       {roDirs.length > 0 && (
                         <div className="text-amber-400/90">
                           <Lock className="w-3 h-3 inline mr-1" />
-                          只读目录: {roDirs.join(", ")}
+                          {t('nodeActions.readonlyDirs')} {roDirs.join(", ")}
                         </div>
                       )}
                       {fcDirs.length > 0 && (
                         <div className="text-emerald-400/90">
                           <Cpu className="w-3 h-3 inline mr-1" />
-                          完全控制: {fcDirs.join(", ")}
+                          {t('nodeActions.fullControl')} {fcDirs.join(", ")}
                         </div>
                       )}
                     </div>
@@ -1417,7 +1436,7 @@ function WorkflowDetailsPanel({
                 })()}
                 {task.nodeAgents?.[task.currentNode] && (
                   <div className="flex items-center text-xs text-blue-400 mt-1">
-                    <Bot className="w-3 h-3 mr-1.5" /> 执行者: {task.nodeAgents[task.currentNode]}
+                    <Bot className="w-3 h-3 mr-1.5" /> {t('nodeActions.executor')} {task.nodeAgents[task.currentNode]}
                   </div>
                 )}
                 {!isCompleted && !isCancelled && (
@@ -1428,19 +1447,19 @@ function WorkflowDetailsPanel({
                           onClick={() => handleDoManual("resume")}
                           className="flex items-center justify-center px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-sm font-medium border border-emerald-500/30 transition-colors-fast"
                         >
-                          <Activity className="w-4 h-4 mr-2" /> 恢复执行
+                          <Activity className="w-4 h-4 mr-2" /> {t('actions.resume')}
                         </button>
                         <button
                           onClick={() => setShowReassignDialog(true)}
                           className="flex items-center justify-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-sm font-medium border border-indigo-500/30 transition-colors-fast"
                         >
-                          <ArrowRight className="w-4 h-4 mr-2" /> 重新分配
+                          <ArrowRight className="w-4 h-4 mr-2" /> {t('actions.reassign')}
                         </button>
                         <button
                           onClick={() => handleDoManual("cancel")}
                           className="flex items-center justify-center px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm font-medium border border-red-500/30 transition-colors-fast"
                         >
-                          <XCircle className="w-4 h-4 mr-2" /> 取消任务
+                          <XCircle className="w-4 h-4 mr-2" /> {t('actions.cancelTask')}
                         </button>
                       </>
                     ) : (
@@ -1451,20 +1470,20 @@ function WorkflowDetailsPanel({
                               onClick={handleDoApprove}
                               className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-colors-fast btn-press"
                             >
-                              <CheckCircle2 className="w-4 h-4 mr-2" /> ✅ 通过 (approve)
+                              <CheckCircle2 className="w-4 h-4 mr-2" /> {t('actions.approve')}
                             </button>
                             <button
                               onClick={() => setShowRejectDialog(true)}
                               className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-orange-400 rounded-lg text-sm font-medium border border-slate-700 transition-colors-fast"
                             >
-                              <ArrowRight className="w-4 h-4 mr-2 rotate-180" /> ❌ 退回至...
+                              <ArrowRight className="w-4 h-4 mr-2 rotate-180" /> {t('actions.rejectTo')}
                             </button>
                             {nodeInProgress && (
                               <button
                                 onClick={() => handleDoManual("manual_intervention")}
                                 className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-amber-900/50 text-amber-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-amber-500/50 transition-colors-fast"
                               >
-                                <Pause className="w-4 h-4 mr-2" /> 🚩 需人工介入
+                                <Pause className="w-4 h-4 mr-2" /> {t('actions.manualIntervention')}
                               </button>
                             )}
                             {nodeInProgress && (
@@ -1472,7 +1491,7 @@ function WorkflowDetailsPanel({
                                 onClick={() => handleDoManual("interrupt")}
                                 className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-red-900/50 text-red-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-red-500/50 transition-colors-fast"
                               >
-                                <Ban className="w-3.5 h-3.5 mr-2" /> ⏹ 中断
+                                <Ban className="w-3.5 h-3.5 mr-2" /> {t('actions.interrupt')}
                               </button>
                             )}
                           </>
@@ -1481,7 +1500,7 @@ function WorkflowDetailsPanel({
                             onClick={() => handleDoManual("manual_intervention")}
                             className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-amber-900/50 text-amber-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-amber-500/50 transition-colors-fast"
                           >
-                            <AlertCircle className="w-4 h-4 mr-2" /> 🚩 标记需人工介入
+                            <AlertCircle className="w-4 h-4 mr-2" /> {t('actions.markManual')}
                           </button>
                         )}
                       </>
@@ -1493,14 +1512,14 @@ function WorkflowDetailsPanel({
 
             {/* 属性面板 */}
             <div className="bg-slate-800/30 border border-slate-700/60 rounded-xl p-4">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">属性</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{t('attributes.title')}</div>
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">类型</span>
+                  <span className="text-slate-400">{t('attributes.type')}</span>
                   <span className="text-white font-mono">{task.type || "story"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">优先级</span>
+                  <span className="text-slate-400">{t('attributes.priority')}</span>
                   <span
                     className={`font-medium ${
                       (task.priority as string) === "urgent"
@@ -1515,29 +1534,29 @@ function WorkflowDetailsPanel({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">工作流</span>
+                  <span className="text-slate-400">{t('attributes.workflow')}</span>
                   <span className="text-slate-300 text-right max-w-[120px] truncate">
                     {task.workflowName || "-"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">截止日期</span>
+                  <span className="text-slate-400">{t('attributes.dueDate')}</span>
                   <span className={`${isOverdue ? "text-red-400" : "text-slate-300"}`}>
                     {task.dueDate || "-"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">标签</span>
-                  <span className="text-slate-300">{(task.labels?.length || 0) + " 个"}</span>
+                  <span className="text-slate-400">{t('attributes.labels')}</span>
+                  <span className="text-slate-300">{t('attributes.labelCount', { count: task.labels?.length || 0 })}</span>
                 </div>
                 {task.rejectCount > 0 && (
                   <div className="flex justify-between text-orange-400">
-                    <span>退回次数</span>
-                    <span>{task.rejectCount} 次</span>
+                    <span>{t('attributes.rejectCount')}</span>
+                    <span>{t('attributes.rejectCountValue', { count: task.rejectCount })}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-400">进度</span>
+                  <span className="text-slate-400">{t('attributes.progress')}</span>
                   <span className="text-slate-300">
                     {completedCount}/{totalNodes}
                   </span>
@@ -1549,11 +1568,11 @@ function WorkflowDetailsPanel({
             {task.gitBranch && (
               <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
-                  <GitBranch className="w-3.5 h-3.5 mr-1 text-slate-400" /> Git 分支
+                  <GitBranch className="w-3.5 h-3.5 mr-1 text-slate-400" /> {t('gitBranch.title')}
                 </div>
                 <div className="text-sm text-blue-300 font-mono truncate">{task.gitBranch}</div>
                 <div className="text-[10px] text-slate-500 mt-1">
-                  节点基线: {task.taskRef}-node-{task.currentNode}
+                  {t('gitBranch.baseline', { ref: task.taskRef, index: task.currentNode })}
                 </div>
               </div>
             )}
@@ -1562,7 +1581,7 @@ function WorkflowDetailsPanel({
             {task.constraints && (
               <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
                 <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 flex items-center">
-                  <AlertTriangle className="w-3.5 h-3.5 mr-1" /> 红线要求
+                  <AlertTriangle className="w-3.5 h-3.5 mr-1" /> {t('constraints.title')}
                 </div>
                 <div className="text-sm text-amber-200 whitespace-pre-wrap leading-relaxed">
                   {task.constraints}
@@ -1575,7 +1594,7 @@ function WorkflowDetailsPanel({
               <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-4">
                 <div className="flex items-center mb-3">
                   <Cpu className="w-4 h-4 mr-2 text-blue-400" />
-                  <span className="text-xs font-semibold text-slate-300">Token 消耗</span>
+                  <span className="text-xs font-semibold text-slate-300">{t('tokenUsage.title')}</span>
                 </div>
                 <div className="space-y-2">
                   {Object.entries(task.nodeTokens).map(([nodeIdx, tokens]) => (
@@ -1625,6 +1644,7 @@ interface ContinuationBadgeProps {
 }
 
 function ContinuationBadge({ agentName, expiresAt }: ContinuationBadgeProps) {
+  const t = useTranslations("dashboard");
   const [remaining, setRemaining] = useState(
     Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000))
   );
@@ -1644,7 +1664,7 @@ function ContinuationBadge({ agentName, expiresAt }: ContinuationBadgeProps) {
     <div className="mt-2 flex items-center text-xs text-indigo-400 bg-indigo-500/10 p-2 rounded border border-indigo-500/30">
       <Lock className="w-3.5 h-3.5 mr-1.5 shrink-0" />
       <span>
-        等待 <span className="font-semibold text-indigo-300">{agentName}</span> 续约中（剩余 {remaining}s）
+        {t('continuationBadge.waiting', { agentName, seconds: remaining })}
       </span>
     </div>
   );
@@ -1662,6 +1682,7 @@ interface TaskColumnProps {
 }
 
 function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProps) {
+  const t = useTranslations("dashboard");
   const styles: Record<string, string> = {
     manual: "border-red-500/30 bg-red-500/5",
     rejected: "border-orange-500/30 bg-orange-500/5",
@@ -1698,7 +1719,7 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
             <div className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center mb-2">
               {icons[type]}
             </div>
-            暂无任务
+            {t('taskColumn.empty')}
           </div>
         ) : (
           tasks.map((task) => {
@@ -1727,10 +1748,10 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                       <span className="text-[10px] text-red-400 bg-red-400/10 px-1.5 rounded">BUG</span>
                     )}
                     {(task.priority as string) === "urgent" && (
-                      <span className="text-[10px] text-orange-400 bg-orange-400/10 px-1.5 rounded">紧急</span>
+                      <span className="text-[10px] text-orange-400 bg-orange-400/10 px-1.5 rounded">{t('badge.urgent')}</span>
                     )}
                     {task.currentNodeType === "review" && (
-                      <span className="text-[10px] text-purple-400 bg-purple-400/10 px-1.5 rounded">审查</span>
+                      <span className="text-[10px] text-purple-400 bg-purple-400/10 px-1.5 rounded">{t('badge.review')}</span>
                     )}
                   </div>
                   <span className="text-xs text-slate-500 shrink-0">
@@ -1745,14 +1766,13 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                       <Clock className="w-3 h-3 text-blue-400" />
                       <span className="text-[10px] text-blue-300 font-medium">
-                        {task.reservedForAgent} 优先续约{" "}
-                        {Math.ceil((new Date(task.reservationExpiresAt).getTime() - Date.now()) / 1000)}s
+                        {t('taskCard.priorityRenewal', { agentName: task.reservedForAgent, seconds: Math.ceil((new Date(task.reservationExpiresAt).getTime() - Date.now()) / 1000) })}
                       </span>
                     </div>
                   )}
                 <div className="flex items-center text-xs text-slate-400 mb-2">
                   <Bot className="w-3 h-3 mr-1.5" />{" "}
-                  {task.nodeAgents?.[task.currentNode] || task.agent || "等待认领"}
+                  {task.nodeAgents?.[task.currentNode] || task.agent || t('taskCard.awaitingClaim')}
                 </div>
                 {/* 标签 */}
                 {task.labels && task.labels.length > 0 && (
@@ -1773,20 +1793,20 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                     <Calendar className="w-3 h-3 mr-1" />
                     {task.dueDate}
                     {isOverdue && (
-                      <span className="ml-1 bg-red-500/10 text-red-400 px-1 rounded">已逾期</span>
+                      <span className="ml-1 bg-red-500/10 text-red-400 px-1 rounded">{t('overdue')}</span>
                     )}
                   </div>
                 )}
                 {/* 节点超时 */}
                 {currentTimeout && task.priorityState === "in_progress" && (
                   <div className="flex items-center text-[10px] text-slate-500 mb-2">
-                    <Timer className="w-3 h-3 mr-1" /> 节点超时: {currentTimeout}min
+                    <Timer className="w-3 h-3 mr-1" /> {t('taskCard.nodeTimeout', { minutes: currentTimeout })}
                   </div>
                 )}
                 {/* 退回计数 */}
                 {task.rejectCount > 0 && (
                   <div className="flex items-center text-[10px] text-orange-400 mb-2">
-                    <AlertOctagon className="w-3 h-3 mr-1" /> 已退回 {task.rejectCount} 次
+                    <AlertOctagon className="w-3 h-3 mr-1" /> {t('taskCard.rejectedCount', { count: task.rejectCount })}
                   </div>
                 )}
                 <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
@@ -1831,6 +1851,7 @@ interface TaskListViewProps {
 }
 
 function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProps) {
+  const t = useTranslations("dashboard");
   const [sortBy, setSortBy] = useState<string>("created");
   const [sortDir, setSortDir] = useState<string>("desc");
   const [filterType, setFilterType] = useState<string>("all");
@@ -1853,12 +1874,12 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
   });
 
   const statusMap: Record<string, { label: string; cls: string }> = {
-    manual_intervention: { label: "需人工介入", cls: "bg-red-500/10 text-red-400 border-red-500/20" },
-    rejected: { label: "待返工", cls: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
-    in_progress: { label: "进行中", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-    pending: { label: "待认领", cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
-    completed: { label: "已完成", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-    cancelled: { label: "已取消", cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
+    manual_intervention: { label: t('status.manualIntervention'), cls: "bg-red-500/10 text-red-400 border-red-500/20" },
+    rejected: { label: t('status.rejected'), cls: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
+    in_progress: { label: t('status.inProgress'), cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+    pending: { label: t('status.pending'), cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+    completed: { label: t('status.completed'), cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+    cancelled: { label: t('status.cancelled'), cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
   };
 
   return (
@@ -1870,7 +1891,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
           onChange={(e) => setFilterType(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none cursor-pointer"
         >
-          <option value="all">全部类型</option>
+          <option value="all">{t('filters.allTypes')}</option>
           <option value="story">Story</option>
           <option value="bug">Bug</option>
           <option value="task">Task</option>
@@ -1880,16 +1901,16 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
           onChange={(e) => setFilterStatus(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none cursor-pointer"
         >
-          <option value="all">全部状态</option>
-          <option value="manual_intervention">需人工介入</option>
-          <option value="rejected">待返工</option>
-          <option value="in_progress">进行中</option>
-          <option value="pending">待认领</option>
-          <option value="completed">已完成</option>
-          <option value="cancelled">已取消</option>
+          <option value="all">{t('filters.allStatuses')}</option>
+          <option value="manual_intervention">{t('filters.manualIntervention')}</option>
+          <option value="rejected">{t('filters.rejected')}</option>
+          <option value="in_progress">{t('filters.inProgress')}</option>
+          <option value="pending">{t('filters.pending')}</option>
+          <option value="completed">{t('filters.completed')}</option>
+          <option value="cancelled">{t('filters.cancelled')}</option>
         </select>
         <div className="flex-1" />
-        <span className="text-xs text-slate-500">共 {sorted.length} 个任务</span>
+        <span className="text-xs text-slate-500">{t('filters.taskCount', { count: sorted.length })}</span>
       </div>
 
       {/* 表格 */}
@@ -1898,9 +1919,9 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
           <thead className="bg-slate-800/80 sticky top-0 z-10">
             <tr className="text-xs text-slate-400 uppercase tracking-wider">
               <th className="text-left px-4 py-3 font-medium">ID</th>
-              <th className="text-left px-4 py-3 font-medium">标题</th>
-              <th className="text-left px-4 py-3 font-medium">类型</th>
-              <th className="text-left px-4 py-3 font-medium">优先级</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.title')}</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.type')}</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.priority')}</th>
               <th className="text-left px-4 py-3 font-medium">
                 <button
                   onClick={() => {
@@ -1909,13 +1930,13 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                   }}
                   className="flex items-center gap-1 hover:text-white"
                 >
-                  状态 {sortBy === "priority" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                  {t('table.header.status')} {sortBy === "priority" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </button>
               </th>
-              <th className="text-left px-4 py-3 font-medium">当前节点</th>
-              <th className="text-left px-4 py-3 font-medium">执行者</th>
-              <th className="text-left px-4 py-3 font-medium">进度</th>
-              <th className="text-left px-4 py-3 font-medium">操作</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.currentNode')}</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.executor')}</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.progress')}</th>
+              <th className="text-left px-4 py-3 font-medium">{t('table.header.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
@@ -2015,7 +2036,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                           }}
                           className="text-[10px] px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded border border-indigo-500/30 transition-colors-fast"
                         >
-                          认领
+                          {t('table.claim')}
                         </button>
                       ) : task.reservedForAgent ? (
                         <span className="text-[10px] text-indigo-400 flex items-center">
@@ -2047,6 +2068,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
 // 看板主视图（Next.js 页面组件）
 // ==========================================
 export default function DashboardPage() {
+  const t = useTranslations("dashboard");
   const tasks = useAppStore((s) => s.tasks);
   const agents = useAppStore((s) => s.agents);
   const projects = useAppStore((s) => s.projects);
@@ -2330,13 +2352,13 @@ export default function DashboardPage() {
                 onClick={() => setActiveTab("active")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
               >
-                活跃
+                {t('tabs.active')}
               </button>
               <button
                 onClick={() => setActiveTab("archived")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
               >
-                已归档
+                {t('tabs.archived')}
               </button>
             </div>
             <div className="relative flex-1 max-w-md">
@@ -2344,7 +2366,7 @@ export default function DashboardPage() {
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索任务编号或标题..."
+                placeholder={t('search.placeholder')}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -2353,7 +2375,7 @@ export default function DashboardPage() {
               onChange={(e) => setCurrentProjectId(e.target.value || null)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
             >
-              <option value="">📁 全部工程</option>
+              <option value="">{t('projects.allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -2365,7 +2387,7 @@ export default function DashboardPage() {
               onChange={(e) => setFilterAgent(e.target.value || null)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
             >
-              <option value="">🤖 全部代理</option>
+              <option value="">{t('agents.allAgents')}</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.name}>
                   {a.name}
@@ -2376,7 +2398,7 @@ export default function DashboardPage() {
               onClick={() => setViewMode(viewMode === "list" ? "kanban" : "list")}
               className="flex items-center px-3 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors-fast"
             >
-              <ListTree className="w-3.5 h-3.5 mr-1" /> 看板视图
+              <ListTree className="w-3.5 h-3.5 mr-1" /> {t('view.kanban')}
             </button>
           </div>
         </div>
@@ -2416,13 +2438,13 @@ export default function DashboardPage() {
               onClick={() => setActiveTab("active")}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
             >
-              活跃
+              {t('tabs.active')}
             </button>
             <button
               onClick={() => setActiveTab("archived")}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
             >
-              已归档
+              {t('tabs.archived')}
             </button>
           </div>
           <div className="relative flex-1 max-w-md">
@@ -2430,7 +2452,7 @@ export default function DashboardPage() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索任务编号或标题..."
+              placeholder={t('search.placeholder')}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -2439,7 +2461,7 @@ export default function DashboardPage() {
               onChange={(e) => setCurrentProjectId(e.target.value || null)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
             >
-              <option value="">📁 全部工程</option>
+              <option value="">{t('projects.allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -2451,7 +2473,7 @@ export default function DashboardPage() {
               onChange={(e) => setFilterAgent(e.target.value || null)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
             >
-              <option value="">🤖 全部代理</option>
+              <option value="">{t('agents.allAgents')}</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.name}>
                   {a.name}
@@ -2462,7 +2484,7 @@ export default function DashboardPage() {
               onClick={() => setViewMode(viewMode === "list" ? "kanban" : "list")}
               className="flex items-center px-3 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors-fast"
             >
-              <ListTree className="w-3.5 h-3.5 mr-1" /> 看板视图
+              <ListTree className="w-3.5 h-3.5 mr-1" /> {t('view.kanban')}
             </button>
           </div>
         </div>
@@ -2504,7 +2526,7 @@ export default function DashboardPage() {
                     agent: bt.assignee_id || null,
                     message: "",
                     nodesStatus: [bt.current_node_status as "pending" | "in_progress" | "completed" | "rejected" | "manual_intervention"],
-                    nodeAgents: bt.current_node_status === "completed" ? ["已完成"] : bt.assignee_id ? [bt.assignee_id] : [],
+                    nodeAgents: bt.current_node_status === "completed" ? [t('status.completed')] : bt.assignee_id ? [bt.assignee_id] : [],
                     nodeNames: bt.current_node_name ? [bt.current_node_name] : [],
                     nodeTokens: {},
                     nodeTimeouts: {},
@@ -2540,10 +2562,10 @@ export default function DashboardPage() {
             : // 兜底：若看板 API 不可用则使用本地分组
               (
                 <>
-                  <TaskColumn title="🚩 需人工介入" type="manual" tasks={groups.manual_intervention} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
-                  <TaskColumn title="🔧 进行中" type="progress" tasks={groups.in_progress} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
-                  <TaskColumn title="⏳ 待认领" type="pending" tasks={groups.pending} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
-                  <TaskColumn title="✅ 已完成" type="completed" tasks={groups.completed} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
+                  <TaskColumn title={t('kanbanColumn.manualIntervention')} type="manual" tasks={groups.manual_intervention} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
+                  <TaskColumn title={t('kanbanColumn.inProgress')} type="progress" tasks={groups.in_progress} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
+                  <TaskColumn title={t('kanbanColumn.pending')} type="pending" tasks={groups.pending} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
+                  <TaskColumn title={t('kanbanColumn.completed')} type="completed" tasks={groups.completed} onSelect={setSelectedTask} selectedId={selectedTask?.id} />
                 </>
               )}
         </div>

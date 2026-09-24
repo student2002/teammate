@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations, useFormatter, useLocale } from "next-intl";
+import { useRouter as useLocaleRouter } from "@/i18n/navigation";
 import {
   LayoutDashboard,
   Cpu,
@@ -32,16 +34,16 @@ import { usePermission } from "@/lib/use-permission";
 import api from "@/lib/api";
 
 const navItems = [
-  { id: "dashboard", href: "/dashboard", icon: LayoutDashboard, label: "任务监控" },
-  { id: "history", href: "/history", icon: History, label: "历史任务" },
-  { id: "workflows", href: "/workflows", icon: Workflow, label: "工作流模板" },
-  { id: "agents", href: "/agents", icon: Cpu, label: "AI 代理" },
-  { id: "skills", href: "/skills", icon: Puzzle, label: "Skill & MCP" },
-  { id: "memory", href: "/memory", icon: Brain, label: "共享记忆" },
-  { id: "reviews", href: "/reviews", icon: Shield, label: "审查队列" },
-  { id: "settings", href: "/settings/project", icon: Settings, label: "工程设置" },
-  { id: "tokens", href: "/tokens", icon: BarChart3, label: "Token 统计" },
-  { id: "market", href: "/market", icon: Globe, label: "社区市场" },
+  { id: "dashboard", href: "/dashboard", icon: LayoutDashboard, labelKey: "dashboard" },
+  { id: "history", href: "/history", icon: History, labelKey: "history" },
+  { id: "workflows", href: "/workflows", icon: Workflow, labelKey: "workflows" },
+  { id: "agents", href: "/agents", icon: Cpu, labelKey: "agents" },
+  { id: "skills", href: "/skills", icon: Puzzle, labelKey: "skills" },
+  { id: "memory", href: "/memory", icon: Brain, labelKey: "memory" },
+  { id: "reviews", href: "/reviews", icon: Shield, labelKey: "reviews" },
+  { id: "settings", href: "/settings/project", icon: Settings, labelKey: "settings" },
+  { id: "tokens", href: "/tokens", icon: BarChart3, labelKey: "tokens" },
+  { id: "market", href: "/market", icon: Globe, labelKey: "market" },
 ];
 
 export default function WorkspaceLayout({
@@ -49,6 +51,10 @@ export default function WorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("nav");
+  const { dateTime } = useFormatter();
+  const locale = useLocale();
+  const routerLocale = useLocaleRouter();
   const pathname = usePathname();
   // 固定初始值避免 SSR 与 hydrate 首帧不一致；真实主题由下方 useEffect 从 localStorage 读取
   const [theme, setTheme] = useState("dark");
@@ -132,10 +138,10 @@ export default function WorkspaceLayout({
         ]);
         const results: Array<{id: string; type: string; title: string; subtitle?: string}> = [];
         if (Array.isArray(tasks)) {
-          tasks.forEach((t) => results.push({ id: String(t.id), type: "task", title: t.title, subtitle: `任务 #${t.id}` }));
+          tasks.forEach((task) => results.push({ id: String(task.id), type: "task", title: task.title, subtitle: `${t("searchTaskPrefix")} #${task.id}` }));
         }
         if (Array.isArray(agents)) {
-          agents.forEach((a) => results.push({ id: a.id, type: "agent", title: a.name, subtitle: "AI 代理" }));
+          agents.forEach((a) => results.push({ id: a.id, type: "agent", title: a.name, subtitle: t("searchAgentLabel") }));
         }
         setSearchResults(results);
       } catch {
@@ -153,6 +159,13 @@ export default function WorkspaceLayout({
     });
   };
 
+  const toggleLocale = () => {
+    const next = locale === "zh-CN" ? "en-US" : "zh-CN";
+    // 项目未启用 next-intl 中间件，语言切换通过 NEXT_LOCALE cookie 生效
+    document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000; samesite=lax`;
+    routerLocale.replace(pathname, { locale: next });
+  };
+
   const handleCreateWorkspace = async () => {
     if (!newWsName.trim() || !newWsPrefix.trim()) return;
     try {
@@ -165,7 +178,7 @@ export default function WorkspaceLayout({
       setNewWsPrefix("");
       setNewWsDesc("");
     } catch (err) {
-      setWsError(err instanceof Error ? err.message : "创建工作区失败");
+      setWsError(err instanceof Error ? err.message : t("createFailed"));
     } finally {
       setCreatingWs(false);
     }
@@ -206,7 +219,7 @@ export default function WorkspaceLayout({
               className="w-full text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 flex items-center justify-between hover:text-slate-300 transition-colors-fast"
             >
               <span className="truncate">
-                工作区 : {(currentWs?.issuePrefix || currentWs?.slug || "LOADING").toUpperCase()}
+                {t("workspace")} : {(currentWs?.issuePrefix || currentWs?.slug || "LOADING").toUpperCase()}
               </span>
               <ChevronDown className={`w-3 h-3 shrink-0 ml-1 transition-transform duration-200 ${showWsSwitcher ? "rotate-180" : ""}`} />
             </button>
@@ -241,7 +254,7 @@ export default function WorkspaceLayout({
                       className="w-full text-left px-3 py-2 text-xs text-blue-400 hover:bg-slate-700/50 flex items-center gap-2 transition-colors-fast"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      新建工作区
+                      {t("createWorkspace")}
                     </button>
                   )}
                 </div>
@@ -257,29 +270,29 @@ export default function WorkspaceLayout({
             <ChevronRight
               className={`w-2.5 h-2.5 mr-1 transition-transform duration-200 ${showWsOverview ? "rotate-90" : ""}`}
             />
-            工作区详情
+            {t("workspaceDetails")}
           </button>
 
           {showWsOverview && (
             <div className="mb-4 mx-2 p-3 bg-slate-800/60 border border-slate-700/50 rounded-xl space-y-2 text-xs animate-scale-in">
               <div className="flex justify-between">
-                <span className="text-slate-500">工程</span>
+                <span className="text-slate-500">{t("projectCount")}</span>
                 <span className="text-white font-medium">
                   {currentWs?.stats?.projects ?? projects.length}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">AI 代理</span>
+                <span className="text-slate-500">{t("agentCount")}</span>
                 <span className="text-white font-medium">{agents.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">进行中任务</span>
+                <span className="text-slate-500">{t("activeTaskCount")}</span>
                 <span className="text-white font-medium">
                   {tasks.filter((t) => t.priorityState === "in_progress").length}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">需人工介入</span>
+                <span className="text-slate-500">{t("manualInterventionCount")}</span>
                 <span className="text-red-400 font-medium">
                   {tasks.filter((t) => t.priorityState === "manual_intervention").length}
                 </span>
@@ -293,7 +306,7 @@ export default function WorkspaceLayout({
                     className="w-full text-left text-slate-400 hover:text-white flex items-center py-1 transition-colors-fast"
                   >
                     <Settings className="w-3 h-3 mr-1.5" />
-                    成员管理
+                    {t("memberManage")}
                   </Link>
                 )}
                 {perm.isAdmin && (
@@ -304,7 +317,7 @@ export default function WorkspaceLayout({
                     className="w-full text-left text-slate-400 hover:text-white flex items-center py-1 transition-colors-fast"
                   >
                     <Settings className="w-3 h-3 mr-1.5" />
-                    工作区设置
+                    {t("workspaceSettings")}
                   </Link>
                 )}
               </div>
@@ -332,7 +345,7 @@ export default function WorkspaceLayout({
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-400 rounded-r-full shadow-sm shadow-blue-400/50" />
                   )}
                   <item.icon className={`w-5 h-5 mr-3 transition-transform-fast group-hover:scale-110 ${isActive ? "text-blue-400" : ""}`} />
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}
@@ -344,9 +357,16 @@ export default function WorkspaceLayout({
           <div className="flex items-center justify-between">
             <div className="flex items-center min-w-0">
               <button
+                onClick={toggleLocale}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center mr-2 shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-slate-300"
+                title={locale === "zh-CN" ? "Switch to English" : "切换到中文"}
+              >
+                {locale === "zh-CN" ? "EN" : "中"}
+              </button>
+              <button
                 onClick={toggleTheme}
                 className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center mr-3 shrink-0 transition-colors-fast btn-press"
-                title={theme === "dark" ? "切换到白天模式" : "切换到夜间模式"}
+                title={theme === "dark" ? t("switchToLight") : t("switchToDark")}
               >
                 {theme === "dark" ? (
                   <Sun className="w-4 h-4 text-amber-400" />
@@ -359,7 +379,7 @@ export default function WorkspaceLayout({
                   {user?.name || "Admin"}
                 </div>
                 <div className="text-[10px] text-slate-500 truncate">
-                  {perm.isViewer ? "只读" : (user?.role || "Owner")}
+                  {perm.isViewer ? t("readOnly") : (user?.role || "Owner")}
                 </div>
               </div>
             </div>
@@ -369,7 +389,7 @@ export default function WorkspaceLayout({
                 setUser(null);
               }}
               className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors-fast shrink-0"
-              title="退出登录"
+              title={t("logout")}
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -383,7 +403,7 @@ export default function WorkspaceLayout({
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-slate-400">加载数据中...</span>
+              <span className="text-sm text-slate-400">{t("loadingData")}</span>
             </div>
           </div>
         )}
@@ -403,7 +423,7 @@ export default function WorkspaceLayout({
                 }}
                 onFocus={() => searchQuery.trim() && setShowSearch(true)}
                 onBlur={() => setTimeout(() => setShowSearch(false), 200)}
-                placeholder="搜索任务、代理..."
+                placeholder={t("searchPlaceholder")}
                 className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-9 pr-4 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:bg-slate-800 transition-colors-fast"
               />
               {searchQuery && (
@@ -455,7 +475,7 @@ export default function WorkspaceLayout({
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="relative w-9 h-9 rounded-lg bg-slate-800/60 hover:bg-slate-700 flex items-center justify-center transition-colors-fast btn-press"
-              title="通知"
+              title={t("notifications")}
             >
               <Bell className="w-4 h-4 text-slate-400" />
               {notifications.length > 0 && (
@@ -468,14 +488,14 @@ export default function WorkspaceLayout({
             {showNotifications && (
               <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 animate-scale-in">
                 <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white">通知</span>
+                  <span className="text-sm font-semibold text-white">{t("notifications")}</span>
                   {notifications.length > 0 && (
-                    <span className="text-[10px] text-slate-500">{notifications.length} 条未读</span>
+                    <span className="text-[10px] text-slate-500">{t("unreadCount", { count: notifications.length })}</span>
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-slate-500">暂无通知</div>
+                    <div className="px-4 py-8 text-center text-sm text-slate-500">{t("noNotifications")}</div>
                   ) : (
                     notifications.map((n) => (
                       <button
@@ -500,7 +520,7 @@ export default function WorkspaceLayout({
                               <div className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.description}</div>
                             )}
                             <div className="text-[10px] text-slate-600 mt-1">
-                              {new Date(n.created_at).toLocaleString("zh-CN")}
+                              {dateTime(new Date(n.created_at), { dateStyle: "medium", timeStyle: "short" })}
                             </div>
                           </div>
                         </div>
@@ -530,7 +550,7 @@ export default function WorkspaceLayout({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">新建工作区</h3>
+              <h3 className="text-lg font-bold text-white">{t("createWorkspaceTitle")}</h3>
               <button
                 onClick={() => setShowCreateWs(false)}
                 className="text-slate-500 hover:text-white transition-colors-fast"
@@ -546,7 +566,7 @@ export default function WorkspaceLayout({
               )}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  工作区名称 <span className="text-red-400">*</span>
+                  {t("workspaceName")} <span className="text-red-400">*</span>
                 </label>
                 <input
                   value={newWsName}
@@ -558,7 +578,7 @@ export default function WorkspaceLayout({
                     }
                   }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors-fast"
-                  placeholder="如: Acme Corp"
+                  placeholder={t("workspaceNamePlaceholder")}
                 />
               </div>
               <div>
@@ -573,18 +593,18 @@ export default function WorkspaceLayout({
                   placeholder="ACME"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
-                  用于构造任务 ID 前缀（无 PROJECT_KEY 时生效），如 ACME-42
+                  {t("issuePrefixHint")}
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  描述
+                  {t("description")}
                 </label>
                 <input
                   value={newWsDesc}
                   onChange={(e) => setNewWsDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors-fast"
-                  placeholder="可选，工作区描述"
+                  placeholder={t("descriptionPlaceholder")}
                 />
               </div>
             </div>
@@ -593,14 +613,14 @@ export default function WorkspaceLayout({
                 onClick={() => setShowCreateWs(false)}
                 className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
               >
-                取消
+                {t("cancel")}
               </button>
               <button
                 onClick={handleCreateWorkspace}
                 disabled={!newWsName.trim() || !newWsPrefix.trim() || creatingWs}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
               >
-                {creatingWs ? "创建中..." : "创建"}
+                {creatingWs ? t("creating") : t("create")}
               </button>
             </div>
           </div>
