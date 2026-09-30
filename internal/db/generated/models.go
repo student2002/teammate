@@ -74,6 +74,7 @@ const (
 	AgentStatusOffline AgentStatus = "offline"
 	AgentStatusBusy    AgentStatus = "busy"
 	AgentStatusPaused  AgentStatus = "paused"
+	AgentStatusPending AgentStatus = "pending"
 )
 
 func (e *AgentStatus) Scan(src interface{}) error {
@@ -153,6 +154,48 @@ func (ns NullAssigneeType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.AssigneeType), nil
+}
+
+type DaemonStatus string
+
+const (
+	DaemonStatusOnline  DaemonStatus = "online"
+	DaemonStatusOffline DaemonStatus = "offline"
+)
+
+func (e *DaemonStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DaemonStatus(s)
+	case string:
+		*e = DaemonStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DaemonStatus: %T", src)
+	}
+	return nil
+}
+
+type NullDaemonStatus struct {
+	DaemonStatus DaemonStatus `json:"daemon_status"`
+	Valid        bool         `json:"valid"` // Valid is true if DaemonStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDaemonStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.DaemonStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DaemonStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDaemonStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DaemonStatus), nil
 }
 
 type McpAuthType string
@@ -695,6 +738,8 @@ type Agent struct {
 	ExtraArgs    []string              `db:"extra_args" json:"extra_args"`
 	GitName      sql.NullString        `db:"git_name" json:"git_name"`
 	GitEmail     sql.NullString        `db:"git_email" json:"git_email"`
+	DaemonID     uuid.NullUUID         `db:"daemon_id" json:"daemon_id"`
+	Origin       string                `db:"origin" json:"origin"`
 	CreatedAt    time.Time             `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time             `db:"updated_at" json:"updated_at"`
 }
@@ -739,15 +784,14 @@ type AuditLog struct {
 }
 
 type AuthToken struct {
-	ID         uuid.UUID     `db:"id" json:"id"`
-	TokenHash  string        `db:"token_hash" json:"token_hash"`
-	LookupHash string        `db:"lookup_hash" json:"lookup_hash"`
-	TokenType  TokenType     `db:"token_type" json:"token_type"`
-	OwnerType  string        `db:"owner_type" json:"owner_type"`
-	OwnerID    uuid.UUID     `db:"owner_id" json:"owner_id"`
-	RuntimeID  uuid.NullUUID `db:"runtime_id" json:"runtime_id"`
-	ExpiresAt  time.Time     `db:"expires_at" json:"expires_at"`
-	CreatedAt  time.Time     `db:"created_at" json:"created_at"`
+	ID         uuid.UUID `db:"id" json:"id"`
+	TokenHash  string    `db:"token_hash" json:"token_hash"`
+	LookupHash string    `db:"lookup_hash" json:"lookup_hash"`
+	TokenType  TokenType `db:"token_type" json:"token_type"`
+	OwnerType  string    `db:"owner_type" json:"owner_type"`
+	OwnerID    uuid.UUID `db:"owner_id" json:"owner_id"`
+	ExpiresAt  time.Time `db:"expires_at" json:"expires_at"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 }
 
 type Comment struct {
@@ -783,9 +827,23 @@ type CommunityWorkflow struct {
 	UpdatedAt                    time.Time             `db:"updated_at" json:"updated_at"`
 }
 
+type Daemon struct {
+	ID            uuid.UUID       `db:"id" json:"id"`
+	WorkspaceID   uuid.UUID       `db:"workspace_id" json:"workspace_id"`
+	Name          string          `db:"name" json:"name"`
+	DeviceName    string          `db:"device_name" json:"device_name"`
+	Version       string          `db:"version" json:"version"`
+	Status        DaemonStatus    `db:"status" json:"status"`
+	PublicKey     string          `db:"public_key" json:"public_key"`
+	Providers     json.RawMessage `db:"providers" json:"providers"`
+	LastHeartbeat sql.NullTime    `db:"last_heartbeat" json:"last_heartbeat"`
+	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
+}
+
 type ExecutionSession struct {
 	ID              uuid.UUID      `db:"id" json:"id"`
-	RuntimeID       uuid.NullUUID  `db:"runtime_id" json:"runtime_id"`
+	DaemonID        uuid.NullUUID  `db:"daemon_id" json:"daemon_id"`
 	AgentID         uuid.NullUUID  `db:"agent_id" json:"agent_id"`
 	TaskNodeID      uuid.UUID      `db:"task_node_id" json:"task_node_id"`
 	Attempt         int32          `db:"attempt" json:"attempt"`
@@ -876,18 +934,17 @@ type NodeTransition struct {
 }
 
 type Project struct {
-	ID                uuid.UUID      `db:"id" json:"id"`
-	WorkspaceID       uuid.UUID      `db:"workspace_id" json:"workspace_id"`
-	Name              string         `db:"name" json:"name"`
-	Description       sql.NullString `db:"description" json:"description"`
-	Icon              sql.NullString `db:"icon" json:"icon"`
-	Status            ProjectStatus  `db:"status" json:"status"`
-	RepoUrl           sql.NullString `db:"repo_url" json:"repo_url"`
-	Context           sql.NullString `db:"context" json:"context"`
-	DefaultWorkflowID uuid.NullUUID  `db:"default_workflow_id" json:"default_workflow_id"`
-	MaxReviewCycles   int32          `db:"max_review_cycles" json:"max_review_cycles"`
-	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt         time.Time      `db:"updated_at" json:"updated_at"`
+	ID              uuid.UUID      `db:"id" json:"id"`
+	WorkspaceID     uuid.UUID      `db:"workspace_id" json:"workspace_id"`
+	Name            string         `db:"name" json:"name"`
+	Description     sql.NullString `db:"description" json:"description"`
+	Icon            sql.NullString `db:"icon" json:"icon"`
+	Status          ProjectStatus  `db:"status" json:"status"`
+	RepoUrl         sql.NullString `db:"repo_url" json:"repo_url"`
+	Context         sql.NullString `db:"context" json:"context"`
+	MaxReviewCycles int32          `db:"max_review_cycles" json:"max_review_cycles"`
+	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type ProjectMember struct {
@@ -907,21 +964,6 @@ type ProjectReviewer struct {
 	AgentID    uuid.NullUUID `db:"agent_id" json:"agent_id"`
 	MemberID   uuid.NullUUID `db:"member_id" json:"member_id"`
 	CreatedAt  time.Time     `db:"created_at" json:"created_at"`
-}
-
-type Runtime struct {
-	ID               uuid.UUID      `db:"id" json:"id"`
-	AgentID          uuid.UUID      `db:"agent_id" json:"agent_id"`
-	DaemonID         string         `db:"daemon_id" json:"daemon_id"`
-	Provider         AgentProvider  `db:"provider" json:"provider"`
-	Version          sql.NullString `db:"version" json:"version"`
-	Status           RuntimeStatus  `db:"status" json:"status"`
-	SessionTokenHash sql.NullString `db:"session_token_hash" json:"session_token_hash"`
-	SessionExpiresAt sql.NullTime   `db:"session_expires_at" json:"session_expires_at"`
-	PublicKey        sql.NullString `db:"public_key" json:"public_key"`
-	LastHeartbeat    sql.NullTime   `db:"last_heartbeat" json:"last_heartbeat"`
-	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type Skill struct {

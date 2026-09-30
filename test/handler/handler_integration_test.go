@@ -364,11 +364,10 @@ func TestTaskAPI(t *testing.T) {
 
 	// Setup
 	updateBody := map[string]interface{}{
-		"name":                "test-project",
-		"description":         "integration test project",
-		"status":              "active",
-		"default_workflow_id": tplID,
-		"max_review_cycles":   3,
+		"name":              "test-project",
+		"description":       "integration test project",
+		"status":            "active",
+		"max_review_cycles": 3,
 	}
 	_, _, _ = doRequestWithToken(t, client, http.MethodPut,
 		srv.URL+"/api/workspaces/"+wsID+"/projects/"+projID, token, updateBody)
@@ -470,11 +469,10 @@ func TestNodeOperationsAPI(t *testing.T) {
 
 	// Setup
 	updateBody := map[string]interface{}{
-		"name":                "test-project",
-		"description":         "integration test project",
-		"status":              "active",
-		"default_workflow_id": tplID,
-		"max_review_cycles":   3,
+		"name":              "test-project",
+		"description":       "integration test project",
+		"status":            "active",
+		"max_review_cycles": 3,
 	}
 	_, _, _ = doRequestWithToken(t, client, http.MethodPut,
 		srv.URL+"/api/workspaces/"+wsID+"/projects/"+projID, token, updateBody)
@@ -583,9 +581,9 @@ func TestNodeOperationsAPI(t *testing.T) {
 	_, _, _ = doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/%d", taskBaseURL, taskID), token, nil)
 }
 
-// ---------- Runtime API ----------
+// ---------- Daemon API ----------
 
-func TestRuntimeAPI(t *testing.T) {
+func TestDaemonAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
 
@@ -596,35 +594,15 @@ func TestRuntimeAPI(t *testing.T) {
 	token, wsID := registerTestUser(t, client, srv.URL)
 
 	// Create agent
-	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
+	agentID, _ := createAgent(t, client, srv.URL, wsID, token)
 
-	runtimeBaseURL := srv.URL + "/api/workspaces/" + wsID + "/runtimes"
-
-	// 1. Register runtime (agent registers its own runtime)
-	daemonID := fmt.Sprintf("daemon-%s", uuid.New().String()[:8])
-	registerBody := map[string]interface{}{
-		"agent_id":           agentID,
-		"daemon_id":          daemonID,
-		"provider":           "claude",
-		"version":            "1.0.0",
-		"status":             "online",
-		"session_token_hash": "hash123",
-		"public_key":         "pubkey123",
-	}
-	_, status, body := doRequestWithAPIKey(t, client, http.MethodPost, runtimeBaseURL, agentAPIToken, registerBody)
-	if status != http.StatusCreated {
-		t.Fatalf("RegisterRuntime: expected 201, got %d, body: %s", status, body)
-	}
-
-	var rtResult map[string]interface{}
-	if err := json.Unmarshal(body, &rtResult); err != nil {
-		t.Fatalf("decode runtime: %v", err)
-	}
-	rtID := rtResult["id"].(string)
-	t.Logf("Registered runtime: %s", rtID)
+	// 1. Daemon registers reporting the agent (web creates daemon, machine registers)
+	daemonID, daemonToken := createDaemonForAgent(t, client, srv.URL, wsID, token, agentID)
+	t.Logf("Daemon registered: %s", daemonID)
 
 	// 2. Heartbeat
-	_, status, body = doRequestWithToken(t, client, http.MethodPost, runtimeBaseURL+"/"+rtID+"/heartbeat", token, nil)
+	_, status, body := doRequestWithAPIKey(t, client, http.MethodPost,
+		srv.URL+"/api/daemons/heartbeat", daemonToken, map[string]interface{}{})
 	if status != http.StatusOK {
 		t.Fatalf("Heartbeat: expected 200, got %d, body: %s", status, body)
 	}
@@ -632,8 +610,13 @@ func TestRuntimeAPI(t *testing.T) {
 	if err := json.Unmarshal(body, &hbResult); err != nil {
 		t.Fatalf("decode heartbeat: %v", err)
 	}
-	if hbResult["status"] != "online" {
-		t.Fatalf("expected status 'online', got %q", hbResult["status"])
+	t.Logf("Heartbeat successful, desired agents: %v", hbResult["desired_agents"])
+
+	// 3. Deregister (graceful shutdown)
+	_, status, body = doRequestWithAPIKey(t, client, http.MethodPost,
+		srv.URL+"/api/daemons/deregister", daemonToken, map[string]interface{}{})
+	if status != http.StatusOK {
+		t.Fatalf("Deregister: expected 200, got %d, body: %s", status, body)
 	}
-	t.Log("Heartbeat successful")
+	t.Log("Deregister successful")
 }

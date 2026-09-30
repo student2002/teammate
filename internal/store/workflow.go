@@ -225,12 +225,6 @@ func (s *Store) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) error 
 
 	qtx := s.q.WithTx(tx)
 
-	// After 002_remove_fks, projects.default_workflow_id no longer has a foreign key; it must be explicitly set to NULL
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET default_workflow_id = NULL WHERE default_workflow_id = $1`, id); err != nil {
-		return fmt.Errorf("clear projects.default_workflow_id: %w", err)
-	}
-
 	if err := qtx.DeleteTemplateNodesByTemplate(ctx, id); err != nil {
 		return fmt.Errorf("delete template nodes: %w", err)
 	}

@@ -20,8 +20,8 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 	svc.Hub = hub
 
 	// agent1 and agent2 are project members (setupServiceTest already added them to the project)
-	agent1Runtime := createOnlineRuntime(t, svc, env.agent1ID)
-	agent2Runtime := createOnlineRuntime(t, svc, env.agent2ID)
+	agent1Daemon := onlineDaemonKey(t, svc, env.agent1ID)
+	agent2Daemon := onlineDaemonKey(t, svc, env.agent2ID)
 
 	// Create a non-project-member agent3 (same workspace, but not belonging to this project)
 	agent3, _, err := svc.Store.CreateAgent(context.Background(), types.CreateAgentParams{
@@ -37,7 +37,7 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create agent3: %v", err)
 	}
-	agent3Runtime := createOnlineRuntime(t, svc, agent3.ID)
+	agent3Daemon := onlineDaemonKey(t, svc, agent3.ID)
 
 	// Create a task through the service layer (triggers publishNodePendingEvents project-scoped broadcast)
 	taskSvc := service.NewTaskService(svc)
@@ -67,18 +67,18 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 		}
 	}
 
-	// Only runtimes of project members (agent1/agent2) should receive the broadcast
-	expected := map[string]bool{agent1Runtime: true, agent2Runtime: true}
+	// Only daemons of project members (agent1/agent2) should receive the broadcast
+	expected := map[string]bool{agent1Daemon: true, agent2Daemon: true}
 	if len(pendingSubs) != len(expected) {
 		t.Fatalf("expected %d node:pending deliveries, got %d: %v", len(expected), len(pendingSubs), pendingSubs)
 	}
 	for _, sub := range pendingSubs {
 		if !expected[sub] {
-			t.Fatalf("unexpected delivery to runtime %s (non-member should not receive)", sub)
+			t.Fatalf("unexpected delivery to daemon %s (non-member should not receive)", sub)
 		}
 	}
-	if containsSub(pendingSubs, agent3Runtime) {
-		t.Fatalf("non-member agent3 runtime %s received node:pending — broadcast must be project-scoped", agent3Runtime)
+	if containsSub(pendingSubs, agent3Daemon) {
+		t.Fatalf("non-member agent3 daemon %s received node:pending — broadcast must be project-scoped", agent3Daemon)
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 )
 
 const searchAgentsByWorkspace = `-- name: SearchAgentsByWorkspace :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
 FROM agents
 WHERE workspace_id = $1
   AND name ILIKE $2
@@ -46,6 +46,8 @@ func (q *Queries) SearchAgentsByWorkspace(ctx context.Context, arg SearchAgentsB
 			pq.Array(&i.ExtraArgs),
 			&i.GitName,
 			&i.GitEmail,
+			&i.DaemonID,
+			&i.Origin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

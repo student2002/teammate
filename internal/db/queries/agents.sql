@@ -124,3 +124,25 @@ SELECT ms.*, amr.enabled, amr.created_at AS assigned_at
 FROM agent_mcp_servers amr
 JOIN mcp_servers ms ON ms.id = amr.mcp_server_id
 WHERE amr.agent_id = $1;
+
+-- name: SumTokenUsageByAgents :many
+SELECT agent_id,
+       COALESCE(SUM(input_tokens), 0)::bigint  AS input_tokens,
+       COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+FROM token_usage
+WHERE agent_id = ANY($1::uuid[])
+GROUP BY agent_id;
+
+-- name: CountCompletedNodesByAgents :many
+SELECT assignee_id AS agent_id, COUNT(*)::int AS completed_nodes
+FROM task_nodes
+WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[]) AND status = 'completed'
+GROUP BY assignee_id;
+
+-- name: GetCurrentTasksByAgents :many
+SELECT DISTINCT ON (assignee_id)
+       assignee_id AS agent_id, task_id, title AS task_title, name AS node_name
+FROM task_nodes tn JOIN tasks t ON t.id = tn.task_id
+WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[])
+  AND status IN ('pending', 'in_progress', 'manual_intervention')
+ORDER BY assignee_id, tn.updated_at DESC;

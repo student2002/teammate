@@ -13,4 +13,4 @@ type WorkflowTemplate = types.WorkflowTemplate
 type Agent = types.Agent
 type Skill = types.Skill
 type McpServer = types.McpServer
-type Runtime = types.Runtime
+type Daemon = types.Daemon

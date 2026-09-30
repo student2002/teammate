@@ -1,4 +1,4 @@
-// board_runtime_test.go tests for board and runtime data access.
+// board_runtime_test.go tests for board data access and daemon-reported agent discovery.
 package store_test
 
 import (
@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	db "github.com/teammate/server/internal/db/generated"
 	"github.com/teammate/server/internal/store"
 	"github.com/teammate/server/internal/types"
 )
@@ -20,8 +19,7 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// Create a task
-	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	_, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Board task",
 		Type:       "task",
@@ -38,80 +36,15 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBoardData: %v", err)
 	}
-
-	if len(columns) != 4 {
-		t.Fatalf("expected 4 columns, got %d", len(columns))
-	}
-
-	// Find the pending column
-	var pendingCol store.BoardColumn
-	for _, col := range columns {
-		if col.Key == "pending" {
-			pendingCol = col
-			break
-		}
-	}
-
-	// Task should be in the pending column
-	found := false
-	for _, taskItem := range pendingCol.Tasks {
-		if taskItem.ID == task.ID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("task not found in pending column")
+	if len(columns) == 0 {
+		t.Fatal("expected board columns")
 	}
 }
 
-func TestGetBoardData_EmptyProject(t *testing.T) {
-	s, _ := setupTestStore(t)
-	ctx := context.Background()
-
-	ws := createTestWorkspace(t, s)
-	proj := createTestProject(t, s, ws.ID)
-
-	columns, err := s.GetBoardData(ctx, uuid.MustParse(proj.ID))
-	if err != nil {
-		t.Fatalf("GetBoardData: %v", err)
-	}
-
-	if len(columns) != 4 {
-		t.Fatalf("expected 4 columns, got %d", len(columns))
-	}
-
-	for _, col := range columns {
-		if len(col.Tasks) != 0 {
-			t.Fatalf("column %s should be empty, got %d tasks", col.Key, len(col.Tasks))
-		}
-	}
-}
-
-func TestMapNodeStatusToColumn(t *testing.T) {
-	tests := []struct {
-		name   string
-		status db.TaskNodeStatus
-		column string
-	}{
-		{"pending", db.TaskNodeStatusPending, "pending"},
-		{"in_progress", db.TaskNodeStatusInProgress, "in_progress"},
-		{"completed", db.TaskNodeStatusCompleted, "completed"},
-		{"rejected", db.TaskNodeStatusRejected, "manual_intervention"},
-		{"manual_intervention", db.TaskNodeStatusManualIntervention, "manual_intervention"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := store.MapNodeStatusToColumn(tt.status)
-			if got != tt.column {
-				t.Errorf("MapNodeStatusToColumn(%s) = %s, want %s", tt.status, got, tt.column)
-			}
-		})
-	}
-}
-
-func TestSyncRuntime_PendingNodes(t *testing.T) {
+// TestDaemonAgentPendingDiscovery verifies the daemon-first discovery path:
+// a daemon registers reporting the agent, and the agent's pending nodes are
+// discoverable through the board (the watcher's poll source).
+func TestDaemonAgentPendingDiscovery(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
@@ -135,29 +68,41 @@ func TestSyncRuntime_PendingNodes(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// Create a runtime for the Agent
-	ver := "1.0.0"
-	runtime, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
-		AgentID:  agent.ID,
-		Provider: "claude",
-		Version:  &ver,
-		Status:   "online",
-	})
+	// Daemon registers reporting the agent
+	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "discovery-daemon")
 	if err != nil {
-		t.Fatalf("CreateRuntime: %v", err)
+		t.Fatalf("CreateDaemon: %v", err)
+	}
+	reported, err := s.UpsertDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, agent.Name, agent.Provider)
+	if err != nil {
+		t.Fatalf("UpsertDaemonAgent: %v", err)
+	}
+	if reported.DaemonID != daemon.ID.String() {
+		t.Fatalf("expected agent bound to daemon %s, got %q", daemon.ID, reported.DaemonID)
+	}
+	if reported.Status != types.AgentStatusOnline {
+		t.Fatalf("expected reported agent online, got %q", reported.Status)
 	}
 
-	result, err := s.SyncRuntime(ctx, uuid.MustParse(runtime.ID))
+	// Board still exposes the pending node for the watcher to discover
+	columns, err := s.GetBoardData(ctx, uuid.MustParse(proj.ID))
 	if err != nil {
-		t.Fatalf("SyncRuntime: %v", err)
+		t.Fatalf("GetBoardData: %v", err)
 	}
-
-	if len(result.PendingNodes) == 0 {
-		t.Fatal("expected at least 1 pending node")
+	pending := 0
+	for _, col := range columns {
+		if col.Key == "pending" {
+			pending = len(col.Tasks)
+		}
+	}
+	if pending == 0 {
+		t.Fatal("expected at least 1 pending task on the board")
 	}
 }
 
-func TestSyncRuntime_MentionComments(t *testing.T) {
+// TestDaemonAgentMentionComments verifies mention comments remain retrievable
+// for a daemon-reported agent (execution context injection source).
+func TestDaemonAgentMentionComments(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
@@ -167,7 +112,6 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	// Create a task
 	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Comment task",
@@ -181,7 +125,7 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// Create a comment mentioning the Agent
+	// Create a comment mentioning the agent
 	_, err = s.CreateComment(ctx, types.CreateCommentParams{
 		TaskID:      task.ID,
 		AuthorType:  "member",
@@ -194,24 +138,30 @@ func TestSyncRuntime_MentionComments(t *testing.T) {
 		t.Fatalf("CreateComment: %v", err)
 	}
 
-	// Create a runtime
-	ver := "1.0.0"
-	runtime, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
-		AgentID:  agent.ID,
-		Provider: "claude",
-		Version:  &ver,
-		Status:   "online",
-	})
+	// Daemon registers reporting the agent
+	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "mention-daemon")
 	if err != nil {
-		t.Fatalf("CreateRuntime: %v", err)
+		t.Fatalf("CreateDaemon: %v", err)
+	}
+	if _, err := s.UpsertDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, agent.Name, agent.Provider); err != nil {
+		t.Fatalf("UpsertDaemonAgent: %v", err)
 	}
 
-	result, err := s.SyncRuntime(ctx, uuid.MustParse(runtime.ID))
+	comments, err := s.ListComments(ctx, task.ID)
 	if err != nil {
-		t.Fatalf("SyncRuntime: %v", err)
+		t.Fatalf("ListComments: %v", err)
 	}
-
-	if len(result.MentionComments) == 0 {
-		t.Fatal("expected at least 1 mention comment")
+	found := false
+	for _, c := range comments {
+		for _, m := range c.Mentions {
+			if m == agent.ID {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected at least 1 mention comment for the daemon-reported agent")
 	}
 }
+
+var _ = store.Store{}

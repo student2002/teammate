@@ -30,7 +30,7 @@ func TestRejectCascading(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -161,7 +161,6 @@ func TestRejectToManualNode(t *testing.T) {
 		Status:            dbgen.ProjectStatusActive,
 		RepoUrl:           sql.NullString{},
 		Context:           sql.NullString{},
-		DefaultWorkflowID: uuid.NullUUID{UUID: tpl.ID, Valid: true},
 		MaxReviewCycles:   sql.NullInt32{Int32: 3, Valid: true},
 	})
 

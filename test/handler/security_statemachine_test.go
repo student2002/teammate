@@ -23,7 +23,7 @@ func TestNode3CannotBeClaimedBeforeNode2Completed(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -61,7 +61,7 @@ func TestRejectTargetNodeCanBeReclaimed(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -117,7 +117,7 @@ func TestAgentCanCompleteStandardNode(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -163,7 +163,7 @@ func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -229,7 +229,7 @@ func TestAgentCannotCompleteReviewNode(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -271,7 +271,7 @@ func TestInterruptAckEndpoint(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -306,7 +306,7 @@ func TestLogUploadCannotForgeNode(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -343,7 +343,7 @@ func TestTaskLogsFallbackToDatabaseWhenRedisBufferEmpty(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, dbgen.New(db), projID, agentID)
@@ -396,7 +396,7 @@ func TestTaskLogsRejectsInvalidNodeIDFilter(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 	taskID, _ := createTask(t, client, srv.URL, projID, tplID, token)
 
 	logsURL := fmt.Sprintf("%s/api/tasks/%d/logs?node_id=not-a-uuid", srv.URL, taskID)

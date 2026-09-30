@@ -67,11 +67,46 @@ func (q *Queries) AddAgentSkill(ctx context.Context, arg AddAgentSkillParams) (A
 	return i, err
 }
 
+const countCompletedNodesByAgents = `-- name: CountCompletedNodesByAgents :many
+SELECT assignee_id AS agent_id, COUNT(*)::int AS completed_nodes
+FROM task_nodes
+WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[]) AND status = 'completed'
+GROUP BY assignee_id
+`
+
+type CountCompletedNodesByAgentsRow struct {
+	AgentID        uuid.NullUUID `db:"agent_id" json:"agent_id"`
+	CompletedNodes int32         `db:"completed_nodes" json:"completed_nodes"`
+}
+
+func (q *Queries) CountCompletedNodesByAgents(ctx context.Context, dollar_1 []uuid.UUID) ([]CountCompletedNodesByAgentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, countCompletedNodesByAgents, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountCompletedNodesByAgentsRow{}
+	for rows.Next() {
+		var i CountCompletedNodesByAgentsRow
+		if err := rows.Scan(&i.AgentID, &i.CompletedNodes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createAgent = `-- name: CreateAgent :one
 
 INSERT INTO agents (workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type CreateAgentParams struct {
@@ -114,6 +149,8 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		pq.Array(&i.ExtraArgs),
 		&i.GitName,
 		&i.GitEmail,
+		&i.DaemonID,
+		&i.Origin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -227,7 +264,7 @@ func (q *Queries) DeleteSkill(ctx context.Context, id uuid.UUID) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at FROM agents
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
 WHERE id = $1
 `
 
@@ -246,10 +283,56 @@ func (q *Queries) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 		pq.Array(&i.ExtraArgs),
 		&i.GitName,
 		&i.GitEmail,
+		&i.DaemonID,
+		&i.Origin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getCurrentTasksByAgents = `-- name: GetCurrentTasksByAgents :many
+SELECT DISTINCT ON (assignee_id)
+       assignee_id AS agent_id, task_id, title AS task_title, name AS node_name
+FROM task_nodes tn JOIN tasks t ON t.id = tn.task_id
+WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[])
+  AND status IN ('pending', 'in_progress', 'manual_intervention')
+ORDER BY assignee_id, tn.updated_at DESC
+`
+
+type GetCurrentTasksByAgentsRow struct {
+	AgentID   uuid.NullUUID `db:"agent_id" json:"agent_id"`
+	TaskID    int32         `db:"task_id" json:"task_id"`
+	TaskTitle string        `db:"task_title" json:"task_title"`
+	NodeName  string        `db:"node_name" json:"node_name"`
+}
+
+func (q *Queries) GetCurrentTasksByAgents(ctx context.Context, dollar_1 []uuid.UUID) ([]GetCurrentTasksByAgentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCurrentTasksByAgents, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCurrentTasksByAgentsRow{}
+	for rows.Next() {
+		var i GetCurrentTasksByAgentsRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.TaskID,
+			&i.TaskTitle,
+			&i.NodeName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getMcpServer = `-- name: GetMcpServer :one
@@ -403,7 +486,7 @@ func (q *Queries) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]Lis
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at FROM agents
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
 WHERE workspace_id = $1
 ORDER BY created_at DESC
 `
@@ -429,6 +512,8 @@ func (q *Queries) ListAgents(ctx context.Context, workspaceID uuid.UUID) ([]Agen
 			pq.Array(&i.ExtraArgs),
 			&i.GitName,
 			&i.GitEmail,
+			&i.DaemonID,
+			&i.Origin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -551,6 +636,44 @@ func (q *Queries) RemoveAgentSkill(ctx context.Context, arg RemoveAgentSkillPara
 	return err
 }
 
+const sumTokenUsageByAgents = `-- name: SumTokenUsageByAgents :many
+SELECT agent_id,
+       COALESCE(SUM(input_tokens), 0)::bigint  AS input_tokens,
+       COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+FROM token_usage
+WHERE agent_id = ANY($1::uuid[])
+GROUP BY agent_id
+`
+
+type SumTokenUsageByAgentsRow struct {
+	AgentID      uuid.UUID `db:"agent_id" json:"agent_id"`
+	InputTokens  int64     `db:"input_tokens" json:"input_tokens"`
+	OutputTokens int64     `db:"output_tokens" json:"output_tokens"`
+}
+
+func (q *Queries) SumTokenUsageByAgents(ctx context.Context, dollar_1 []uuid.UUID) ([]SumTokenUsageByAgentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, sumTokenUsageByAgents, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumTokenUsageByAgentsRow{}
+	for rows.Next() {
+		var i SumTokenUsageByAgentsRow
+		if err := rows.Scan(&i.AgentID, &i.InputTokens, &i.OutputTokens); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAgent = `-- name: UpdateAgent :one
 UPDATE agents
 SET instructions = COALESCE($2, instructions),
@@ -562,7 +685,7 @@ SET instructions = COALESCE($2, instructions),
     git_email = COALESCE($8, git_email),
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type UpdateAgentParams struct {
@@ -600,6 +723,8 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		pq.Array(&i.ExtraArgs),
 		&i.GitName,
 		&i.GitEmail,
+		&i.DaemonID,
+		&i.Origin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -610,7 +735,7 @@ const updateAgentStatus = `-- name: UpdateAgentStatus :one
 UPDATE agents
 SET status = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, created_at, updated_at
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type UpdateAgentStatusParams struct {
@@ -633,6 +758,8 @@ func (q *Queries) UpdateAgentStatus(ctx context.Context, arg UpdateAgentStatusPa
 		pq.Array(&i.ExtraArgs),
 		&i.GitName,
 		&i.GitEmail,
+		&i.DaemonID,
+		&i.Origin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -19,6 +19,7 @@ import {
   Zap,
   Database,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import type { MappedAgent, MappedTemplate, Skill, McpServer } from "@/lib/types";
@@ -152,38 +153,38 @@ function PublishDialog({
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[640px] max-h-[85vh] overflow-y-auto shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[640px] max-h-[85vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-lg font-bold text-white flex items-center">
-            <Upload className="w-5 h-5 mr-2 text-blue-400" /> {t("title")}
+        <div className="p-5 border-b border-line flex justify-between items-center sticky top-0 bg-surface z-10">
+          <h2 className="text-lg font-bold text-fg flex items-center">
+            <Upload className="w-5 h-5 mr-2 text-primary-fg" /> {t("title")}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
 
         <div className="p-5 space-y-5">
           {/* 选择工作流模板 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <Workflow className="w-3.5 h-3.5 inline mr-1 text-blue-400" />
-              {t("templateLabel")} <span className="text-red-400">*</span>
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
+              <Workflow className="w-3.5 h-3.5 inline mr-1 text-primary-fg" />
+              {t("templateLabel")} <span className="text-danger-fg">*</span>
             </label>
             <select
               value={selectedTemplateId}
               onChange={(e) => handleTemplateSelect(e.target.value)}
-              className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors-fast cursor-pointer animate-scale-in"
+              className="w-full bg-surface-2/40 border border-line-strong/60 rounded-lg px-4 py-2.5 text-sm text-fg focus:outline-none focus:border-primary transition-colors-fast cursor-pointer animate-scale-in"
             >
-              <option value="" className="bg-slate-800">
+              <option value="" className="bg-surface-2">
                 {t("templatePlaceholder")}
               </option>
               {templates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id} className="bg-slate-800">
+                <option key={tpl.id} value={tpl.id} className="bg-surface-2">
                   {tpl.name} {tpl.isBuiltIn ? t("builtIn") : t("custom")} —{" "}
                   {t("nodeCount", { count: tpl.nodes.length })}
                 </option>
@@ -193,20 +194,20 @@ function PublishDialog({
 
           {/* 工作流名称 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              {t("nameLabel")} <span className="text-red-400">*</span>
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
+              {t("nameLabel")} <span className="text-danger-fg">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("namePlaceholder")}
-              className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors-fast"
+              className="w-full bg-surface-2/40 border border-line-strong/60 rounded-lg px-4 py-2.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary transition-colors-fast"
             />
           </div>
 
           {/* 描述 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
               {t("descLabel")}
             </label>
             <textarea
@@ -214,37 +215,37 @@ function PublishDialog({
               onChange={(e) => setDesc(e.target.value)}
               placeholder={t("descPlaceholder")}
               rows={3}
-              className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors-fast resize-none"
+              className="w-full bg-surface-2/40 border border-line-strong/60 rounded-lg px-4 py-2.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary transition-colors-fast resize-none"
             />
           </div>
 
           {/* 版本 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
               {t("versionLabel")}
             </label>
             <input
               value={version}
               onChange={(e) => setVersion(e.target.value)}
               placeholder="v1.0.0"
-              className="w-full bg-slate-800/40 border border-slate-700/60 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors-fast"
+              className="w-full bg-surface-2/40 border border-line-strong/60 rounded-lg px-4 py-2.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary transition-colors-fast"
             />
           </div>
 
           {/* 节点预览（只读） */}
           {nodes.length > 0 && (
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
                 {t("nodeFlowLabel")}
               </label>
               <div className="flex items-center gap-2 flex-wrap">
                 {nodes.map((n, i) => (
                   <React.Fragment key={i}>
-                    <span className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300">
+                    <span className="px-3 py-1.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-fg-muted">
                       {n}
                     </span>
                     {i < nodes.length - 1 && (
-                      <span className="text-slate-600 text-xs">→</span>
+                      <span className="text-fg-faint text-xs">→</span>
                     )}
                   </React.Fragment>
                 ))}
@@ -254,18 +255,18 @@ function PublishDialog({
 
           {/* 依赖技能（下拉多选） */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <Zap className="w-3.5 h-3.5 inline mr-1 text-indigo-400" />
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
+              <Zap className="w-3.5 h-3.5 inline mr-1 text-accent-fg" />
               {t("skillsLabel")}{" "}
               {selectedTemplate && (
-                <span className="text-blue-400 normal-case tracking-normal font-normal">
+                <span className="text-primary-fg normal-case tracking-normal font-normal">
                   {t("autoDetected")}
                 </span>
               )}
             </label>
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-3 max-h-40 overflow-y-auto">
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-lg p-3 max-h-40 overflow-y-auto">
               {skills.length === 0 ? (
-                <div className="text-xs text-slate-500 text-center py-2">
+                <div className="text-xs text-fg-faint text-center py-2">
                   {t("noSkills")}
                 </div>
               ) : (
@@ -277,8 +278,8 @@ function PublishDialog({
                       onClick={() => toggleSkill(s.name)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors-fast ${
                         selectedSkills.includes(s.name)
-                          ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-300"
-                          : "bg-slate-700/30 border-slate-600/50 text-slate-400 hover:border-slate-500"
+                          ? "bg-accent/20 border-accent/40 text-accent-fg"
+                          : "bg-surface-3/30 border-line-strong/50 text-fg-subtle hover:border-line-strong"
                       }`}
                     >
                       {s.name}
@@ -288,7 +289,7 @@ function PublishDialog({
               )}
             </div>
             {selectedSkills.length > 0 && (
-              <div className="mt-2 text-xs text-slate-500">
+              <div className="mt-2 text-xs text-fg-faint">
                 {t("skillsSelected", { count: selectedSkills.length })}
               </div>
             )}
@@ -296,18 +297,18 @@ function PublishDialog({
 
           {/* 依赖 MCP 服务器（下拉多选） */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <Database className="w-3.5 h-3.5 inline mr-1 text-emerald-400" />
+            <label className="block text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
+              <Database className="w-3.5 h-3.5 inline mr-1 text-success-fg" />
               {t("mcpsLabel")}{" "}
               {selectedTemplate && (
-                <span className="text-blue-400 normal-case tracking-normal font-normal">
+                <span className="text-primary-fg normal-case tracking-normal font-normal">
                   {t("autoDetected")}
                 </span>
               )}
             </label>
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-3 max-h-40 overflow-y-auto">
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-lg p-3 max-h-40 overflow-y-auto">
               {mcpServers.length === 0 ? (
-                <div className="text-xs text-slate-500 text-center py-2">
+                <div className="text-xs text-fg-faint text-center py-2">
                   {t("noMcps")}
                 </div>
               ) : (
@@ -319,8 +320,8 @@ function PublishDialog({
                       onClick={() => toggleMcp(m.name)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors-fast ${
                         selectedMcps.includes(m.name)
-                          ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                          : "bg-slate-700/30 border-slate-600/50 text-slate-400 hover:border-slate-500"
+                          ? "bg-success/20 border-success/40 text-success-fg"
+                          : "bg-surface-3/30 border-line-strong/50 text-fg-subtle hover:border-line-strong"
                       }`}
                     >
                       {m.name}
@@ -330,7 +331,7 @@ function PublishDialog({
               )}
             </div>
             {selectedMcps.length > 0 && (
-              <div className="mt-2 text-xs text-slate-500">
+              <div className="mt-2 text-xs text-fg-faint">
                 {t("mcpsSelected", { count: selectedMcps.length })}
               </div>
             )}
@@ -338,7 +339,7 @@ function PublishDialog({
 
           {/* 代理信息提示 */}
           {selectedTemplate && (
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs text-primary-fg">
               <Cpu className="w-3.5 h-3.5 inline mr-1" />
               {t("autoDetectHint")}
             </div>
@@ -348,14 +349,14 @@ function PublishDialog({
           <div className="flex justify-end gap-3 pt-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+              className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
             >
               {t("cancel")}
             </button>
             <button
               onClick={handlePublish}
               disabled={!isValid}
-              className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
+              className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary disabled:bg-surface-3 disabled:text-fg-faint text-fg rounded-lg text-sm font-medium transition-colors-fast btn-press"
             >
               <Save className="w-4 h-4 mr-2" /> {t("publish")}
             </button>
@@ -403,58 +404,58 @@ function ImportDialog({
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[580px] max-h-[80vh] overflow-y-auto shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[580px] max-h-[80vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-lg font-bold text-white">{t("title")}</h2>
+        <div className="p-5 border-b border-line flex justify-between items-center sticky top-0 bg-surface z-10">
+          <h2 className="text-lg font-bold text-fg">{t("title")}</h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
 
         {step === "preview" && (
           <div className="p-5 space-y-5">
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+              <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg text-sm text-danger-fg">
                 {error}
               </div>
             )}
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-                <Download className="w-6 h-6 text-indigo-400" />
+              <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                <Download className="w-6 h-6 text-accent-fg" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-white">
+                <h3 className="text-xl font-bold text-fg">
                   {workflow.name}
                 </h3>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-fg-subtle mt-1">
                   {t("authorVersion", {
                     author: workflow.author,
                     version: workflow.version,
                     downloads: workflow.downloads,
                   })}
                 </div>
-                <p className="text-sm text-slate-300 mt-3">{workflow.desc}</p>
+                <p className="text-sm text-fg-muted mt-3">{workflow.desc}</p>
               </div>
             </div>
 
             {/* 节点序列 */}
             <div>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3">
                 {t("nodeSequenceLabel")}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {workflow.nodes.map((n, i) => (
                   <React.Fragment key={i}>
-                    <span className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300">
+                    <span className="px-3 py-1.5 bg-surface-2 border border-line-strong rounded-lg text-sm text-fg-muted">
                       {n}
                     </span>
                     {i < workflow.nodes.length - 1 && (
-                      <span className="text-slate-600 text-xs">→</span>
+                      <span className="text-fg-faint text-xs">→</span>
                     )}
                   </React.Fragment>
                 ))}
@@ -463,8 +464,8 @@ function ImportDialog({
 
             {/* 依赖分析 */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
-                <div className="text-xs font-semibold text-slate-500 mb-3">
+              <div className="bg-surface-2/30 border border-line-strong rounded-xl p-4">
+                <div className="text-xs font-semibold text-fg-faint mb-3">
                   {t("requiredSkills")}
                 </div>
                 <ul className="space-y-2">
@@ -473,16 +474,16 @@ function ImportDialog({
                       key={s}
                       className="flex items-center justify-between text-sm"
                     >
-                      <span className="text-slate-300">{s}</span>
-                      <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      <span className="text-fg-muted">{s}</span>
+                      <span className="text-[10px] text-warning-fg bg-warning/10 px-1.5 py-0.5 rounded">
                         {t("notInstalled")}
                       </span>
                     </li>
                   ))}
                 </ul>
               </div>
-              <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
-                <div className="text-xs font-semibold text-slate-500 mb-3">
+              <div className="bg-surface-2/30 border border-line-strong rounded-xl p-4">
+                <div className="text-xs font-semibold text-fg-faint mb-3">
                   {t("requiredMcps")}
                 </div>
                 <ul className="space-y-2">
@@ -491,8 +492,8 @@ function ImportDialog({
                       key={m}
                       className="flex items-center justify-between text-sm"
                     >
-                      <span className="text-slate-300">{m}</span>
-                      <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      <span className="text-fg-muted">{m}</span>
+                      <span className="text-[10px] text-warning-fg bg-warning/10 px-1.5 py-0.5 rounded">
                         {t("placeholder")}
                       </span>
                     </li>
@@ -503,9 +504,9 @@ function ImportDialog({
 
             {/* 推荐的代理身份指令 */}
             {workflow.recommendedAgentInstructions && (
-              <div className="bg-slate-800/30 border border-indigo-500/20 rounded-xl p-4">
-                <div className="text-xs font-semibold text-slate-500 mb-3 flex items-center">
-                  <BookOpen className="w-3.5 h-3.5 mr-1 text-indigo-400" />{" "}
+              <div className="bg-surface-2/30 border border-accent/20 rounded-xl p-4">
+                <div className="text-xs font-semibold text-fg-faint mb-3 flex items-center">
+                  <BookOpen className="w-3.5 h-3.5 mr-1 text-accent-fg" />{" "}
                   {t("recommendedInstructions")}
                 </div>
                 <div className="space-y-2">
@@ -513,12 +514,12 @@ function ImportDialog({
                     ([nodeName, instruction]) => (
                       <div
                         key={nodeName}
-                        className="bg-slate-950/50 border border-slate-700/50 rounded-lg p-3"
+                        className="bg-bg/50 border border-line-strong/50 rounded-lg p-3"
                       >
-                        <div className="text-[10px] text-indigo-400 font-semibold mb-1">
+                        <div className="text-[10px] text-accent-fg font-semibold mb-1">
                           {nodeName}
                         </div>
-                        <div className="text-xs text-slate-400 leading-relaxed">
+                        <div className="text-xs text-fg-subtle leading-relaxed">
                           {instruction}
                         </div>
                       </div>
@@ -528,21 +529,21 @@ function ImportDialog({
               </div>
             )}
 
-            <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4 text-xs text-slate-400">
-              <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-amber-400" />
+            <div className="bg-surface-2/30 border border-line-strong rounded-xl p-4 text-xs text-fg-subtle">
+              <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-warning-fg" />
               {t("mcpPlaceholderHint")}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
               >
                 {t("cancel")}
               </button>
               <button
                 onClick={handleImport}
-                className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
+                className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast btn-press"
               >
                 <Download className="w-4 h-4 mr-2" /> {t("confirmImport")}
               </button>
@@ -552,9 +553,9 @@ function ImportDialog({
 
         {step === "importing" && (
           <div className="p-8 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">{t("importingTitle")}</h3>
-            <p className="text-sm text-slate-400 mb-6">
+            <Loader2 className="w-10 h-10 text-primary-fg animate-spin mb-4" />
+            <h3 className="text-lg font-bold text-fg mb-2">{t("importingTitle")}</h3>
+            <p className="text-sm text-fg-subtle mb-6">
               {t("importingDesc")}
             </p>
           </div>
@@ -562,18 +563,18 @@ function ImportDialog({
 
         {step === "done" && (
           <div className="p-8 flex flex-col items-center">
-            <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            <div className="w-14 h-14 rounded-full bg-success/20 border border-success/30 flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-8 h-8 text-success-fg" />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">{t("successTitle")}</h3>
-            <div className="text-sm text-slate-400 text-center mb-6">
+            <h3 className="text-lg font-bold text-fg mb-2">{t("successTitle")}</h3>
+            <div className="text-sm text-fg-subtle text-center mb-6">
               {t("successDesc", { name: workflow.name })}
               <br />
               {t("successHint")}
             </div>
             <button
               onClick={onClose}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
+              className="px-6 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast btn-press"
             >
               {t("finish")}
             </button>
@@ -703,26 +704,26 @@ export default function MarketPage() {
     <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
       <div className="flex justify-between items-center mb-8 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">
+          <h1 className="text-2xl font-bold text-fg mb-2">
             {t("title")}
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             {t("subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-fg-faint absolute left-3 top-2.5" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("searchPlaceholder")}
-              className="bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 w-64 transition-colors-fast"
+              className="bg-surface border border-line-strong rounded-lg pl-9 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-primary w-64 transition-colors-fast"
             />
           </div>
           <button
             onClick={() => setPublishing(true)}
-            className="flex items-center px-4 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
+            className="flex items-center px-4 py-2 bg-primary-strong/10 hover:bg-primary-strong/20 text-primary-fg border border-primary/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
           >
             <Upload className="w-4 h-4 mr-1.5" /> {t("publishButton")}
           </button>
@@ -731,10 +732,10 @@ export default function MarketPage() {
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary-fg animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-slate-500">
+        <div className="flex-1 flex items-center justify-center text-fg-faint">
           {t("noMatch")}
         </div>
       ) : (
@@ -742,27 +743,27 @@ export default function MarketPage() {
           {filtered.map((wf) => (
             <div
               key={wf.id}
-              className="bg-slate-900/50 border border-slate-700/60 hover:border-blue-500/40 transition-colors-normal rounded-xl backdrop-blur-sm hover:shadow-lg hover:shadow-blue-500/5 p-6 flex flex-col card-hover"
+              className="bg-surface/50 border border-line-strong/60 hover:border-primary/40 transition-colors-normal rounded-xl backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 p-6 flex flex-col card-hover"
             >
               <div className="flex justify-between items-start mb-3">
-                <h3 className="text-lg font-bold text-white">{wf.name}</h3>
-                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
+                <h3 className="text-lg font-bold text-fg">{wf.name}</h3>
+                <span className="text-xs text-fg-subtle bg-surface-2 px-2 py-1 rounded">
                   {wf.version}
                 </span>
               </div>
-              <div className="text-sm text-slate-400 mb-4 line-clamp-2 min-h-[40px]">
+              <div className="text-sm text-fg-subtle mb-4 line-clamp-2 min-h-[40px]">
                 {wf.desc}
               </div>
 
               {/* 统 badges */}
               <div className="flex items-center gap-2 mb-4 text-[10px]">
                 {wf.nodes && (
-                  <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                  <span className="text-fg-subtle bg-surface-2 px-2 py-0.5 rounded">
                     {t("nodeCount", { count: wf.nodes.length })}
                   </span>
                 )}
                 {wf.recommendedAgentInstructions && (
-                  <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 flex items-center">
+                  <span className="text-accent-fg bg-accent/10 px-2 py-0.5 rounded border border-accent/20 flex items-center">
                     <BookOpen className="w-3 h-3 mr-0.5" />{" "}
                     {t("instructionCount", { count: Object.keys(wf.recommendedAgentInstructions).length })}
                   </span>
@@ -773,44 +774,44 @@ export default function MarketPage() {
               <div className="flex items-center gap-1.5 mb-4 text-xs">
                 {wf.nodes.map((n, i) => (
                   <React.Fragment key={i}>
-                    <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                    <span className="px-2 py-1 bg-surface-2 border border-line-strong rounded text-fg-muted">
                       {n}
                     </span>
                     {i < wf.nodes.length - 1 && (
-                      <span className="text-slate-600">→</span>
+                      <span className="text-fg-faint">→</span>
                     )}
                   </React.Fragment>
                 ))}
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
-                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <div className="text-slate-500 mb-2 font-semibold">
+                <div className="bg-bg p-3 rounded-lg border border-line">
+                  <div className="text-fg-faint mb-2 font-semibold">
                     {t("dependentSkills")}
                   </div>
                   <ul className="space-y-1">
                     {wf.skills.map((s) => (
                       <li
                         key={s}
-                        className="text-slate-300 flex items-center"
+                        className="text-fg-muted flex items-center"
                       >
-                        <span className="w-1 h-1 bg-indigo-500 rounded-full mr-2" />
+                        <span className="w-1 h-1 bg-accent rounded-full mr-2" />
                         {s}
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <div className="text-slate-500 mb-2 font-semibold">
+                <div className="bg-bg p-3 rounded-lg border border-line">
+                  <div className="text-fg-faint mb-2 font-semibold">
                     {t("dependentMcps")}
                   </div>
                   <ul className="space-y-1">
                     {wf.mcps.map((m) => (
                       <li
                         key={m}
-                        className="text-slate-300 flex items-center"
+                        className="text-fg-muted flex items-center"
                       >
-                        <span className="w-1 h-1 bg-emerald-500 rounded-full mr-2" />
+                        <span className="w-1 h-1 bg-success rounded-full mr-2" />
                         {m}
                       </li>
                     ))}
@@ -818,15 +819,15 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-800">
-                <div className="text-xs text-slate-500 flex items-center">
+              <div className="mt-auto flex items-center justify-between pt-4 border-t border-line">
+                <div className="text-xs text-fg-faint flex items-center">
                   <User className="w-3.5 h-3.5 mr-1" /> {wf.author}
                   <span className="mx-2">·</span>
                   <Download className="w-3.5 h-3.5 mr-1" /> {wf.downloads}
                 </div>
                 <button
                   onClick={() => setImporting(wf)}
-                  className="flex items-center px-4 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
+                  className="flex items-center px-4 py-1.5 bg-primary-strong/10 hover:bg-primary-strong/20 text-primary-fg border border-primary/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
                 >
                   <Download className="w-4 h-4 mr-1.5" /> {t("import")}
                 </button>
@@ -837,13 +838,16 @@ export default function MarketPage() {
       )}
 
       {importing && (
+        <ModalPortal>
         <ImportDialog
           workflow={importing}
           onClose={() => setImporting(null)}
           workspaceId={workspaceId}
         />
+        </ModalPortal>
       )}
       {publishing && (
+        <ModalPortal>
         <PublishDialog
           onClose={() => setPublishing(false)}
           onPublish={handlePublish}
@@ -852,6 +856,7 @@ export default function MarketPage() {
           skills={skills}
           mcpServers={mcpServers}
         />
+        </ModalPortal>
       )}
     </div>
   );

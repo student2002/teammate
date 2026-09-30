@@ -11,7 +11,7 @@ export type TaskNodeStatus =
 export type NodeType = "standard" | "review" | "manual";
 export type WorkflowTriggerType = "manual" | "schedule" | "github_issue";
 export type AssigneeType = "any_agent" | "specific_agent" | "human" | "auto";
-export type AgentStatus = "online" | "offline" | "busy" | "paused";
+export type AgentStatus = "online" | "offline" | "busy" | "paused" | "pending";
 export type Priority = "low" | "medium" | "high" | "urgent";
 
 export interface TaskNode {
@@ -247,6 +247,7 @@ export interface MappedAgent {
   id: string;
   name: string;
   tool: string;
+  provider: string;
   status: AgentStatus;
   task: string | null;
   identityInstruction: string;
@@ -256,6 +257,42 @@ export interface MappedAgent {
   mcpServers: McpServer[];
   tokenUsage: { input: number; output: number };
   history: unknown[];
+  // 上报来源:该代理由哪个守护进程上报
+  daemonId?: string;
+  daemonName?: string;
+  // 创建路径:"server" = Web 端在守护进程分组下创建并下发;"daemon" = 机器上 agentd 配置后上报
+  origin?: string;
+}
+
+// ── 守护进程(daemon)类型 ────────────────────────────────────
+export type DaemonStatus = "online" | "offline";
+
+// 守护进程上报的代理条目(名称即本机标识,同一守护进程内唯一)
+export interface DaemonReportedAgent {
+  name: string;
+  provider: string;
+  status: AgentStatus;
+  lastReportedAt: string;
+}
+
+// 守护进程检测到的可用编码工具(agentd 主动探测本机已安装的 CLI 后上报)
+export interface DaemonProvider {
+  provider: string;
+  version: string;
+  installed: boolean;
+}
+
+export interface MappedDaemon {
+  id: string;
+  name: string;
+  deviceName: string;
+  version: string;
+  status: DaemonStatus;
+  lastHeartbeat: string;
+  agentCount: number;
+  createdAt: string;
+  agents: DaemonReportedAgent[];
+  providers: DaemonProvider[];
 }
 
 export interface MappedTemplate {

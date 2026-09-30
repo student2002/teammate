@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/teammate/server/internal/store"
-	"github.com/teammate/server/internal/types"
 )
 
 func TestCreateAgent_WithToken(t *testing.T) {
@@ -35,16 +34,13 @@ func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 	agent, _ := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 
-	// Create a runtime for the agent
-	ver := "1.0.0"
-	_, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
-		AgentID:  agent.ID,
-		Provider: "claude",
-		Version:  &ver,
-		Status:   "online",
-	})
+	// Bind the agent to a reporting daemon (daemon-first model)
+	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "cascade-test-daemon")
 	if err != nil {
-		t.Fatalf("CreateRuntime: %v", err)
+		t.Fatalf("CreateDaemon: %v", err)
+	}
+	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, uuid.MustParse(agent.ID)); err != nil {
+		t.Fatalf("RegisterDaemonAgent: %v", err)
 	}
 
 	err = s.DeleteAgent(ctx, uuid.MustParse(agent.ID))

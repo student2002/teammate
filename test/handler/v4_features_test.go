@@ -110,7 +110,7 @@ func TestReservationWindow_ClaimWithinWindow(t *testing.T) {
 	token, wsID := registerTestUser(t, client, srv.URL)
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, apiToken := createAgent(t, client, srv.URL, wsID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)

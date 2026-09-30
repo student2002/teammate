@@ -84,7 +84,7 @@ type CompleteExecutionSessionParams struct {
 
 // CreateExecutionSessionParams is the domain parameter struct for creating an execution session.
 type CreateExecutionSessionParams struct {
-	RuntimeID       *string `json:"runtime_id"`
+	DaemonID        *string `json:"daemon_id"`
 	AgentID         *string `json:"agent_id"`
 	TaskNodeID      string  `json:"task_node_id"`
 	Attempt         int32   `json:"attempt"`
@@ -235,14 +235,13 @@ type ListProjectsByAgentMembershipParams struct {
 
 // UpdateProjectParams is the domain parameter struct for updating a project.
 type UpdateProjectParams struct {
-	ID                string   `json:"id"`
-	Name              string   `json:"name"`
-	Description       *string  `json:"description"`
-	Status            string   `json:"status"`
-	RepoURL           *string  `json:"repo_url"`
-	Context           *string  `json:"context"`
-	DefaultWorkflowID *string  `json:"default_workflow_id"`
-	MaxReviewCycles   *int32   `json:"max_review_cycles"`
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	Status          string  `json:"status"`
+	RepoURL         *string `json:"repo_url"`
+	Context         *string `json:"context"`
+	MaxReviewCycles *int32  `json:"max_review_cycles"`
 }
 
 // === Review domain ===
@@ -261,17 +260,6 @@ type GetReviewNodeReviewerParams struct {
 
 // === Runtime domain ===
 
-// CreateRuntimeParams is the domain parameter struct for creating a Runtime record.
-type CreateRuntimeParams struct {
-	AgentID          string  `json:"agent_id"`
-	DaemonID         string  `json:"daemon_id"`
-	Provider         string  `json:"provider"`
-	Version          *string `json:"version"`
-	Status           string  `json:"status"`
-	SessionTokenHash *string `json:"session_token_hash"`
-	SessionExpiresAt *time.Time `json:"session_expires_at"`
-	PublicKey        *string `json:"public_key"`
-}
 
 // UpdateRuntimeHeartbeatParams is the domain parameter struct for updating a Runtime's heartbeat time.
 type UpdateRuntimeHeartbeatParams struct {
@@ -279,11 +267,6 @@ type UpdateRuntimeHeartbeatParams struct {
 	LastHeartbeat *time.Time `json:"last_heartbeat"`
 }
 
-// UpdateRuntimeStatusParams is the domain parameter struct for updating a Runtime's status.
-type UpdateRuntimeStatusParams struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-}
 
 // === Search domain ===
 

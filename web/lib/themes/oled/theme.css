@@ -1,0 +1,30 @@
+/* 纯黑主题：OLED 屏幕零发光底色，中性灰阶表面 */
+[data-theme="oled"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #171717;
+  --surface-3: #262626;
+  --line: #1f1f1f;
+  --line-strong: #303030;
+  --fg: #fafafa;
+  --fg-muted: #d4d4d4;
+  --fg-subtle: #a3a3a3;
+  --fg-faint: #737373;
+  --primary: #3b82f6;
+  --primary-strong: #2563eb;
+  --primary-fg: #60a5fa;
+  --accent: #6366f1;
+  --accent-strong: #4f46e5;
+  --accent-fg: #818cf8;
+  --success: #10b981;
+  --success-strong: #059669;
+  --success-fg: #34d399;
+  --warning: #f59e0b;
+  --warning-strong: #d97706;
+  --warning-fg: #fbbf24;
+  --danger: #ef4444;
+  --danger-strong: #dc2626;
+  --danger-fg: #f87171;
+  --shadow: rgba(0, 0, 0, 0.6);
+}

@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- ============================================================
 
 CREATE TYPE agent_provider AS ENUM ('claude', 'openclaw', 'opencode', 'atomcode', 'mimocode', 'copilot', 'hermes', 'gemini', 'pi', 'cursor', 'kimi', 'kiro');
-CREATE TYPE agent_status AS ENUM ('online', 'offline', 'busy', 'paused');
+CREATE TYPE agent_status AS ENUM ('online', 'offline', 'busy', 'paused', 'pending');
 CREATE TYPE project_status AS ENUM ('planned', 'active', 'paused', 'completed', 'archived');
 CREATE TYPE node_type AS ENUM ('standard', 'review', 'manual');
 CREATE TYPE assignee_type AS ENUM ('any_agent', 'specific_agent', 'human', 'auto');
@@ -24,6 +24,7 @@ CREATE TYPE task_status AS ENUM ('active', 'completed', 'cancelled');
 CREATE TYPE task_node_status AS ENUM ('pending', 'in_progress', 'completed', 'rejected', 'manual_intervention');
 CREATE TYPE transition_action AS ENUM ('approve', 'reject', 'manual', 'reclaim', 'timeout', 'interrupt_ack');
 CREATE TYPE runtime_status AS ENUM ('online', 'offline', 'error');
+CREATE TYPE daemon_status AS ENUM ('online', 'offline');
 CREATE TYPE memory_type AS ENUM ('architecture', 'command', 'convention', 'decision', 'insight', 'environment');
 CREATE TYPE token_type AS ENUM ('api', 'session', 'task', 'password_reset');
 CREATE TYPE mcp_auth_type AS ENUM ('none', 'api_key', 'oauth');
@@ -86,11 +87,15 @@ CREATE TABLE agents (
     extra_args      TEXT[] DEFAULT '{}',
     git_name        VARCHAR(200) DEFAULT '',
     git_email       VARCHAR(300) DEFAULT '',
+    daemon_id       UUID,
+    origin          VARCHAR(10) NOT NULL DEFAULT 'daemon',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_agents_workspace ON agents(workspace_id);
 CREATE INDEX idx_agents_status ON agents(status);
+-- Agent identity is (daemon, name); agents with no daemon are not constrained
+CREATE UNIQUE INDEX idx_agents_daemon_name ON agents(daemon_id, name) WHERE daemon_id IS NOT NULL;
 
 -- 3.4 workflow_templates — workflow templates
 CREATE TABLE workflow_templates (
@@ -120,14 +125,15 @@ CREATE TABLE workflow_template_nodes (
     sort_order       INTEGER NOT NULL,
     node_type        node_type NOT NULL DEFAULT 'standard',
     assignee_type    assignee_type NOT NULL DEFAULT 'any_agent',
-    assignee_id      UUID REFERENCES agents(id) ON DELETE SET NULL,
+    assignee_id      UUID,
     timeout_minutes  INTEGER NOT NULL DEFAULT 60,
     max_reject_cycles INTEGER NOT NULL DEFAULT 5,
     readonly_dirs    JSONB DEFAULT '[]',
     full_control_dirs JSONB DEFAULT '[]',
     artifact         JSONB DEFAULT '[]',
     depends_on       UUID[] DEFAULT '{}',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT workflow_template_nodes_template_sort_order_key UNIQUE (template_id, sort_order)
 );
 CREATE INDEX idx_wf_template_nodes_template ON workflow_template_nodes(template_id);
 
@@ -141,7 +147,6 @@ CREATE TABLE projects (
     status                project_status NOT NULL DEFAULT 'planned',
     repo_url              VARCHAR(500) DEFAULT '',
     context               TEXT DEFAULT '',
-    default_workflow_id   UUID REFERENCES workflow_templates(id),
     max_review_cycles     INTEGER NOT NULL DEFAULT 5,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -199,14 +204,14 @@ CREATE TABLE task_nodes (
     node_type             node_type NOT NULL DEFAULT 'standard',
     status                task_node_status NOT NULL DEFAULT 'pending',
     assignee_type         assignee_type NOT NULL DEFAULT 'any_agent',
-    assignee_id           UUID REFERENCES agents(id) ON DELETE SET NULL,
-    reserved_for_agent_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+    assignee_id           UUID,
+    reserved_for_agent_id UUID,
     reject_count          INTEGER NOT NULL DEFAULT 0,
     max_reject_cycles     INTEGER NOT NULL DEFAULT 5,
     timeout_minutes       INTEGER NOT NULL DEFAULT 60,
     version               INTEGER NOT NULL DEFAULT 1,
     completed_at          TIMESTAMPTZ,
-    completed_by          UUID REFERENCES agents(id) ON DELETE SET NULL,
+    completed_by          UUID,
     summary               TEXT NOT NULL DEFAULT '',
     previous_summary      TEXT NOT NULL DEFAULT '',
     reservation_expires_at TIMESTAMPTZ,
@@ -231,7 +236,7 @@ CREATE TABLE node_transitions (
     from_status    task_node_status NOT NULL,
     to_status      task_node_status NOT NULL,
     action         transition_action NOT NULL,
-    target_node_id UUID REFERENCES task_nodes(id) ON DELETE CASCADE,
+    target_node_id UUID,
     comment        TEXT DEFAULT '',
     operator_id    UUID,
     operator_type  VARCHAR(10) NOT NULL,
@@ -244,8 +249,8 @@ CREATE INDEX idx_node_transitions_time ON node_transitions(created_at);
 CREATE TABLE comments (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    node_id     UUID REFERENCES task_nodes(id) ON DELETE CASCADE,
-    source_node_id UUID REFERENCES task_nodes(id) ON DELETE SET NULL,
+    node_id     UUID,
+    source_node_id UUID,
     parent_id   UUID REFERENCES comments(id) ON DELETE CASCADE,
     author_type VARCHAR(10) NOT NULL,
     author_id   UUID NOT NULL,
@@ -261,25 +266,6 @@ CREATE INDEX idx_comments_task ON comments(task_id);
 CREATE INDEX idx_comments_node ON comments(node_id);
 CREATE INDEX idx_comments_source_node ON comments(source_node_id);
 CREATE INDEX idx_comments_parent ON comments(parent_id);
-
--- 3.12 runtimes
-CREATE TABLE runtimes (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_id           UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    daemon_id          VARCHAR(200) NOT NULL,
-    provider           agent_provider NOT NULL,
-    version            VARCHAR(50) DEFAULT '',
-    status             runtime_status NOT NULL DEFAULT 'offline',
-    session_token_hash VARCHAR(64) DEFAULT '',
-    session_expires_at TIMESTAMPTZ,
-    public_key         TEXT DEFAULT '',
-    last_heartbeat     TIMESTAMPTZ,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_runtimes_agent ON runtimes(agent_id);
-CREATE INDEX idx_runtimes_daemon ON runtimes(daemon_id);
-CREATE INDEX idx_runtimes_heartbeat ON runtimes(last_heartbeat);
 
 -- 3.13 task_logs — persisted execution logs
 CREATE TABLE task_logs (
@@ -310,7 +296,7 @@ CREATE INDEX idx_log_chunks_node ON task_log_chunks(task_node_id);
 CREATE TABLE memories (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id   UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    source_task_id INTEGER,
     type           memory_type NOT NULL,
     title          VARCHAR(300) NOT NULL,
     content        TEXT NOT NULL,
@@ -336,7 +322,6 @@ CREATE TABLE auth_tokens (
     token_type   token_type NOT NULL,
     owner_type   VARCHAR(10) NOT NULL,
     owner_id     UUID NOT NULL,
-    runtime_id   UUID REFERENCES runtimes(id) ON DELETE CASCADE,
     expires_at   TIMESTAMPTZ NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -351,7 +336,7 @@ CREATE TABLE git_credentials (
     repo_url      VARCHAR(500) NOT NULL,
     username      VARCHAR(200) NOT NULL DEFAULT 'git',
     encrypted_pat TEXT NOT NULL,
-    created_by    UUID REFERENCES members(id) ON DELETE SET NULL,
+    created_by    UUID,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(project_id, repo_url)
@@ -367,7 +352,7 @@ CREATE TABLE workflow_trigger_runs (
     trigger_type         workflow_trigger_type NOT NULL,
     external_key         TEXT NOT NULL DEFAULT '',
     status               VARCHAR(20) NOT NULL,
-    task_id              INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    task_id              INTEGER,
     payload              JSONB NOT NULL DEFAULT '{}',
     error                TEXT NOT NULL DEFAULT '',
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -376,10 +361,10 @@ CREATE TABLE workflow_trigger_runs (
 CREATE INDEX idx_workflow_trigger_runs_workspace ON workflow_trigger_runs(workspace_id, created_at DESC);
 CREATE INDEX idx_workflow_trigger_runs_template ON workflow_trigger_runs(workflow_template_id, created_at DESC);
 
--- 3.17 sse_event_buffer — SSE event buffer
+-- 3.17 sse_event_buffer — SSE event buffer (keyed by daemon or agent subscriber id)
 CREATE TABLE sse_event_buffer (
     id         BIGSERIAL PRIMARY KEY,
-    runtime_id UUID NOT NULL REFERENCES runtimes(id) ON DELETE CASCADE,
+    runtime_id UUID NOT NULL,
     event_type VARCHAR(50) NOT NULL,
     event_data JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -487,7 +472,7 @@ CREATE TABLE agent_permissions (
     permission    VARCHAR(50) NOT NULL,
     resource_type VARCHAR(50) NOT NULL DEFAULT '*',
     resource_id   UUID DEFAULT NULL,
-    granted_by    UUID REFERENCES members(id) ON DELETE SET NULL,
+    granted_by    UUID,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(agent_id, permission, resource_type, resource_id)
 );
@@ -520,7 +505,7 @@ CREATE TABLE invitations (
     email        VARCHAR(300) NOT NULL,
     role         VARCHAR(20) NOT NULL DEFAULT 'member',
     token_hash   VARCHAR(64) NOT NULL UNIQUE,
-    invited_by   UUID REFERENCES members(id) ON DELETE SET NULL,
+    invited_by   UUID,
     expires_at   TIMESTAMPTZ NOT NULL,
     accepted_at  TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -531,8 +516,8 @@ CREATE INDEX idx_invitations_email ON invitations(email);
 -- 3.28 execution_sessions — execution sessions
 CREATE TABLE execution_sessions (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    runtime_id       UUID REFERENCES runtimes(id) ON DELETE SET NULL,
-    agent_id         UUID REFERENCES agents(id) ON DELETE SET NULL,
+    daemon_id        UUID,
+    agent_id         UUID,
     task_node_id     UUID NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
     attempt          INTEGER NOT NULL DEFAULT 1,
     status           VARCHAR(20) NOT NULL DEFAULT 'running',
@@ -546,8 +531,26 @@ CREATE TABLE execution_sessions (
     interrupted_at   TIMESTAMPTZ,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_execution_sessions_runtime ON execution_sessions(runtime_id);
+CREATE INDEX idx_execution_sessions_runtime ON execution_sessions(daemon_id);
 CREATE INDEX idx_execution_sessions_agent ON execution_sessions(agent_id);
 CREATE INDEX idx_execution_sessions_node ON execution_sessions(task_node_id);
 CREATE INDEX idx_execution_sessions_status ON execution_sessions(status);
 CREATE INDEX idx_execution_sessions_claude_session ON execution_sessions(claude_session_id) WHERE claude_session_id != '';
+
+-- 3.29 daemons — agentd instances running on work machines
+-- One daemon per machine; agent instances are reported by the daemon at
+-- registration (agents.daemon_id) and authenticated on its behalf via X-Agent-ID.
+CREATE TABLE daemons (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id   UUID NOT NULL,
+    name           TEXT NOT NULL,
+    device_name    TEXT NOT NULL DEFAULT '',
+    version        TEXT NOT NULL DEFAULT '',
+    status         daemon_status NOT NULL DEFAULT 'offline',
+    public_key     TEXT NOT NULL DEFAULT '',
+    providers      JSONB NOT NULL DEFAULT '[]',
+    last_heartbeat TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_daemons_workspace ON daemons(workspace_id);

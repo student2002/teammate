@@ -132,20 +132,18 @@ type UpdateWorkspaceReq struct {
 
 // CreateProjectReq is the request body for creating a project.
 type CreateProjectReq struct {
-	Name              string  `json:"name"`               // Project name
-	Description       string  `json:"description"`        // Description
-	Visibility        string  `json:"visibility"`         // Visibility
-	RepoURL           string  `json:"repo_url"`           // Repository URL
-	DefaultWorkflowID *string `json:"default_workflow_id"` // Default workflow template ID
+	Name        string `json:"name"`        // Project name
+	Description string `json:"description"` // Description
+	Visibility  string `json:"visibility"`  // Visibility
+	RepoURL     string `json:"repo_url"`    // Repository URL
 }
 
 // UpdateProjectReq is the request body for updating a project.
 type UpdateProjectReq struct {
-	Name              string  `json:"name"`               // Name
-	Description       string  `json:"description"`        // Description
-	Status            string  `json:"status"`             // Status
-	DefaultWorkflowID *string `json:"default_workflow_id"` // Default workflow template ID
-	Context           string  `json:"context"`            // Project context
+	Name        string `json:"name"`        // Name
+	Description string `json:"description"` // Description
+	Status      string `json:"status"`      // Status
+	Context     string `json:"context"`     // Project context
 }
 
 // CreateAgentReq is the request body for creating an Agent.

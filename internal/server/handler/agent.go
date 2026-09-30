@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -19,6 +20,7 @@ import (
 	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/server/response"
 	"github.com/teammate/server/internal/service"
+	"github.com/teammate/server/internal/types"
 )
 
 // AgentHandler handles HTTP requests related to AI agents, including creating, querying, updating, and deleting agents, managing agent skill and MCP server bindings, and agent permission control.
@@ -48,6 +50,7 @@ func (h *AgentHandler) Routes() chi.Router {
 		r.Post("/mcp-servers", h.AddMcpServer)
 		r.Delete("/mcp-servers/{serverId}", h.RemoveMcpServer)
 		r.Get("/in-progress-nodes", h.GetInProgressNodes)
+		r.Get("/executions", h.ListExecutions)
 
 		// daemon-only MCP execution endpoint: returns decrypted env_vars, only accessible by the Agent itself
 		r.Get("/execution/mcp-servers", h.GetExecutionMcpServers)
@@ -816,4 +819,34 @@ func (h *AgentHandler) GetInProgressNodes(w http.ResponseWriter, r *http.Request
 	}
 
 	response.JSON(w, r, nodes)
+}
+
+// ListExecutions handles GET /workspaces/{workspaceId}/agents/{id}/executions?limit=10,
+// returning the agent's recent execution sessions with task context.
+//
+// Response:
+//   - 200: [{task_id, task_title, node_name, status, branch, started_at, completed_at}]
+//   - 400: invalid agent id
+func (h *AgentHandler) ListExecutions(w http.ResponseWriter, r *http.Request) {
+	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	limit := int32(10)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = int32(n)
+		}
+	}
+
+	executions, err := service.NewAgentService(h.Svc).ListExecutions(r.Context(), agentID, limit)
+	if err != nil {
+		response.InternalServerError(w, fmt.Errorf("list agent executions: %w", err))
+		return
+	}
+	if executions == nil {
+		executions = []types.AgentExecution{}
+	}
+	response.JSON(w, r, executions)
 }

@@ -21,9 +21,9 @@ import {
   X,
   BarChart3,
   Clock,
-  Star,
   GripVertical,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import { useTranslations } from "next-intl";
 import api from "@/lib/api";
@@ -150,20 +150,20 @@ function TemplateEditorView({
   };
 
   return (
-    <div className="page-enter flex flex-col min-h-[calc(100vh-3.5rem)] relative bg-slate-950">
-      <div className="p-6 border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-md z-10 flex justify-between items-center shrink-0 sticky top-0">
+    <div className="page-enter flex flex-col min-h-[calc(100vh-3.5rem)] relative bg-bg">
+      <div className="p-6 border-b border-line-strong/50 bg-surface/50 backdrop-blur-md z-10 flex justify-between items-center shrink-0 sticky top-0">
         <div className="flex items-center">
           <button
             onClick={onCancel}
-            className="p-2 mr-4 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors-fast"
+            className="p-2 mr-4 text-fg-subtle hover:text-fg hover:bg-surface-2 rounded-lg transition-colors-fast"
           >
             <ArrowRight className="w-5 h-5 rotate-180" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white mb-1">
+            <h1 className="text-2xl font-bold text-fg mb-1">
               {t("title")}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-fg-subtle">
               {t("subtitle")}
             </p>
           </div>
@@ -173,8 +173,8 @@ function TemplateEditorView({
           disabled={saving}
           className={`flex items-center px-6 py-2.5 rounded-lg font-medium shadow-lg transition-colors-normal shrink-0 btn-press ${
             saving
-              ? "bg-blue-500/50 text-white cursor-wait"
-              : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20"
+              ? "bg-primary/50 text-fg cursor-wait"
+              : "bg-primary-strong hover:bg-primary text-fg shadow-primary/20"
           }`}
         >
           {saving ? (
@@ -189,42 +189,42 @@ function TemplateEditorView({
       <div className="px-8 py-12 flex justify-center pb-24">
         <div className="w-full max-w-4xl">
           {/* 基础信息 */}
-          <div className="mb-10 bg-slate-800/40 border border-slate-700/60 rounded-xl p-6">
+          <div className="mb-10 bg-surface-2/40 border border-line-strong/60 rounded-xl p-6">
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-400 mb-2">
+              <label className="block text-sm font-medium text-fg-subtle mb-2">
                 {t("nameLabel")}
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => updateField("name", e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white font-semibold text-lg focus:outline-none focus:border-blue-500"
+                className="w-full bg-surface border border-line-strong rounded-lg px-4 py-2.5 text-fg font-semibold text-lg focus:outline-none focus:border-primary"
               />
             </div>
             <div className="grid grid-cols-2 gap-5 mb-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
+                <label className="block text-sm font-medium text-fg-subtle mb-2">
                   {t("descLabel")}
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => updateField("description", e.target.value)}
                   rows={2}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-surface border border-line-strong rounded-lg px-4 py-2.5 text-fg-muted text-sm focus:outline-none focus:border-primary resize-none"
                 />
               </div>
             </div>
           </div>
 
-          <div className="mb-10 bg-slate-800/40 border border-slate-700/60 rounded-xl p-6">
+          <div className="mb-10 bg-surface-2/40 border border-line-strong/60 rounded-xl p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-white">{t("triggerTitle")}</h3>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <h3 className="text-lg font-bold text-fg">{t("triggerTitle")}</h3>
+              <label className="flex items-center gap-2 text-sm text-fg-muted">
                 <input
                   type="checkbox"
                   checked={formData.triggerEnabled}
                   onChange={(e) => updateField("triggerEnabled", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-line-strong bg-bg text-primary-strong focus:ring-primary"
                 />
                 {t("triggerEnable")}
               </label>
@@ -246,8 +246,8 @@ function TemplateEditorView({
                     }
                     className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-medium transition-colors ${
                       active
-                        ? "border-blue-500 bg-blue-500/10 text-blue-200"
-                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-500"
+                        ? "border-primary bg-primary/10 text-primary-fg"
+                        : "border-line-strong bg-bg text-fg-subtle hover:border-line-strong"
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -262,7 +262,7 @@ function TemplateEditorView({
                 <select
                   value={formData.triggerConfig.projectId || ""}
                   onChange={(e) => updateTriggerConfig("projectId", e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary"
                 >
                   <option value="">{t("selectProject")}</option>
                   {projects.map((project) => (
@@ -278,7 +278,7 @@ function TemplateEditorView({
                   onChange={(e) =>
                     updateTriggerConfig("intervalMinutes", parseInt(e.target.value) || 60)
                   }
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder={t("intervalPlaceholder")}
                 />
                 <input
@@ -290,20 +290,20 @@ function TemplateEditorView({
                       e.target.value ? new Date(e.target.value).toISOString() : ""
                     )
                   }
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                 />
                 <input
                   type="text"
                   value={formData.triggerConfig.title || ""}
                   onChange={(e) => updateTriggerConfig("title", e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder={t("taskTitlePlaceholder")}
                 />
                 <input
                   type="text"
                   value={formData.triggerConfig.description || ""}
                   onChange={(e) => updateTriggerConfig("description", e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder={t("taskDescPlaceholder")}
                 />
               </div>
@@ -314,7 +314,7 @@ function TemplateEditorView({
                 <select
                   value={formData.triggerConfig.projectId || ""}
                   onChange={(e) => updateTriggerConfig("projectId", e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary"
                 >
                   <option value="">{t("selectProject")}</option>
                   {projects.map((project) => (
@@ -327,33 +327,33 @@ function TemplateEditorView({
                   type="text"
                   value={formData.triggerConfig.repoOwner || ""}
                   onChange={(e) => updateTriggerConfig("repoOwner", e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder={t("repoOwnerPlaceholder")}
                 />
                 <input
                   type="text"
                   value={formData.triggerConfig.repoName || ""}
                   onChange={(e) => updateTriggerConfig("repoName", e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder={t("repoNamePlaceholder")}
                 />
                 <input
                   type="password"
                   value={formData.triggerConfig.secret || ""}
                   onChange={(e) => updateTriggerConfig("secret", e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                  className="bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-primary"
                   placeholder="Webhook Secret"
                 />
               </div>
             )}
           </div>
 
-          <h3 className="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2">
+          <h3 className="text-lg font-bold text-fg mb-6 border-b border-line pb-2">
             {t("nodeOrchestration")}
           </h3>
 
           <div className="relative pl-2">
-            <div className="absolute left-[35px] top-6 bottom-0 w-0.5 bg-slate-800 z-0" />
+            <div className="absolute left-[35px] top-6 bottom-0 w-0.5 bg-surface-2 z-0" />
 
             {formData.nodes.map((node, index) => {
               const isDragging = dragIndex === index;
@@ -376,33 +376,33 @@ function TemplateEditorView({
                     <div
                       className={`w-14 h-14 rounded-full border-2 flex items-center justify-center font-bold shadow-xl transition-colors-fast ${
                         isDragOver
-                            ? "bg-blue-900/30 border-blue-400 text-blue-400"
-                            : "bg-slate-900 border-slate-700 text-slate-400 group-hover:border-blue-500/50"
+                            ? "bg-primary-strong/30 border-primary-fg text-primary-fg"
+                            : "bg-surface border-line-strong text-fg-subtle group-hover:border-primary/50"
                       }`}
                     >
                       {index + 1}
                     </div>
                     {index < formData.nodes.length - 1 && (
-                      <ArrowDown className="w-5 h-5 text-slate-600 my-3" />
+                      <ArrowDown className="w-5 h-5 text-fg-faint my-3" />
                     )}
                   </div>
 
                   <div
-                    className={`flex-1 rounded-xl p-6 mb-6 transition-all bg-slate-800/40 border hover:shadow-lg ${
+                    className={`flex-1 rounded-xl p-6 mb-6 transition-all bg-surface-2/40 border hover:shadow-lg ${
                       isDragOver
-                          ? "border-blue-500/50 shadow-blue-500/10"
-                          : "border-slate-700/60 hover:border-slate-500"
-                    } ${isDragging ? "border-dashed border-slate-500" : ""}`}
+                          ? "border-primary/50 shadow-primary/10"
+                          : "border-line-strong/60 hover:border-line-strong"
+                    } ${isDragging ? "border-dashed border-line-strong" : ""}`}
                   >
                     {false ? (
                       <div>
                         <div className="flex items-center mb-4">
-                          <h3 className="text-xl font-bold text-indigo-100 flex items-center">
-                            <User className="w-5 h-5 mr-2 text-indigo-400" />{" "}
+                          <h3 className="text-xl font-bold text-accent-fg flex items-center">
+                            <User className="w-5 h-5 mr-2 text-accent-fg" />{" "}
                             {t("firstNodeLocked")}
                           </h3>
                         </div>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-fg-subtle">
                           {t("firstNodeHint")}
                         </p>
                       </div>
@@ -411,7 +411,7 @@ function TemplateEditorView({
                         <div className="flex justify-between items-start mb-5">
                           <div className="flex-1 flex items-start gap-2">
                             <div
-                              className="mt-1 shrink-0 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400"
+                              className="mt-1 shrink-0 cursor-grab active:cursor-grabbing text-fg-faint hover:text-fg-subtle"
                               title={t("dragToSort")}
                             >
                               <GripVertical className="w-5 h-5" />
@@ -423,7 +423,7 @@ function TemplateEditorView({
                                 onChange={(e) =>
                                   updateNode(node.id, "name", e.target.value)
                                 }
-                                className="bg-transparent text-white font-semibold text-lg focus:outline-none border-b border-dashed border-slate-600 focus:border-blue-500 px-1 w-2/3"
+                                className="bg-transparent text-fg font-semibold text-lg focus:outline-none border-b border-dashed border-line-strong focus:border-primary px-1 w-2/3"
                                 placeholder={t("stepNamePlaceholder")}
                               />
                               <div className="mt-2 flex items-center gap-3">
@@ -432,16 +432,16 @@ function TemplateEditorView({
                                     node.nodeType === "review"
                                       ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
                                       : node.nodeType === "manual"
-                                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
-                                        : "bg-slate-500/10 text-slate-400 border border-slate-500/30"
+                                        ? "bg-warning/10 text-warning-fg border border-warning/30"
+                                        : "bg-fg-faint/10 text-fg-subtle border border-line-strong/30"
                                   }`}
                                 >
                                   {nodeTypeLabels[node.nodeType] || t("nodeTypeStandard")}
                                 </span>
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-fg-faint">
                                   {t("timeoutLabel", { minutes: node.timeout })}
                                 </span>
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-fg-faint">
                                   {t("maxRejectLabel", { count: node.maxRejectCycles ?? 5 })}
                                 </span>
                               </div>
@@ -449,7 +449,7 @@ function TemplateEditorView({
                           </div>
                           <button
                             onClick={() => removeNode(node.id)}
-                            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700 rounded transition-colors-fast"
+                            className="p-1.5 text-fg-faint hover:text-danger-fg hover:bg-surface-3 rounded transition-colors-fast"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -457,7 +457,7 @@ function TemplateEditorView({
 
                         <div className="grid grid-cols-2 gap-5">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5">
                               {t("nodeTypeLabel")}
                             </label>
                             <select
@@ -469,7 +469,7 @@ function TemplateEditorView({
                                   e.target.value as WorkflowTemplateNode["nodeType"]
                                 )
                               }
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary"
                             >
                               <option value="standard">
                                 {"\u2699"} {t("optionStandard")}
@@ -484,7 +484,7 @@ function TemplateEditorView({
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5">
                               {t("assigneeLabel")}
                             </label>
                             <select
@@ -512,7 +512,7 @@ function TemplateEditorView({
                                   )
                                 );
                               }}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary"
                             >
                               <option value="any_agent">
                                 {"\uD83E\uDD16"} {t("optionAnyAgent")}
@@ -534,7 +534,7 @@ function TemplateEditorView({
                                     e.target.value
                                   )
                                 }
-                                className="w-full mt-2 bg-slate-900 border border-blue-500/50 rounded text-sm text-blue-300 p-2 focus:outline-none"
+                                className="w-full mt-2 bg-surface border border-primary/50 rounded text-sm text-primary-fg p-2 focus:outline-none"
                               >
                                 <option value="" disabled>
                                   {t("selectAgentPlaceholder")}
@@ -549,7 +549,7 @@ function TemplateEditorView({
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5">
                               {t("timeoutMinutesLabel")}
                             </label>
                             <input
@@ -564,12 +564,12 @@ function TemplateEditorView({
                                   parseInt(e.target.value) || 0
                                 )
                               }
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-primary"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5">
                               {t("maxRejectCyclesLabel")}
                             </label>
                             <input
@@ -584,15 +584,15 @@ function TemplateEditorView({
                                   parseInt(e.target.value) || 5
                                 )
                               }
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-primary"
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">
+                            <p className="text-[10px] text-fg-faint mt-1">
                               {t("maxRejectHint")}
                             </p>
                           </div>
 
                           <div className="col-span-2">
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5">
                               {t("stepDescLabel")}
                             </label>
                             <textarea
@@ -605,14 +605,14 @@ function TemplateEditorView({
                                 )
                               }
                               rows={2}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500 resize-none"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2 text-sm text-fg-muted focus:outline-none focus:border-primary resize-none"
                               placeholder={t("stepDescPlaceholder")}
                             />
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
-                              <FolderGit2 className="w-3.5 h-3.5 mr-1 text-amber-400" />{" "}
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5 flex items-center">
+                              <FolderGit2 className="w-3.5 h-3.5 mr-1 text-warning-fg" />{" "}
                               {t("readonlyDirsLabel")}
                             </label>
                             <input
@@ -625,17 +625,17 @@ function TemplateEditorView({
                                   e.target.value
                                 )
                               }
-                              className="w-full bg-slate-950 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-amber-500"
+                              className="w-full bg-bg border border-warning/30 rounded-lg px-3 py-2 text-sm text-fg font-mono focus:outline-none focus:border-warning"
                               placeholder={t("readonlyDirsPlaceholder")}
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">
+                            <p className="text-[10px] text-fg-faint mt-1">
                               {t("readonlyDirsHint")}
                             </p>
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
-                              <FileOutput className="w-3.5 h-3.5 mr-1 text-emerald-500" />{" "}
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5 flex items-center">
+                              <FileOutput className="w-3.5 h-3.5 mr-1 text-success" />{" "}
                               {t("fullControlDirsLabel")}
                             </label>
                             <input
@@ -648,17 +648,17 @@ function TemplateEditorView({
                                   e.target.value
                                 )
                               }
-                              className="w-full bg-slate-950 border border-emerald-500/30 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-emerald-500"
+                              className="w-full bg-bg border border-success/30 rounded-lg px-3 py-2 text-sm text-fg font-mono focus:outline-none focus:border-success"
                               placeholder={t("fullControlDirsPlaceholder")}
                             />
-                            <p className="text-[10px] text-slate-500 mt-1">
+                            <p className="text-[10px] text-fg-faint mt-1">
                               {t("fullControlDirsHint")}
                             </p>
                           </div>
 
                           <div className="col-span-2">
-                            <label className="block text-xs font-semibold text-slate-500 mb-1.5 flex items-center">
-                              <FileOutput className="w-3.5 h-3.5 mr-1 text-indigo-500" />{" "}
+                            <label className="block text-xs font-semibold text-fg-faint mb-1.5 flex items-center">
+                              <FileOutput className="w-3.5 h-3.5 mr-1 text-accent" />{" "}
                               {t("artifactLabel")}
                             </label>
                             <input
@@ -671,7 +671,7 @@ function TemplateEditorView({
                                   e.target.value
                                 )
                               }
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                              className="w-full bg-bg border border-line-strong rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-success"
                             />
                           </div>
                         </div>
@@ -693,17 +693,17 @@ function TemplateEditorView({
             >
               <div className="flex flex-col items-center mr-6 mt-4">
                 {formData.nodes.length > 1 && (
-                  <ArrowDown className="w-5 h-5 text-slate-600 my-3" />
+                  <ArrowDown className="w-5 h-5 text-fg-faint my-3" />
                 )}
                 <button
                   onClick={addNode}
-                  className="w-14 h-14 rounded-full border-2 border-dashed border-slate-600 hover:border-blue-400 bg-slate-900/50 hover:bg-blue-500/10 flex items-center justify-center text-slate-500 hover:text-blue-400 transition-all duration-200 group-hover:scale-105"
+                  className="w-14 h-14 rounded-full border-2 border-dashed border-line-strong hover:border-primary-fg bg-surface/50 hover:bg-primary/10 flex items-center justify-center text-fg-faint hover:text-primary-fg transition-all duration-200 group-hover:scale-105"
                 >
                   <Plus className="w-6 h-6" />
                 </button>
               </div>
               <div className="flex items-center h-14 pt-4">
-                <span className="text-sm text-slate-500 group-hover:text-blue-400 transition-colors-fast">
+                <span className="text-sm text-fg-faint group-hover:text-primary-fg transition-colors-fast">
                   {t("addStep")}
                 </span>
               </div>
@@ -792,23 +792,23 @@ function TemplateRunView({
   ).length;
 
   return (
-    <div className="page-enter flex flex-col h-full relative bg-slate-950">
-      <div className="p-6 border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-md z-10 flex justify-between items-center shrink-0">
+    <div className="page-enter flex flex-col h-full relative bg-bg">
+      <div className="p-6 border-b border-line-strong/50 bg-surface/50 backdrop-blur-md z-10 flex justify-between items-center shrink-0">
         <div className="flex items-center">
           <button
             onClick={onCancel}
-            className="p-2 mr-4 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors-fast"
+            className="p-2 mr-4 text-fg-subtle hover:text-fg hover:bg-surface-2 rounded-lg transition-colors-fast"
           >
             <ArrowRight className="w-5 h-5 rotate-180" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white mb-1 flex items-center">
+            <h1 className="text-2xl font-bold text-fg mb-1 flex items-center">
               {t("title")}{" "}
-              <span className="ml-3 text-sm text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full font-normal">
+              <span className="ml-3 text-sm text-accent-fg bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-full font-normal">
                 {t("basedOn", { name: template.name })}
               </span>
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-fg-subtle">
               {t("subtitle")}
             </p>
           </div>
@@ -818,8 +818,8 @@ function TemplateRunView({
           disabled={isStarting || !title || !desc || !selectedProject}
           className={`flex items-center px-8 py-2.5 rounded-lg font-bold transition-colors-normal shadow-lg btn-press ${
             isStarting
-              ? "bg-indigo-500/50 text-white cursor-wait"
-              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20"
+              ? "bg-accent/50 text-fg cursor-wait"
+              : "bg-accent-strong hover:bg-accent text-fg shadow-accent/20"
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isStarting ? (
@@ -835,9 +835,9 @@ function TemplateRunView({
         <div className="w-full max-w-5xl grid grid-cols-12 gap-8">
           {/* 左侧：表单 */}
           <div className="col-span-12 lg:col-span-7 space-y-6">
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white flex items-center mb-6">
-                <div className="w-8 h-8 rounded-full bg-indigo-900/50 border border-indigo-500 text-indigo-400 flex items-center justify-center mr-3 text-sm">
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-6">
+              <h3 className="text-lg font-bold text-fg flex items-center mb-6">
+                <div className="w-8 h-8 rounded-full bg-accent-strong/50 border border-accent text-accent-fg flex items-center justify-center mr-3 text-sm">
                   1
                 </div>
                 {t("stepOneHeader", { title: t("stepOneTitle") })}
@@ -845,27 +845,27 @@ function TemplateRunView({
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    {t("titleLabel")} <span className="text-red-400">*</span>
+                  <label className="block text-sm font-semibold text-fg-muted mb-2">
+                    {t("titleLabel")} <span className="text-danger-fg">*</span>
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg text-lg focus:outline-none focus:border-accent"
                     placeholder={t("titlePlaceholder")}
                   />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      {t("projectLabel")} <span className="text-red-400">*</span>
+                    <label className="block text-sm font-semibold text-fg-muted mb-2">
+                      {t("projectLabel")} <span className="text-danger-fg">*</span>
                     </label>
                     <select
                       value={selectedProject}
                       onChange={(e) => setSelectedProject(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg focus:outline-none focus:border-accent"
                     >
                       {!projects?.length && (
                         <option value="">
@@ -879,19 +879,19 @@ function TemplateRunView({
                       ))}
                     </select>
                     {!projects?.length && (
-                      <p className="text-[10px] text-amber-400 mt-1">
+                      <p className="text-[10px] text-warning-fg mt-1">
                         {t("goCreateProject")}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                    <label className="block text-sm font-semibold text-fg-muted mb-2">
                       {t("taskTypeLabel")}
                     </label>
                     <select
                       value={taskType}
                       onChange={(e) => setTaskType(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="story">
                         {"\uD83D\uDCD6"} {t("typeStory")}
@@ -903,13 +903,13 @@ function TemplateRunView({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                    <label className="block text-sm font-semibold text-fg-muted mb-2">
                       {t("priorityLabel")}
                     </label>
                     <select
                       value={priority}
                       onChange={(e) => setPriority(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="urgent">
                         {"\uD83D\uDD34"} {t("prioUrgent")}
@@ -927,58 +927,58 @@ function TemplateRunView({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                    <label className="block text-sm font-semibold text-fg-muted mb-2">
                       {t("dueDateLabel")}
                     </label>
                     <input
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg text-sm focus:outline-none focus:border-accent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                    <label className="block text-sm font-semibold text-fg-muted mb-2">
                       {t("labelsLabel")}
                     </label>
                     <input
                       type="text"
                       value={labels}
                       onChange={(e) => setLabels(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg text-sm focus:outline-none focus:border-accent"
                       placeholder={t("labelsPlaceholder")}
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
+                    <p className="text-[10px] text-fg-faint mt-1">
                       {t("labelsHint")}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
+                  <label className="block text-sm font-semibold text-fg-muted mb-2">
                     {t("constraintsLabel")}
                   </label>
                   <textarea
                     value={constraints}
                     onChange={(e) => setConstraints(e.target.value)}
                     rows={3}
-                    className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-200 text-sm focus:outline-none focus:border-amber-500 resize-none font-mono"
+                    className="w-full bg-surface border border-warning/30 rounded-lg px-4 py-3 text-warning-fg text-sm focus:outline-none focus:border-warning resize-none font-mono"
                     placeholder={t("constraintsPlaceholder")}
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-fg-faint mt-1">
                     {t("constraintsHint")}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    {t("descRequiredLabel")}<span className="text-red-400">*</span>
+                  <label className="block text-sm font-semibold text-fg-muted mb-2">
+                    {t("descRequiredLabel")}<span className="text-danger-fg">*</span>
                   </label>
                   <textarea
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
                     rows={10}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 text-sm focus:outline-none focus:border-indigo-500 resize-none font-mono"
+                    className="w-full bg-surface border border-line-strong rounded-lg px-4 py-3 text-fg-muted text-sm focus:outline-none focus:border-accent resize-none font-mono"
                     placeholder={t("descPlaceholder")}
                   />
                 </div>
@@ -988,23 +988,23 @@ function TemplateRunView({
 
           {/* 右侧：预览执行链路*/}
           <div className="col-span-12 lg:col-span-5">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 sticky top-0 space-y-4">
-              <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center">
+            <div className="bg-surface border border-line rounded-xl p-6 sticky top-0 space-y-4">
+              <h4 className="text-sm font-semibold text-fg-subtle uppercase tracking-wider flex items-center">
                 <Workflow className="w-4 h-4 mr-2" /> {t("executionChain")}
               </h4>
 
               <div className="flex gap-3 text-xs">
-                <span className="text-slate-400">{t("nodesCount", { count: totalNodes })}</span>
-                <span className="text-slate-600">·</span>
-                <span className="text-amber-400">{t("humanNodes", { count: humanNodes })}</span>
-                <span className="text-slate-600">·</span>
+                <span className="text-fg-subtle">{t("nodesCount", { count: totalNodes })}</span>
+                <span className="text-fg-faint">·</span>
+                <span className="text-warning-fg">{t("humanNodes", { count: humanNodes })}</span>
+                <span className="text-fg-faint">·</span>
                 <span className="text-purple-400">
                   {t("reviewNodes", { count: reviewNodes })}
                 </span>
               </div>
 
               <div className="space-y-0 relative pl-4">
-                <div className="absolute left-[27px] top-4 bottom-4 w-[2px] bg-slate-800 z-0" />
+                <div className="absolute left-[27px] top-4 bottom-4 w-[2px] bg-surface-2 z-0" />
 
                 {template.nodes.map((node, index) => {
                   const isFirst = index === 0;
@@ -1029,28 +1029,28 @@ function TemplateRunView({
                       <div
                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 shrink-0 mt-0.5 transition-colors-fast ${
                           isFirst
-                            ? "bg-indigo-500 border-indigo-400 node-glow"
-                            : "bg-slate-900 border-slate-700"
+                            ? "bg-accent border-accent-fg node-glow"
+                            : "bg-surface border-line-strong"
                         }`}
                       >
                         {isFirst && (
-                          <div className="w-2 h-2 bg-white rounded-full" />
+                          <div className="w-2 h-2 bg-fg rounded-full" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div
-                          className={`font-semibold mb-1 ${isFirst ? "text-indigo-400" : "text-slate-300"}`}
+                          className={`font-semibold mb-1 ${isFirst ? "text-accent-fg" : "text-fg-muted"}`}
                         >
                           {nodeTypeIcon} {node.name}
                         </div>
-                        <div className="text-xs text-slate-500 mb-1 flex items-center gap-2">
+                        <div className="text-xs text-fg-faint mb-1 flex items-center gap-2">
                           <span>{assigneeLabel}</span>
                           {node.nodeType === "review" && (
                             <span className="text-purple-400">{t("reviewNodeTag")}</span>
                           )}
                         </div>
                         {node.description && (
-                          <div className="text-[11px] text-slate-500 italic line-clamp-1">
+                          <div className="text-[11px] text-fg-faint italic line-clamp-1">
                             {node.description}
                           </div>
                         )}
@@ -1083,28 +1083,28 @@ function NodeGraphPreview({ template, onClose }: NodeGraphPreviewProps) {
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-lg font-bold text-white flex items-center">
-            <Workflow className="w-5 h-5 mr-2 text-blue-400" />{" "}
+        <div className="p-5 border-b border-line flex justify-between items-center sticky top-0 bg-surface z-10">
+          <h2 className="text-lg font-bold text-fg flex items-center">
+            <Workflow className="w-5 h-5 mr-2 text-primary-fg" />{" "}
             {template.name}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-8 flex flex-col items-center">
           <div className="flex flex-col items-center w-full max-w-md">
             {template.nodes.map((node, idx) => {
               const nodeColors: Record<string, string> = {
-                standard: "border-slate-500 bg-slate-800",
+                standard: "border-line-strong bg-surface-2",
                 review: "border-purple-500 bg-purple-900/20",
-                manual: "border-amber-500 bg-amber-900/20",
+                manual: "border-warning bg-warning-strong/20",
               };
               const c = nodeColors[node.nodeType] || nodeColors.standard;
               return (
@@ -1112,17 +1112,17 @@ function NodeGraphPreview({ template, onClose }: NodeGraphPreviewProps) {
                   <div
                     className={`w-full p-4 rounded-xl border-2 ${c} text-center animate-scale-in`}
                   >
-                    <div className="text-xs text-slate-500 mb-1">
+                    <div className="text-xs text-fg-faint mb-1">
                       {node.nodeType === "review"
                         ? `\uD83D\uDD0D ${t("nodeReview")}`
                         : node.nodeType === "manual"
                           ? `\uD83D\uDC68 ${t("nodeManual")}`
                           : `\u2699 ${t("nodeStandard")}`}
                     </div>
-                    <div className="text-white font-bold text-lg">
+                    <div className="text-fg font-bold text-lg">
                       {node.name}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="text-xs text-fg-subtle mt-1">
                       {node.assigneeType === "human"
                         ? `\uD83D\uDC68 ${t("assigneeHumanShort")}`
                         : node.assigneeType === "specific_agent"
@@ -1133,7 +1133,7 @@ function NodeGraphPreview({ template, onClose }: NodeGraphPreviewProps) {
                   </div>
                   {idx < template.nodes.length - 1 && (
                     <div className="flex flex-col items-center my-2">
-                      <ArrowDown className="w-5 h-5 text-slate-600" />
+                      <ArrowDown className="w-5 h-5 text-fg-faint" />
                     </div>
                   )}
                 </React.Fragment>
@@ -1165,62 +1165,62 @@ function TemplateStatsDialog({
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[680px] max-h-[80vh] overflow-y-auto shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[680px] max-h-[80vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-          <h2 className="text-lg font-bold text-white flex items-center">
-            <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />{" "}
+        <div className="p-5 border-b border-line flex justify-between items-center sticky top-0 bg-surface z-10">
+          <h2 className="text-lg font-bold text-fg flex items-center">
+            <BarChart3 className="w-5 h-5 mr-2 text-primary-fg" />{" "}
             {t("title")}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-              <Workflow className="w-6 h-6 text-blue-400" />
+            <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Workflow className="w-6 h-6 text-primary-fg" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-white">
+              <h3 className="text-xl font-bold text-fg">
                 {template.name}
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-fg-subtle">
                 {template.description?.substring(0, 60)}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">{t("refCount")}</div>
-              <div className="text-2xl font-bold text-white">-</div>
-              <div className="text-[10px] text-slate-500 mt-1">{t("tasksUnit")}</div>
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 text-center">
+              <div className="text-xs text-fg-faint mb-1">{t("refCount")}</div>
+              <div className="text-2xl font-bold text-fg">-</div>
+              <div className="text-[10px] text-fg-faint mt-1">{t("tasksUnit")}</div>
             </div>
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">{t("avgCompletion")}</div>
-              <div className="text-2xl font-bold text-white flex items-center justify-center">
-                <Clock className="w-5 h-5 mr-1 text-blue-400" /> -
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 text-center">
+              <div className="text-xs text-fg-faint mb-1">{t("avgCompletion")}</div>
+              <div className="text-2xl font-bold text-fg flex items-center justify-center">
+                <Clock className="w-5 h-5 mr-1 text-primary-fg" /> -
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">{t("endToEnd")}</div>
+              <div className="text-[10px] text-fg-faint mt-1">{t("endToEnd")}</div>
             </div>
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 text-center">
-              <div className="text-xs text-slate-500 mb-1">{t("nodeCountLabel")}</div>
-              <div className="text-2xl font-bold text-white">
+            <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 text-center">
+              <div className="text-xs text-fg-faint mb-1">{t("nodeCountLabel")}</div>
+              <div className="text-2xl font-bold text-fg">
                 {template.nodes.length}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">{t("stepsUnit")}</div>
+              <div className="text-[10px] text-fg-faint mt-1">{t("stepsUnit")}</div>
             </div>
           </div>
 
-          <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-6 text-center">
-            <BarChart3 className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">{t("noStats")}</p>
-            <p className="text-slate-500 text-xs mt-1">
+          <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-6 text-center">
+            <BarChart3 className="w-8 h-8 text-fg-faint mx-auto mb-3" />
+            <p className="text-fg-subtle text-sm">{t("noStats")}</p>
+            <p className="text-fg-faint text-xs mt-1">
               {t("noStatsHint")}
             </p>
           </div>
@@ -1239,8 +1239,6 @@ interface TemplateListViewProps {
   onEdit: (template: MappedTemplate) => void;
   onRun: (template: MappedTemplate) => void;
   onDelete: (templateId: string) => void;
-  defaultId: string;
-  onSetDefault: (id: string) => void;
 }
 
 function TemplateListView({
@@ -1249,8 +1247,6 @@ function TemplateListView({
   onEdit,
   onRun,
   onDelete,
-  defaultId,
-  onSetDefault,
 }: TemplateListViewProps) {
   const t = useTranslations("workflows.list");
   const builtIn = templates.filter((t) => t.isBuiltIn);
@@ -1263,27 +1259,27 @@ function TemplateListView({
 
   const TemplateCard = ({ template }: { template: MappedTemplate }) => (
     <div
-      className={`card-hover bg-slate-800/40 border border-slate-700/60 rounded-xl p-6 flex flex-col transition-all hover:bg-slate-800/50 shadow-sm backdrop-blur-sm hover:shadow-lg hover:shadow-blue-500/5 ${template.isBuiltIn ? "" : "hover:border-blue-500/30"}`}
+      className={`card-hover bg-surface-2/40 border border-line-strong/60 rounded-xl p-6 flex flex-col transition-all hover:bg-surface-2/50 shadow-sm backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 ${template.isBuiltIn ? "" : "hover:border-primary/30"}`}
     >
       <div className="flex justify-between items-start mb-3">
-        <h3 className="text-lg font-bold text-white flex items-center">
+        <h3 className="text-lg font-bold text-fg flex items-center">
           <Workflow
-            className={`w-5 h-5 mr-2 ${template.isBuiltIn ? "text-slate-400" : "text-blue-400"}`}
+            className={`w-5 h-5 mr-2 ${template.isBuiltIn ? "text-fg-subtle" : "text-primary-fg"}`}
           />
           {template.name}
         </h3>
         {template.isBuiltIn && (
-          <span className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded border border-slate-600">
+          <span className="px-2 py-0.5 bg-surface-3 text-fg-muted text-xs rounded border border-line-strong">
             {t("builtInTag")}
           </span>
         )}
       </div>
-      <p className="text-sm text-slate-400 mb-4 flex-1 line-clamp-2">
+      <p className="text-sm text-fg-subtle mb-4 flex-1 line-clamp-2">
         {template.description}
       </p>
 
       <div className="flex flex-wrap gap-2 mb-5">
-        <span className="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-400 rounded">
+        <span className="text-[10px] px-2 py-0.5 bg-surface-3/50 text-fg-subtle rounded">
           {t("nodeCount", { count: template.nodes.length })}
         </span>
         {template.nodes.filter((n) => n.nodeType === "review").length > 0 && (
@@ -1292,23 +1288,23 @@ function TemplateListView({
           </span>
         )}
         {template.nodes.filter((n) => n.nodeType === "manual").length > 0 && (
-          <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded border border-amber-500/20">
+          <span className="text-[10px] px-2 py-0.5 bg-warning/10 text-warning-fg rounded border border-warning/20">
             {t("manualCount", { count: template.nodes.filter((n) => n.nodeType === "manual").length })}
           </span>
         )}
       </div>
 
-      <div className="flex items-center text-xs border-t border-slate-700/50 pt-4 mt-auto">
+      <div className="flex items-center text-xs border-t border-line-strong/50 pt-4 mt-auto">
         <div className="flex items-center space-x-3 ml-auto">
           <button
             onClick={() => setPreviewTemplate(template)}
-            className="flex items-center text-slate-400 hover:text-slate-300 transition-colors-fast"
+            className="flex items-center text-fg-subtle hover:text-fg-muted transition-colors-fast"
           >
             <Eye className="w-3.5 h-3.5 mr-1" /> {t("preview")}
           </button>
           <button
             onClick={() => setStatsTemplate(template)}
-            className="flex items-center text-slate-400 hover:text-emerald-400 transition-colors-fast"
+            className="flex items-center text-fg-subtle hover:text-success-fg transition-colors-fast"
           >
             <BarChart3 className="w-3.5 h-3.5 mr-1" /> {t("stats")}
           </button>
@@ -1316,33 +1312,21 @@ function TemplateListView({
             <>
               <button
                 onClick={() => onEdit(template)}
-                className="flex items-center text-slate-400 hover:text-blue-400 font-medium transition-colors-fast"
+                className="flex items-center text-fg-subtle hover:text-primary-fg font-medium transition-colors-fast"
               >
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> {t("edit")}
               </button>
               <button
                 onClick={() => onDelete(template.id)}
-                className="flex items-center text-slate-400 hover:text-red-400 transition-colors-fast"
+                className="flex items-center text-fg-subtle hover:text-danger-fg transition-colors-fast"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" /> {t("delete")}
               </button>
             </>
           )}
-          {defaultId === template.id ? (
-            <span className="flex items-center px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg font-medium cursor-not-allowed">
-              <Star className="w-3.5 h-3.5 mr-1.5" /> {t("default")}
-            </span>
-          ) : (
-            <button
-              onClick={() => onSetDefault?.(template.id)}
-              className="flex items-center px-3 py-1.5 bg-amber-500/5 hover:bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-lg font-medium transition-colors-fast"
-            >
-              <Star className="w-3.5 h-3.5 mr-1.5" /> {t("setDefault")}
-            </button>
-          )}
           <button
             onClick={() => onRun(template)}
-            className="flex items-center px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg font-medium transition-colors-fast btn-press"
+            className="flex items-center px-3 py-1.5 bg-accent-strong/10 hover:bg-accent-strong/20 text-accent-fg border border-accent/30 rounded-lg font-medium transition-colors-fast btn-press"
           >
             <Rocket className="w-3.5 h-3.5 mr-1.5" /> {t("run")}
           </button>
@@ -1355,10 +1339,10 @@ function TemplateListView({
     <div className="page-enter h-full flex flex-col p-8 overflow-y-auto">
       <div className="flex justify-between items-center mb-10 shrink-0">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">
+          <h1 className="text-3xl font-bold text-fg mb-1">
             {t("page.title")}
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             {t("page.subtitle", {
               total: templates.length,
               builtIn: builtIn.length,
@@ -1367,7 +1351,7 @@ function TemplateListView({
         </div>
         <button
           onClick={onCreate}
-          className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors-normal shadow-lg shadow-blue-500/20 btn-press"
+          className="flex items-center px-5 py-2.5 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-normal shadow-lg shadow-primary/20 btn-press"
         >
           <Plus className="w-5 h-5 mr-2" /> {t("page.createButton")}
         </button>
@@ -1375,7 +1359,7 @@ function TemplateListView({
 
       {/* 自定义模板*/}
       <div className="mb-10">
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+        <h2 className="text-sm font-semibold text-fg-faint uppercase tracking-wider mb-4 flex items-center">
           <LayoutTemplate className="w-4 h-4 mr-2" /> {t("customTemplates")}
         </h2>
         {custom.length > 0 ? (
@@ -1385,14 +1369,14 @@ function TemplateListView({
             ))}
           </div>
         ) : (
-          <div className="bg-slate-900/50 border border-dashed border-slate-700 rounded-xl p-10 text-center">
-            <LayoutTemplate className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400 mb-4">
+          <div className="bg-surface/50 border border-dashed border-line-strong rounded-xl p-10 text-center">
+            <LayoutTemplate className="w-12 h-12 text-fg-faint mx-auto mb-4" />
+            <p className="text-fg-subtle mb-4">
               {t("noCustomTemplates")}
             </p>
             <button
               onClick={onCreate}
-              className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+              className="text-primary-fg hover:text-primary-fg font-medium text-sm"
             >
               {t("createFirst")}
             </button>
@@ -1402,7 +1386,7 @@ function TemplateListView({
 
       {/* 内置模板 */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+        <h2 className="text-sm font-semibold text-fg-faint uppercase tracking-wider mb-4 flex items-center">
           <Database className="w-4 h-4 mr-2" /> {t("builtInTemplates")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1413,16 +1397,20 @@ function TemplateListView({
       </div>
 
       {previewTemplate && (
+        <ModalPortal>
         <NodeGraphPreview
           template={previewTemplate}
           onClose={() => setPreviewTemplate(null)}
         />
+        </ModalPortal>
       )}
       {statsTemplate && (
+        <ModalPortal>
         <TemplateStatsDialog
           template={statsTemplate}
           onClose={() => setStatsTemplate(null)}
         />
+        </ModalPortal>
       )}
     </div>
   );
@@ -1441,7 +1429,6 @@ export default function WorkflowsPage() {
   const loadProjectData = useAppStore((s) => s.loadProjectData);
 
   const [subView, setSubView] = useState<"list" | "editor" | "run">("list");
-  const [defaultTemplateId, setDefaultTemplateId] = useState("tpl_builtin_1");
   const [editingTemplate, setEditingTemplate] =
     useState<MappedTemplate | null>(null);
   const t = useTranslations("workflows.page");
@@ -1638,8 +1625,6 @@ export default function WorkflowsPage() {
       onEdit={handleEdit}
       onRun={handleRun}
       onDelete={handleDelete}
-      defaultId={defaultTemplateId}
-      onSetDefault={setDefaultTemplateId}
     />
   );
 }

@@ -12,20 +12,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/teammate/server/internal/server/handler"
 	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/service"
 )
 
 // routeRegistrar holds the shared dependencies required for route registration.
 type routeRegistrar struct {
-	server     *Server
-	svc        *service.Service
-	apiKeyAuth svcmw.APIKeyAuthenticator
-	agentPerm  func(ctx context.Context, agentID uuid.UUID, permission string) (bool, error)
-	wsChk      svcmw.WorkspaceAccessCheckerFunc
-	projectChk func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (svcmw.WorkspaceContext, error)
-	taskChk    func(ctx context.Context, taskID int32) (interface{}, uuid.UUID, error)
-	nodeChk    func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
+	server            *Server
+	svc               *service.Service
+	apiKeyAuth        svcmw.APIKeyAuthenticator
+	agentPerm         func(ctx context.Context, agentID uuid.UUID, permission string) (bool, error)
+	wsChk             svcmw.WorkspaceAccessCheckerFunc
+	effectiveAgentChk svcmw.EffectiveAgentResolverFunc
+	projectChk        func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (svcmw.WorkspaceContext, error)
+	taskChk           func(ctx context.Context, taskID int32) (interface{}, uuid.UUID, error)
+	nodeChk           func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
 }
 
 // newRouteRegistrar creates the route registrar, initializing all shared permission-check functions.
@@ -49,6 +51,7 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 	projSvc := service.NewProjectService(svc)
 	wsSvc := service.NewWorkspaceService(svc)
 	agentSvc := service.NewAgentService(svc)
+	daemonSvc := service.NewDaemonService(svc)
 	wsAccessChecker := func(ctx context.Context, userID uuid.UUID, userType string, workspaceID uuid.UUID) (string, error) {
 		switch userType {
 		case "member":
@@ -66,9 +69,38 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 				return "", fmt.Errorf("agent workspace mismatch")
 			}
 			return "agent", nil
+		case "daemon":
+			daemon, err := svc.Store.GetDaemon(ctx, userID)
+			if err != nil {
+				return "", fmt.Errorf("daemon not found: %w", err)
+			}
+			if daemon.WorkspaceID != workspaceID {
+				return "", fmt.Errorf("daemon workspace mismatch")
+			}
+			return "daemon", nil
 		default:
 			return "", fmt.Errorf("unknown user type")
 		}
+	}
+
+	// Resolves X-Agent-ID for daemon-authenticated requests: the daemon may act
+	// only on behalf of agents it reported (agents.daemon_id == daemon).
+	effectiveAgentResolver := func(ctx context.Context, daemonID, agentID uuid.UUID) (svcmw.AuthClaims, error) {
+		agent, err := daemonSvc.ResolveEffectiveAgent(ctx, daemonID, agentID)
+		if err != nil {
+			return svcmw.AuthClaims{}, err
+		}
+		wsID, err := uuid.Parse(agent.WorkspaceID)
+		if err != nil {
+			return svcmw.AuthClaims{}, fmt.Errorf("agent workspace invalid: %w", err)
+		}
+		return svcmw.AuthClaims{
+			UserID:         agentID,
+			UserType:       "agent",
+			WorkspaceID:    wsID,
+			Role:           "agent",
+			ActingDaemonID: daemonID,
+		}, nil
 	}
 	// The checkers are injected into handlers and middleware via the registrar, no longer set as global variables
 
@@ -128,14 +160,15 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 	}
 
 	return &routeRegistrar{
-		server:     s,
-		svc:        svc,
-		apiKeyAuth: apiKeyAuthenticator,
-		agentPerm:  agentPerm,
-		wsChk:      wsAccessChecker,
-		projectChk: projectAccessChecker,
-		taskChk:    taskWorkspaceChecker,
-		nodeChk:    nodeWorkspaceChecker,
+		server:              s,
+		svc:                 svc,
+		apiKeyAuth:          apiKeyAuthenticator,
+		agentPerm:           agentPerm,
+		wsChk:               wsAccessChecker,
+		effectiveAgentChk:   effectiveAgentResolver,
+		projectChk:          projectAccessChecker,
+		taskChk:             taskWorkspaceChecker,
+		nodeChk:             nodeWorkspaceChecker,
 	}
 }
 
@@ -171,11 +204,14 @@ func (s *Server) buildRouter(svc *service.Service) chi.Router {
 
 		// Authenticated route group
 		r.Group(func(r chi.Router) {
-			r.Use(svcmw.AuthMiddleware(s.Config.JWTSecret, reg.apiKeyAuth, s.Redis))
+			r.Use(svcmw.AuthMiddleware(s.Config.JWTSecret, reg.apiKeyAuth, s.Redis, reg.effectiveAgentChk))
 			r.Use(svcmw.RateLimitMiddleware(s.Redis, svcmw.APIRateLimit, svcmw.UserKeyFunc))
 
 			// Authenticated auth routes
 			reg.registerAuthProtectedRoutes(r)
+
+			// Machine-side daemon API (daemon-token authenticated)
+			r.Mount("/daemons", handler.NewDaemonAPIHandler(svc).Routes())
 
 			// Search, workspaces, projects, tasks, Agents, memories, templates, community, etc.
 			reg.registerWorkspaceRoutes(r)

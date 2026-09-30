@@ -98,18 +98,6 @@ func (s *Service) publishToProject(ctx context.Context, projectID uuid.UUID, eve
 		return
 	}
 
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		slog.Error("marshal SSE event data", "event", eventType, "err", err)
-		return
-	}
-
-	event := types.SSEEvent{
-		ID:    nextSSEEventID(),
-		Event: eventType,
-		Data:  dataBytes,
-	}
-
 	members, err := s.Store.ListProjectMembers(ctx, projectID)
 	if err != nil {
 		slog.Error("list project members for SSE", "project_id", projectID, "err", err)
@@ -125,103 +113,81 @@ func (s *Service) publishToProject(ctx context.Context, projectID uuid.UUID, eve
 		if err != nil {
 			continue
 		}
-		runtimeIDs, err := s.Store.ListOnlineRuntimeIDsByAgent(ctx, agentUUID)
-		if err != nil {
-			slog.Error("list online runtimes for agent SSE", "agent_id", m.AgentID, "err", err)
-			continue
-		}
-		for _, rtID := range runtimeIDs {
-			if err := s.Hub.Publish(ctx, rtID.String(), event); err != nil {
-				slog.Error("publish SSE event to runtime", "runtime_id", rtID, "event", eventType, "err", err)
-				continue
-			}
+		if s.publishToAgent(ctx, agentUUID, eventType, data) {
 			onlineSent = true
 		}
 	}
-
-	// No online member runtimes: buffer the event to all runtimes (including offline) of the member agents,
-	// replayed via Last-Event-ID after offline recovery
-	if !onlineSent {
-		for _, m := range members {
-			if m.MemberType != "agent" || m.AgentID == nil {
-				continue
-			}
-			agentUUID, err := uuid.Parse(*m.AgentID)
-			if err != nil {
-				continue
-			}
-			runtimeIDs, err := s.Store.ListRuntimeIDsByAgent(ctx, agentUUID)
-			if err != nil {
-				continue
-			}
-			for _, rtID := range runtimeIDs {
-				if err := s.Hub.BufferEvent(ctx, rtID.String(), event); err != nil {
-					slog.Error("buffer project event for offline runtime", "runtime_id", rtID, "err", err)
-				}
-			}
-		}
-	}
+	_ = onlineSent
 }
 
-// publishToAgent sends an SSE event to all online runtimes of the specified agent.
-// If Hub is nil (e.g. in a test environment) or there are no online runtimes, this is a no-op.
-//
-// Steps:
-//  1. Query all online runtime IDs of the agent
-//  2. If there are no online runtimes, log a warning and drop the event
-//  3. Serialize the event data to JSON
-//  4. Deliver the event to all online runtimes
+// daemonSubscriberKey is the Hub subscribe key of a daemon's single SSE stream.
+func daemonSubscriberKey(daemonID uuid.UUID) string {
+	return "daemon:" + daemonID.String()
+}
+
+// withAgentEnvelope merges agent_id into the event payload so the daemon can
+// route the event to the local runtime of that agent. Non-object payloads are
+// wrapped under "payload".
+func withAgentEnvelope(agentID uuid.UUID, dataBytes []byte) []byte {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(dataBytes, &payload); err != nil || payload == nil {
+		payload = map[string]json.RawMessage{"payload": json.RawMessage(dataBytes)}
+	}
+	payload["agent_id"] = json.RawMessage(`"` + agentID.String() + `"`)
+	out, err := json.Marshal(payload)
+	if err != nil {
+		return dataBytes
+	}
+	return out
+}
+
+// publishToAgent sends an SSE event on the daemon stream of the specified agent.
+// The daemon must be online; the event envelope carries agent_id for local routing.
+// Returns whether the event was delivered to an online daemon.
 //
 // Parameters:
 //   - ctx: request context
 //   - agentID: agent ID
 //   - eventType: SSE event type
 //   - data: event data (will be JSON-serialized)
-func (s *Service) publishToAgent(ctx context.Context, agentID uuid.UUID, eventType string, data interface{}) {
+func (s *Service) publishToAgent(ctx context.Context, agentID uuid.UUID, eventType string, data interface{}) bool {
 	if s.Hub == nil {
-		return
+		return false
 	}
 
-	runtimeIDs, err := s.Store.ListOnlineRuntimeIDsByAgent(ctx, agentID)
-	if err != nil {
-		slog.Error("list online runtimes for agent SSE", "agent_id", agentID, "err", err)
-		return
-	}
-
-	if len(runtimeIDs) == 0 {
-		slog.Warn("no online runtimes for agent SSE, event dropped",
+	daemonID, online, err := s.Store.GetOnlineDaemonIDByAgent(ctx, agentID)
+	if err != nil || !online {
+		slog.Warn("agent daemon offline or unmanaged, event dropped",
 			"agent_id", agentID, "event", eventType)
-		return
+		return false
 	}
 
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		slog.Error("marshal SSE event data", "event", eventType, "err", err)
-		return
+		return false
 	}
 
 	event := types.SSEEvent{
 		ID:    nextSSEEventID(),
 		Event: eventType,
-		Data:  dataBytes,
+		Data:  withAgentEnvelope(agentID, dataBytes),
 	}
 
-	for _, rtID := range runtimeIDs {
-		if err := s.Hub.Publish(ctx, rtID.String(), event); err != nil {
-			slog.Error("publish SSE event to runtime", "runtime_id", rtID, "event", eventType, "err", err)
-		}
+	if err := s.Hub.Publish(ctx, daemonSubscriberKey(daemonID), event); err != nil {
+		slog.Error("publish SSE event to daemon", "daemon_id", daemonID, "event", eventType, "err", err)
+		return false
 	}
+	return true
 }
 
-// publishControlEvent persists and publishes a control event.
-// Control events (interrupt/rollback/continuation-invite) must not be lost, and can be recovered even if the target runtime is offline.
-// The event is also stored in the SSE event buffer (Redis) and can be retrieved when the runtime comes back online.
+// PublishControlEvent persists and publishes a control event.
+// Control events (interrupt/rollback/continuation-invite) must not be lost and
+// are buffered on the daemon stream, replayed via Last-Event-ID after reconnect.
 //
 // Steps:
-//  1. Send the event to online runtimes (best-effort delivery)
-//  2. Query all runtimes of the agent (including offline ones),
-//  3. Buffer the event to Redis for each runtime
-//  4. When the runtime reconnects, replay missed events from Redis via Last-Event-ID
+//  1. Send the event to the online daemon stream (best-effort delivery)
+//  2. Buffer the event on the daemon stream for offline replay
 //
 // Parameters:
 //   - ctx: request context
@@ -241,21 +207,18 @@ func (s *Service) PublishControlEvent(ctx context.Context, agentID uuid.UUID, ev
 		return
 	}
 
-	runtimeIDs, err := s.Store.ListRuntimeIDsByAgent(ctx, agentID)
-	if err != nil {
-		slog.Error("query runtimes for control event buffering", "agent_id", agentID, "err", err)
+	daemonID, ok, err := s.Store.GetDaemonIDByAgent(ctx, agentID)
+	if err != nil || !ok {
 		return
 	}
 
 	event := types.SSEEvent{
 		ID:    nextSSEEventID(),
 		Event: eventType,
-		Data:  dataBytes,
+		Data:  withAgentEnvelope(agentID, dataBytes),
 	}
 
-	for _, rtID := range runtimeIDs {
-		if err := s.Hub.BufferEvent(ctx, rtID.String(), event); err != nil {
-			slog.Error("buffer control event for runtime", "runtime_id", rtID, "event", eventType, "err", err)
-		}
+	if err := s.Hub.BufferEvent(ctx, daemonSubscriberKey(daemonID), event); err != nil {
+		slog.Error("buffer control event for daemon", "daemon_id", daemonID, "event", eventType, "err", err)
 	}
 }

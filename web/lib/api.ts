@@ -1,4 +1,5 @@
 // api.ts 封装前端 HTTP 请求：统一鉴权头与错误处理，并提供全部后端 API 方法。
+
 const BASE_URL = "/api";
 
 function getAuthHeaders(): Record<string, string> {
@@ -120,6 +121,26 @@ const api = {
     }),
   removeAgentMcpServer: (wsId: string, agentId: string, serverId: string) =>
     request("DELETE", `/workspaces/${wsId}/agents/${agentId}/mcp-servers/${serverId}`),
+
+  // 守护进程(机器上的 agentd 实例;代理由守护进程注册时上报,不再单独注册)
+  listDaemons: (wsId: string) =>
+    request("GET", `/workspaces/${wsId}/daemons`),
+  createDaemon: (wsId: string, data: Record<string, unknown>) =>
+    request("POST", `/workspaces/${wsId}/daemons`, data),
+  deleteDaemon: (wsId: string, id: string) =>
+    request("DELETE", `/workspaces/${wsId}/daemons/${id}`),
+  createDaemonAgent: (
+    wsId: string,
+    daemonId: string,
+    data: Record<string, unknown>
+  ) =>
+    request(
+      "POST",
+      `/workspaces/${wsId}/daemons/${daemonId}/agents`,
+      data
+    ),
+  rotateDaemonToken: (wsId: string, daemonId: string) =>
+    request("POST", `/workspaces/${wsId}/daemons/${daemonId}/rotate-token`),
 
   // 技能
   listSkills: (wsId: string) =>

@@ -2,6 +2,7 @@
 import type {
   MappedTask,
   MappedAgent,
+  MappedDaemon,
   MappedTemplate,
   NodeType,
   TaskNodeStatus,
@@ -194,6 +195,7 @@ export function mapAgentFromApi(apiAgent: any): MappedAgent {
     id: apiAgent.id,
     name: apiAgent.name || "",
     tool: providerMap[apiAgent.provider] || apiAgent.provider || "Custom CLI",
+    provider: apiAgent.provider || "",
     status: apiAgent.status || "offline",
     task: null,
     identityInstruction: apiAgent.instructions || "",
@@ -206,6 +208,39 @@ export function mapAgentFromApi(apiAgent: any): MappedAgent {
       output: apiAgent.output_tokens || 0,
     },
     history: [],
+    daemonId: apiAgent.daemon_id || "",
+    daemonName: apiAgent.daemon_name || "",
+    origin: apiAgent.origin || "",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapDaemonFromApi(apiDaemon: any): MappedDaemon {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (apiDaemon.agents || []).map((a: any) => ({
+    name: a.name || "",
+    provider: a.provider || "",
+    status: a.status || "offline",
+    lastReportedAt: a.last_reported_at || "",
+  }));
+  return {
+    id: apiDaemon.id,
+    name: apiDaemon.name || "",
+    deviceName: apiDaemon.device_name || "",
+    version: apiDaemon.version || "",
+    status: apiDaemon.status === "online" ? "online" : "offline",
+    lastHeartbeat: apiDaemon.last_heartbeat || "",
+    agentCount: agents.length,
+    createdAt: String(apiDaemon.created_at || ""),
+    agents,
+    providers: (apiDaemon.providers || []).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p: any) => ({
+        provider: p.provider || "",
+        version: p.version || "",
+        installed: p.installed !== false,
+      })
+    ),
   };
 }
 

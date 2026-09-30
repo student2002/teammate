@@ -287,8 +287,8 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 		return nil, fmt.Errorf("invalid or expired api token")
 	}
 
-	if ownerType != "agent" {
-		return nil, fmt.Errorf("only agents can exchange api tokens for session tokens")
+	if ownerType != "agent" && ownerType != "daemon" {
+		return nil, fmt.Errorf("only agents or daemons can exchange api tokens for session tokens")
 	}
 
 	ownerID, err := uuid.Parse(ownerIDStr)
@@ -314,8 +314,8 @@ func (s *Store) ExchangeAPITokenForSession(ctx context.Context, apiToken string)
 
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO auth_tokens (token_hash, lookup_hash, token_type, owner_type, owner_id, expires_at)
-		 VALUES ($1, $2, 'session', 'agent', $3, $4)`,
-		string(bcryptHash), sessionLookupHashStr, ownerID, expiresAt)
+		 VALUES ($1, $2, 'session', $3, $4, $5)`,
+		string(bcryptHash), sessionLookupHashStr, ownerType, ownerID, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("store session token: %w", err)
 	}
@@ -431,41 +431,6 @@ func (s *Store) GetWhoamiInfo(ctx context.Context, ownerType string, ownerID uui
 	}
 }
 
-// UpdateRuntimePublicKey updates the public key field of a Runtime.
-//
-// The public key is used to verify secure communication between the Agent and the Server.
-//
-// Parameters:
-//   - ctx: request context
-//   - runtimeID: the Runtime's UUID
-//   - publicKey: the RSA public key string
-//
-// Returns:
-//   - error: error returned when the update fails
-func (s *Store) UpdateRuntimePublicKey(ctx context.Context, runtimeID uuid.UUID, publicKey string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE runtimes SET public_key = $1, updated_at = NOW() WHERE id = $2`,
-		publicKey, runtimeID)
-	return err
-}
-
-// GetRuntimeByID queries a single Runtime record by ID.
-//
-// Parameters:
-//   - ctx: request context
-//   - runtimeID: the Runtime's UUID
-//
-// Returns:
-//   - types.Runtime: the Runtime record
-//   - error: error returned when the query fails
-func (s *Store) GetRuntimeByID(ctx context.Context, runtimeID uuid.UUID) (types.Runtime, error) {
-	r, err := s.q.GetRuntime(ctx, runtimeID)
-	if err != nil {
-		return types.Runtime{}, fmt.Errorf("get runtime by id: %w", err)
-	}
-	return ToDomainRuntime(r)
-}
-
 // GetAuthTokenByLookupHashAndType queries a non-expired auth token by lookup_hash and token_type.
 //
 // Parameters:
@@ -491,7 +456,8 @@ func (s *Store) GetAuthTokenByLookupHashAndType(ctx context.Context, lookupHash 
 	}, nil
 }
 
-// GetLatestPublicKeyForAgent queries the most recently updated public key for the specified Agent.
+// GetLatestPublicKeyForAgent resolves the RSA public key of the daemon reporting
+// the specified agent (git credentials are encrypted with the daemon's key).
 //
 // Parameters:
 //   - ctx: request context
@@ -499,13 +465,13 @@ func (s *Store) GetAuthTokenByLookupHashAndType(ctx context.Context, lookupHash 
 //
 // Returns:
 //   - string: the RSA public key string
-//   - error: error returned when the query fails (e.g. no public key record)
+//   - error: error returned when the query fails (e.g. unmanaged agent or no key registered)
 func (s *Store) GetLatestPublicKeyForAgent(ctx context.Context, agentID uuid.UUID) (string, error) {
 	var publicKey string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT public_key FROM runtimes
-		 WHERE agent_id = $1 AND public_key IS NOT NULL AND public_key != ''
-		 ORDER BY updated_at DESC LIMIT 1`,
+		`SELECT d.public_key FROM daemons d
+		 JOIN agents a ON a.daemon_id = d.id
+		 WHERE a.id = $1 AND d.public_key != ''`,
 		agentID).Scan(&publicKey)
 	if err != nil {
 		return "", fmt.Errorf("no public key found for agent: %w", err)

@@ -15,35 +15,6 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow verifies that when a template is deleted,
-// projects.default_workflow_id is explicitly set to NULL — otherwise the foreign key (NO ACTION) would prevent deletion.
-func TestDeleteWorkflowTemplate_ClearsProjectDefaultWorkflow(t *testing.T) {
-	s, db := setupTestStore(t)
-	ctx := context.Background()
-
-	ws := createTestWorkspace(t, s)
-	tpl, _ := createTestWorkflowTemplate(t, s, ws.ID, 1)
-	proj := createTestProject(t, s, ws.ID)
-
-	// Point the project's default template to the template about to be deleted
-	if _, err := db.Exec(
-		`UPDATE projects SET default_workflow_id = $1 WHERE id = $2`, tpl.ID, proj.ID); err != nil {
-		t.Fatalf("set default_workflow_id: %v", err)
-	}
-
-	if err := s.DeleteWorkflowTemplate(ctx, uuid.MustParse(tpl.ID)); err != nil {
-		t.Fatalf("DeleteWorkflowTemplate with project reference should succeed after explicit clear: %v", err)
-	}
-
-	var dwf sql.NullString
-	if err := db.QueryRow(`SELECT default_workflow_id FROM projects WHERE id = $1`, proj.ID).Scan(&dwf); err != nil {
-		t.Fatalf("query project default_workflow_id: %v", err)
-	}
-	if dwf.Valid {
-		t.Fatalf("expected projects.default_workflow_id to be NULL, got %q", dwf.String)
-	}
-}
-
 // TestDeleteAgent_ClearsNodeRefs verifies that task_nodes.assignee_id is explicitly set to NULL when an Agent is deleted.
 func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 	s, db := setupTestStore(t)

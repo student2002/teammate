@@ -342,7 +342,6 @@ func TestToDomainProject_RoundTrip(t *testing.T) {
 	icon := "🚀"
 	repoURL := "https://github.com/org/repo.git"
 	context := "Project context"
-	defaultWorkflowID := fixedUUID
 
 	dbProject := db.Project{
 		ID:                fixedUUID,
@@ -353,7 +352,6 @@ func TestToDomainProject_RoundTrip(t *testing.T) {
 		Status:            db.ProjectStatusActive,
 		RepoUrl:           sql.NullString{String: repoURL, Valid: true},
 		Context:           sql.NullString{String: context, Valid: true},
-		DefaultWorkflowID: uuid.NullUUID{UUID: defaultWorkflowID, Valid: true},
 		MaxReviewCycles:   3,
 		CreatedAt:         fixedTime,
 		UpdatedAt:         fixedTime,
@@ -387,11 +385,6 @@ func TestToDomainProject_RoundTrip(t *testing.T) {
 	}
 	if domainProject.Context != context {
 		t.Errorf("Context = %q, want %q", domainProject.Context, context)
-	}
-	if domainProject.DefaultWorkflowID == nil ||
-		*domainProject.DefaultWorkflowID != newUUIDString() {
-		t.Errorf("DefaultWorkflowID = %v, want %q",
-			domainProject.DefaultWorkflowID, newUUIDString())
 	}
 }
 

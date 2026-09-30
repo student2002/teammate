@@ -14,6 +14,7 @@ import {
   Loader2,
   ArrowLeft,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import { usePermission } from "@/lib/use-permission";
 import api from "@/lib/api";
@@ -81,46 +82,46 @@ function InviteMemberDialog({
       onClick={onClose}
     >
       <div
-        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[460px] shadow-2xl modal-content"
+        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[460px] shadow-2xl modal-content"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex items-center">
-          <Mail className="w-5 h-5 text-blue-400 mr-3" />
-          <h2 className="text-lg font-bold text-white flex-1">{t("title")}</h2>
+        <div className="p-5 border-b border-line flex items-center">
+          <Mail className="w-5 h-5 text-primary-fg mr-3" />
+          <h2 className="text-lg font-bold text-fg flex-1">{t("title")}</h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              {t("emailLabel")} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("emailLabel")} <span className="text-danger-fg">*</span>
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors-fast"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast"
               placeholder="colleague@company.com"
               onKeyDown={(e) => e.key === "Enter" && handleInvite()}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-fg-muted mb-2">
               {t("nameLabel")}
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors-fast"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast"
               placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-fg-muted mb-2">
               {t("roleLabel")}
             </label>
             <div className="flex gap-2">
@@ -134,8 +135,8 @@ function InviteMemberDialog({
                   onClick={() => setRole(r.id)}
                   className={`flex-1 p-3 rounded-lg border text-left transition-colors-normal ${
                     role === r.id
-                      ? "bg-blue-500/10 border-blue-500/50 text-blue-300"
-                      : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500"
+                      ? "bg-primary/10 border-primary/50 text-primary-fg"
+                      : "bg-surface-2/50 border-line-strong text-fg-subtle hover:border-line-strong"
                   }`}
                 >
                   <div className="text-xs font-bold">{roleLabels[r.id]}</div>
@@ -145,17 +146,17 @@ function InviteMemberDialog({
             </div>
           </div>
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t("cancel")}
           </button>
           <button
             onClick={handleInvite}
             disabled={!email.trim() || sending}
-            className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+            className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {sending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -221,25 +222,25 @@ function ChangeRoleDialog({
       onClick={onClose}
     >
       <div
-        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[400px] shadow-2xl modal-content"
+        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[400px] shadow-2xl modal-content"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex items-center">
-          <Shield className="w-5 h-5 text-blue-400 mr-3" />
-          <h2 className="text-lg font-bold text-white flex-1">{t("title")}</h2>
+        <div className="p-5 border-b border-line flex items-center">
+          <Shield className="w-5 h-5 text-primary-fg mr-3" />
+          <h2 className="text-lg font-bold text-fg flex-1">{t("title")}</h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg"
+            className="p-1.5 hover:bg-surface-3 rounded-lg"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-fg-muted">
             {t("desc", { name: member.name })}
           </p>
           {availableRoles.length === 0 ? (
-            <p className="text-sm text-slate-500">{t("noRoles")}</p>
+            <p className="text-sm text-fg-faint">{t("noRoles")}</p>
           ) : (
             <div className="flex gap-2">
               {availableRoles.map((r) => (
@@ -248,8 +249,8 @@ function ChangeRoleDialog({
                   onClick={() => setRole(r)}
                   className={`flex-1 p-3 rounded-lg border text-left transition-colors-normal ${
                     role === r
-                      ? "bg-blue-500/10 border-blue-500/50 text-blue-300"
-                      : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500"
+                      ? "bg-primary/10 border-primary/50 text-primary-fg"
+                      : "bg-surface-2/50 border-line-strong text-fg-subtle hover:border-line-strong"
                   }`}
                 >
                   <div className="text-xs font-bold">{roleLabels[r]}</div>
@@ -258,17 +259,17 @@ function ChangeRoleDialog({
             </div>
           )}
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t("cancel")}
           </button>
           <button
             onClick={handleChange}
             disabled={saving || availableRoles.length === 0}
-            className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+            className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {t("confirm")}
@@ -347,10 +348,10 @@ export default function MembersPage() {
   };
 
   const roleColors: Record<string, string> = {
-    owner: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    admin: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    member: "bg-slate-500/10 text-slate-300 border-slate-500/20",
-    viewer: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+    owner: "bg-warning/10 text-warning-fg border-warning/20",
+    admin: "bg-primary/10 text-primary-fg border-primary/20",
+    member: "bg-fg-faint/10 text-fg-muted border-line-strong/20",
+    viewer: "bg-fg-faint/10 text-fg-subtle border-line-strong/20",
   };
 
   return (
@@ -360,15 +361,15 @@ export default function MembersPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/dashboard"
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors-fast"
+            className="p-2 hover:bg-surface-2 rounded-lg transition-colors-fast"
           >
-            <ArrowLeft className="w-5 h-5 text-slate-400" />
+            <ArrowLeft className="w-5 h-5 text-fg-subtle" />
           </Link>
           <div>
-            <h2 className="text-2xl font-bold text-white flex items-center">
-              <User className="w-6 h-6 mr-2 text-blue-400" /> {t("title")}
+            <h2 className="text-2xl font-bold text-fg flex items-center">
+              <User className="w-6 h-6 mr-2 text-primary-fg" /> {t("title")}
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-fg-subtle mt-1">
               {t("memberCount", { count: members.length })}
             </p>
           </div>
@@ -376,7 +377,7 @@ export default function MembersPage() {
         {canManageMembers && (
           <button
             onClick={() => setShowInvite(true)}
-            className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors-fast btn-press"
+            className="flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast btn-press"
           >
             <Plus className="w-4 h-4 mr-1.5" /> {t("add")}
           </button>
@@ -386,12 +387,12 @@ export default function MembersPage() {
       {/* 成员列表 */}
       <div className="flex-1 space-y-2">
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-slate-400">
+          <div className="flex items-center justify-center py-12 text-fg-subtle">
             <Loader2 className="w-5 h-5 mr-2 animate-spin" /> {t("loading")}
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-12 gap-3 text-xs text-slate-500 uppercase tracking-wider px-4 py-2">
+            <div className="grid grid-cols-12 gap-3 text-xs text-fg-faint uppercase tracking-wider px-4 py-2">
               <div className="col-span-4">{t("thName")}</div>
               <div className="col-span-4">{t("thEmail")}</div>
               <div className="col-span-2">{t("thRole")}</div>
@@ -401,17 +402,17 @@ export default function MembersPage() {
             {members.map((m) => (
               <div
                 key={m.id}
-                className="grid grid-cols-12 gap-3 items-center bg-slate-800/30 border border-slate-700/50 rounded-lg px-4 py-3 hover:bg-slate-800/50 transition-colors-fast card-hover"
+                className="grid grid-cols-12 gap-3 items-center bg-surface-2/30 border border-line-strong/50 rounded-lg px-4 py-3 hover:bg-surface-2/50 transition-colors-fast card-hover"
               >
                 <div className="col-span-4 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-                    <User className="w-4 h-4 text-slate-400" />
+                  <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center">
+                    <User className="w-4 h-4 text-fg-subtle" />
                   </div>
-                  <span className="text-sm text-white font-medium">
+                  <span className="text-sm text-fg font-medium">
                     {m.name}
                   </span>
                 </div>
-                <div className="col-span-4 text-sm text-slate-400">
+                <div className="col-span-4 text-sm text-fg-subtle">
                   {m.email}
                 </div>
                 <div className="col-span-2">
@@ -427,7 +428,7 @@ export default function MembersPage() {
                   </button>
                 </div>
                 <div className="col-span-1">
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-fg-subtle">
                     {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString(locale) : "-"}
                   </span>
                 </div>
@@ -435,7 +436,7 @@ export default function MembersPage() {
                   {canManageMembers && m.role !== "owner" && (
                     <button
                       onClick={() => handleRemove(m.id)}
-                      className="p-1 text-slate-500 hover:text-red-400 transition-colors-fast"
+                      className="p-1 text-fg-faint hover:text-danger-fg transition-colors-fast"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -447,7 +448,7 @@ export default function MembersPage() {
         )}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-slate-800 text-[10px] text-slate-500 flex items-center">
+      <div className="mt-6 pt-4 border-t border-line text-[10px] text-fg-faint flex items-center">
         {isViewer ? (
           <>
             <Shield className="w-3 h-3 mr-1" /> {t("footerViewer")}
@@ -460,14 +461,17 @@ export default function MembersPage() {
       </div>
 
       {showInvite && currentWorkspaceId && (
+        <ModalPortal>
         <InviteMemberDialog
           onClose={() => setShowInvite(false)}
           onInvited={handleInvited}
           workspaceId={currentWorkspaceId}
         />
+        </ModalPortal>
       )}
 
       {editMember && currentWorkspaceId && (
+        <ModalPortal>
         <ChangeRoleDialog
           member={editMember}
           onClose={() => setEditMember(null)}
@@ -475,6 +479,7 @@ export default function MembersPage() {
           workspaceId={currentWorkspaceId}
           currentUserLevel={currentUserLevel}
         />
+        </ModalPortal>
       )}
     </div>
   );

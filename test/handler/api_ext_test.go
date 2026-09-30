@@ -35,7 +35,7 @@ func TestNotificationList(t *testing.T) {
 	// Prepare
 	tplID := createWorkflowTemplate2Nodes(t, client, server.URL, wsID, token)
 	projID := createProject(t, client, server.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, server.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, server.URL, token}, wsID, projID)
 
 	// Create agent and add to project
 	agentID, agentAPIToken := createAgent(t, client, server.URL, wsID, token)

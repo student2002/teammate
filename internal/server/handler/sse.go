@@ -42,7 +42,9 @@ func (h *SSEHandler) Routes() chi.Router {
 	return r
 }
 
-// Stream handles the GET /workspaces/{workspaceId}/runtimes/{runtimeId}/events endpoint, establishing a long-lived SSE connection and pushing events in real time to the Agent daemon, supporting Last-Event-ID reconnection compensation.
+// Stream handles the GET /workspaces/{workspaceId}/daemons/{id}/events endpoint,
+// establishing a long-lived SSE connection on the daemon's single event stream.
+// Events carry an agent_id envelope so the daemon routes them to the local runtime.
 //
 // Parameters:
 //   - w: HTTP response writer
@@ -55,20 +57,20 @@ func (h *SSEHandler) Routes() chi.Router {
 //   - 200: SSE event stream (text/event-stream)
 //   - 400: parameter error
 //   - 401: not authenticated
-//   - 403: Agents can only subscribe to their own runtime
-//   - 404: runtime does not exist
+//   - 403: daemons can only subscribe to their own stream
+//   - 404: daemon does not exist
 //
 // Processing flow:
-//  1. verify authentication and runtime ownership
+//  1. verify authentication and daemon ownership
 //  2. check the Last-Event-ID header for reconnection
 //  3. replay lost events from the Redis buffer
-//  4. subscribe to the event channel
+//  4. subscribe to the daemon event channel
 //  5. keep the long connection alive and push events
 func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
-	// parse runtime ID
-	runtimeID := chi.URLParam(r, "runtimeId")
-	if runtimeID == "" {
-		response.BadRequest(w, "missing runtimeId")
+	// parse daemon ID
+	daemonID := chi.URLParam(r, "id")
+	if daemonID == "" {
+		response.BadRequest(w, "missing daemon id")
 		return
 	}
 
@@ -91,34 +93,25 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// verify runtime ownership
-	runtimeUUID, err := uuid.Parse(runtimeID)
+	// verify daemon exists and belongs to the URL workspace
+	daemonUUID, err := uuid.Parse(daemonID)
 	if err != nil {
-		response.BadRequest(w, "invalid runtimeId")
+		response.BadRequest(w, "invalid daemon id")
 		return
 	}
-	runtime, err := service.NewRuntimeService(h.Svc).GetRuntimeByID(r.Context(), runtimeUUID)
-	if err != nil {
-		response.NotFound(w, "runtime not found")
+	daemon, err := service.NewDaemonService(h.Svc).Get(r.Context(), daemonUUID)
+	if err != nil || daemon.WorkspaceID != workspaceID {
+		response.NotFound(w, "daemon not found")
 		return
 	}
 
-	// verify the runtime's Agent belongs to the URL workspace
-	runtimeAgentID, _ := uuid.Parse(runtime.AgentID)
-	agent, err := service.NewAgentService(h.Svc).Get(r.Context(), runtimeAgentID)
-	if err != nil || agent.WorkspaceID != workspaceID.String() {
-		response.NotFound(w, "runtime not found")
+	// A daemon may only subscribe to its own stream; humans access for debugging
+	if claims.UserType == "daemon" && claims.UserID != daemonUUID {
+		response.Forbidden(w, "daemons can only subscribe to their own stream")
 		return
 	}
 
-	// Agents can only subscribe to their own runtime
-	if claims.UserType == "agent" {
-		sseAgentID, _ := uuid.Parse(runtime.AgentID)
-		if sseAgentID != claims.UserID {
-			response.Forbidden(w, "agents can only subscribe to their own runtime")
-			return
-		}
-	}
+	subscriberKey := "daemon:" + daemonUUID.String()
 
 	// chi's Timeout middleware wraps the ResponseWriter and hides http.Flusher.
 	// We need to unwrap it to get the underlying Flusher.
@@ -154,11 +147,11 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	// check the Last-Event-ID header to support reconnection
 	lastEventID := r.Header.Get("Last-Event-ID")
 	if lastEventID != "" {
-		h.replayBufferedEvents(r.Context(), w, flusher, runtimeID, lastEventID)
+		h.replayBufferedEvents(r.Context(), w, flusher, subscriberKey, lastEventID)
 	}
 
-	// subscribe to the event channel
-	ch, unsub := h.Hub.Subscribe(runtimeID)
+	// subscribe to the daemon event channel
+	ch, unsub := h.Hub.Subscribe(subscriberKey)
 	defer unsub()
 
 	// send an initial comment to establish the connection
@@ -192,10 +185,10 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 
 // replayBufferedEvents fetches lost events from the Redis buffer and sends them to the client.
 // If the buffer is empty or expired, it sends a sync:required event.
-func (h *SSEHandler) replayBufferedEvents(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, runtimeID string, lastEventID string) {
-	events, err := h.Hub.GetBufferedEvents(ctx, runtimeID, lastEventID)
+func (h *SSEHandler) replayBufferedEvents(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, subscriberKey string, lastEventID string) {
+	events, err := h.Hub.GetBufferedEvents(ctx, subscriberKey, lastEventID)
 	if err != nil {
-		slog.Error("get buffered events for replay", "runtime_id", runtimeID, "last_event_id", lastEventID, "err", err)
+		slog.Error("get buffered events for replay", "subscriber", subscriberKey, "last_event_id", lastEventID, "err", err)
 	}
 
 	// buffer is empty or expired - send sync:required

@@ -83,10 +83,10 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 			r.Mount("/mcp-servers", handler.NewMcpHandler(svc).Routes())
 		})
 
-		// Runtimes — read/write separation
+		// Daemons (agentd instances) — member+ write, viewer+ read
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)
-			r.Mount("/runtimes", handler.NewRuntimeHandler(svc).Routes())
+			r.Mount("/daemons", handler.NewDaemonHandler(svc).Routes())
 		})
 
 		// Notifications (member+ access only; Agents are rejected)

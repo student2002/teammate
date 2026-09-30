@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Eye,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import type { MappedTask } from "@/lib/types";
@@ -49,50 +50,50 @@ function RejectReasonDialog({
       onClick={onClose}
     >
       <div
-        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[480px] shadow-2xl modal-content"
+        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[480px] shadow-2xl modal-content"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white flex items-center">
+        <div className="p-5 border-b border-line flex justify-between items-center">
+          <h3 className="text-lg font-bold text-fg flex items-center">
             <XCircle className="w-5 h-5 mr-2 text-orange-400" /> {t("title")}
           </h3>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors-fast"
+            className="p-1 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
           >
             <XCircle className="w-5 h-5" />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="text-sm text-slate-300">
-            <span className="text-blue-400 font-mono mr-2">{task.taskRef}</span>
+          <div className="text-sm text-fg-muted">
+            <span className="text-primary-fg font-mono mr-2">{task.taskRef}</span>
             {task.title}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              {t("reasonLabel")} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("reasonLabel")} <span className="text-danger-fg">*</span>
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               autoFocus
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-300 focus:outline-none focus:border-orange-500 resize-none transition-colors-fast"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-3 text-sm text-fg-muted focus:outline-none focus:border-orange-500 resize-none transition-colors-fast"
               placeholder={t("reasonPlaceholder")}
             />
           </div>
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t("cancel")}
           </button>
           <button
             onClick={handleSubmit}
             disabled={!reason.trim()}
-            className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
+            className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
           >
             <XCircle className="w-4 h-4 mr-2" /> {t("confirm")}
           </button>
@@ -164,7 +165,7 @@ function SelfReviewBadge({ task }: SelfReviewBadgeProps) {
   if (loading || !isSelfReview) return null;
 
   return (
-    <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-amber-500/10 text-amber-400 border-amber-500/30">
+    <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-warning/10 text-warning-fg border-warning/30">
       <AlertTriangle className="w-3 h-3" /> {t("selfReviewBadge")}
     </span>
   );
@@ -292,11 +293,11 @@ export default function ReviewsPage() {
       {/* 页头 */}
       <div className="flex justify-between items-center mb-8 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2 flex items-center">
-            <Shield className="w-7 h-7 mr-3 text-amber-400" />
+          <h1 className="text-2xl font-bold text-fg mb-2 flex items-center">
+            <Shield className="w-7 h-7 mr-3 text-warning-fg" />
             {t("title")}
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             {t("subtitle", { count: reviewTasks.length })}
           </p>
         </div>
@@ -305,21 +306,23 @@ export default function ReviewsPage() {
         <div className="relative">
           <button
             onClick={() => setShowFilterMenu(!showFilterMenu)}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 border border-slate-700/60 rounded-xl text-sm text-slate-300 hover:bg-slate-700/60 hover:border-slate-600 transition-colors-fast backdrop-blur-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-surface-2/60 border border-line-strong/60 rounded-xl text-sm text-fg-muted hover:bg-surface-3/60 hover:border-line-strong transition-colors-fast backdrop-blur-sm"
           >
-            <Filter className="w-4 h-4 text-slate-400" />
+            <Filter className="w-4 h-4 text-fg-subtle" />
             <span>{filterLabels[filter]}</span>
             <ChevronDown
-              className={`w-4 h-4 text-slate-500 transition-transform ${showFilterMenu ? "rotate-180" : ""}`}
+              className={`w-4 h-4 text-fg-faint transition-transform ${showFilterMenu ? "rotate-180" : ""}`}
             />
           </button>
           {showFilterMenu && (
             <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setShowFilterMenu(false)}
-              />
-              <div className="absolute right-0 top-full mt-2 bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-xl shadow-2xl z-50 min-w-[160px] overflow-hidden animate-scale-in">
+              <ModalPortal>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowFilterMenu(false)}
+                />
+              </ModalPortal>
+              <div className="absolute right-0 top-full mt-2 bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-xl shadow-2xl z-50 min-w-[160px] overflow-hidden animate-scale-in">
                 {Object.entries(filterLabels).map(([key, label]) => (
                   <button
                     key={key}
@@ -331,8 +334,8 @@ export default function ReviewsPage() {
                     }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors-fast ${
                       filter === key
-                        ? "bg-blue-500/10 text-blue-400"
-                        : "text-slate-300 hover:bg-slate-800"
+                        ? "bg-primary/10 text-primary-fg"
+                        : "text-fg-muted hover:bg-surface-2"
                     }`}
                   >
                     {label}
@@ -346,8 +349,8 @@ export default function ReviewsPage() {
 
       {/* 任务列表 */}
       {filteredTasks.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
-          <Shield className="w-16 h-16 mb-4 text-slate-700" />
+        <div className="flex-1 flex flex-col items-center justify-center text-fg-faint">
+          <Shield className="w-16 h-16 mb-4 text-fg-faint" />
           <div className="text-lg font-medium mb-1">{t("emptyTitle")}</div>
           <div className="text-sm">
             {t("emptyDesc")}
@@ -371,19 +374,19 @@ export default function ReviewsPage() {
             return (
               <div
                 key={task.id}
-                className={`bg-slate-800/40 border rounded-xl backdrop-blur-sm p-5 transition-all hover:shadow-lg card-hover ${
+                className={`bg-surface-2/40 border rounded-xl backdrop-blur-sm p-5 transition-all hover:shadow-lg card-hover ${
                   isRejected
                     ? "border-orange-500/40 hover:border-orange-500/60 hover:shadow-orange-500/5"
-                    : "border-slate-700/60 hover:border-slate-600/60 hover:shadow-blue-500/5"
+                    : "border-line-strong/60 hover:border-line-strong/60 hover:shadow-primary/5"
                 }`}
               >
                 {/* 顶部：任务ID + 标题 + 状态 */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="text-blue-400 font-mono text-sm bg-blue-400/10 px-2 py-1 rounded shrink-0">
+                    <span className="text-primary-fg font-mono text-sm bg-primary-fg/10 px-2 py-1 rounded shrink-0">
                       {task.taskRef}
                     </span>
-                    <h3 className="text-white font-medium truncate">
+                    <h3 className="text-fg font-medium truncate">
                       {task.title}
                     </h3>
                   </div>
@@ -393,12 +396,12 @@ export default function ReviewsPage() {
                         <XCircle className="w-3.5 h-3.5" /> {t("statusRejected")}
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-blue-500/10 text-blue-400 border-blue-500/30">
+                      <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-primary/10 text-primary-fg border-primary/30">
                         <Clock className="w-3.5 h-3.5" /> {t("statusPending")}
                       </span>
                     )}
                     {task.rejectCount > 0 && (
-                      <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-red-500/10 text-red-400 border-red-500/20">
+                      <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-danger/10 text-danger-fg border-danger/20">
                         <AlertTriangle className="w-3 h-3" /> {t("rejectCount", { count: task.rejectCount })}
                       </span>
                     )}
@@ -408,25 +411,25 @@ export default function ReviewsPage() {
 
                 {/* 中间：节点信息 + 代理 */}
                 <div className="flex items-center gap-6 mb-4 text-sm">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <Eye className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-500">{t("currentNode")}</span>
+                  <div className="flex items-center gap-2 text-fg-muted">
+                    <Eye className="w-4 h-4 text-fg-faint" />
+                    <span className="text-fg-faint">{t("currentNode")}</span>
                     <span className="font-medium">{currentNodeName}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-300">
+                  <div className="flex items-center gap-2 text-fg-muted">
                     {currentAgent.includes("Bot") ||
                     currentAgent.includes("Claude") ||
                     currentAgent.includes("GPT") ? (
-                      <Bot className="w-4 h-4 text-blue-400" />
+                      <Bot className="w-4 h-4 text-primary-fg" />
                     ) : (
-                      <User className="w-4 h-4 text-emerald-400" />
+                      <User className="w-4 h-4 text-success-fg" />
                     )}
-                    <span className="text-slate-500">{t("reviewer")}</span>
+                    <span className="text-fg-faint">{t("reviewer")}</span>
                     <span className="font-medium">{currentAgent}</span>
                   </div>
                   {task.message && (
                     <div
-                      className="text-xs text-slate-400 truncate max-w-[300px]"
+                      className="text-xs text-fg-subtle truncate max-w-[300px]"
                       title={task.message}
                     >
                       {task.message}
@@ -436,22 +439,22 @@ export default function ReviewsPage() {
 
                 {/* 自我审查风险警告 */}
                 {selfReviewAgent && (
-                  <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 mb-4">
-                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-                    <span className="text-sm text-amber-300 font-medium">
+                  <div className="flex items-center gap-3 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-warning-fg shrink-0" />
+                    <span className="text-sm text-warning-fg font-medium">
                       {"\u26A0"} {t("selfReviewRisk", { agent: selfReviewAgent })}
                     </span>
-                    <span className="text-xs text-amber-400/70 ml-auto shrink-0">
+                    <span className="text-xs text-warning-fg/70 ml-auto shrink-0">
                       {t("suggestChange")}
                     </span>
                   </div>
                 )}
 
                 {/* 底部：操作按钮 */}
-                <div className="flex items-center gap-3 pt-3 border-t border-slate-700/40">
+                <div className="flex items-center gap-3 pt-3 border-t border-line-strong/40">
                   <button
                     onClick={() => handleApprove(task.id)}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-sm font-medium border border-emerald-500/30 transition-colors-fast btn-press"
+                    className="flex items-center gap-2 px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast btn-press"
                   >
                     <CheckCircle2 className="w-4 h-4" /> {t("approve")}
                   </button>
@@ -462,7 +465,7 @@ export default function ReviewsPage() {
                     <XCircle className="w-4 h-4" /> {t("reject")}
                   </button>
                   <div className="flex-1" />
-                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                  <div className="flex items-center gap-4 text-xs text-fg-faint">
                     <span>
                       {t("progress", {
                         completed: (task.nodesStatus || []).filter(
@@ -486,11 +489,13 @@ export default function ReviewsPage() {
 
       {/* 退回弹窗 */}
       {rejectingTask && (
+        <ModalPortal>
         <RejectReasonDialog
           task={rejectingTask}
           onConfirm={handleRejectConfirm}
           onClose={() => setRejectingTask(null)}
         />
+        </ModalPortal>
       )}
     </div>
   );

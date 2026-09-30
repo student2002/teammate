@@ -82,12 +82,12 @@ export default function WorkspaceSettingsPage() {
       {/* 页头 */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-            <Settings className="w-5 h-5 text-indigo-400" />
+          <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <Settings className="w-5 h-5 text-accent-fg" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">{t("title")}</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h1 className="text-xl font-bold text-fg">{t("title")}</h1>
+            <p className="text-xs text-fg-subtle mt-0.5">
               {t("subtitle")}
             </p>
           </div>
@@ -96,8 +96,8 @@ export default function WorkspaceSettingsPage() {
           onClick={handleSave}
           className={`flex items-center px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
             saved
-              ? "bg-emerald-600 text-white"
-              : "bg-blue-600 hover:bg-blue-500 text-white"
+              ? "bg-success-strong text-fg"
+              : "bg-primary-strong hover:bg-primary text-fg"
           }`}
         >
           <Save className="w-4 h-4 mr-2" />
@@ -106,69 +106,69 @@ export default function WorkspaceSettingsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger-fg">
           {error}
         </div>
       )}
 
       {/* 工作区信息 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6">
+      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-5">
-          <Building2 className="w-4 h-4 text-blue-400" />
-          <h2 className="text-sm font-bold text-white">{t("info")}</h2>
+          <Building2 className="w-4 h-4 text-primary-fg" />
+          <h2 className="text-sm font-bold text-fg">{t("info")}</h2>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("name")}
             </label>
             <input
               type="text"
               value={draft.name}
               onChange={(e) => handleChange("name", e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
               placeholder={t("namePlaceholder")}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("description")}
             </label>
             <textarea
               value={draft.description}
               onChange={(e) => handleChange("description", e.target.value)}
               rows={3}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary resize-none"
               placeholder={t("descriptionPlaceholder")}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("issuePrefix")}
             </label>
             <input
               type="text"
               value={draft.issuePrefix}
               readOnly
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg-subtle cursor-not-allowed"
             />
-            <p className="text-[10px] text-slate-500 mt-1.5">
+            <p className="text-[10px] text-fg-faint mt-1.5">
               {t("issuePrefixHint")}
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("owner")}
             </label>
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5">
-              <User className="w-4 h-4 text-slate-500 shrink-0" />
-              <span className="text-slate-300">{ownerName || t("loadingOwner")}</span>
+            <div className="flex items-center gap-2 bg-bg border border-line-strong rounded-lg px-4 py-2.5">
+              <User className="w-4 h-4 text-fg-faint shrink-0" />
+              <span className="text-fg-muted">{ownerName || t("loadingOwner")}</span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1.5">
+            <p className="text-[10px] text-fg-faint mt-1.5">
               {t("ownerHint")}
             </p>
           </div>
@@ -176,18 +176,18 @@ export default function WorkspaceSettingsPage() {
       </div>
 
       {/* 危险操作区 */}
-      <div className="bg-red-500/5 backdrop-blur-sm border border-red-500/20 rounded-xl p-5">
+      <div className="bg-danger/5 backdrop-blur-sm border border-danger/20 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle className="w-4 h-4 text-red-400" />
-          <h2 className="text-sm font-bold text-red-400">{t("dangerZone")}</h2>
+          <AlertTriangle className="w-4 h-4 text-danger-fg" />
+          <h2 className="text-sm font-bold text-danger-fg">{t("dangerZone")}</h2>
         </div>
-        <p className="text-xs text-slate-400 mb-4">
+        <p className="text-xs text-fg-subtle mb-4">
           {t("dangerHint")}
         </p>
-        <div className="flex items-center justify-between p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg">
+        <div className="flex items-center justify-between p-4 bg-surface-2/30 border border-line-strong/50 rounded-lg">
           <div>
-            <div className="text-sm font-medium text-white">{t("deleteWorkspace")}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5">
+            <div className="text-sm font-medium text-fg">{t("deleteWorkspace")}</div>
+            <div className="text-[10px] text-fg-faint mt-0.5">
               {(workspace as { is_default?: boolean })?.is_default
                 ? t("defaultCannotDelete")
                 : t("deleteWorkspaceHint")}
@@ -219,10 +219,10 @@ export default function WorkspaceSettingsPage() {
               disabled={deleting || !!(workspace as { is_default?: boolean })?.is_default}
               className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 (workspace as { is_default?: boolean })?.is_default
-                  ? "bg-red-600/10 text-red-400/30 cursor-not-allowed"
+                  ? "bg-danger-strong/10 text-danger-fg/30 cursor-not-allowed"
                   : deleting
-                    ? "bg-red-600/20 text-red-400/50 cursor-wait"
-                    : "bg-red-600/20 text-red-400 hover:bg-red-600/30 hover:text-red-300"
+                    ? "bg-danger-strong/20 text-danger-fg/50 cursor-wait"
+                    : "bg-danger-strong/20 text-danger-fg hover:bg-danger-strong/30 hover:text-danger-fg"
               }`}
             >
               <Trash2 className="w-4 h-4 mr-2" />

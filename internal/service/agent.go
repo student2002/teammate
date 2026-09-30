@@ -103,7 +103,12 @@ func (s *AgentService) Get(ctx context.Context, id uuid.UUID) (types.Agent, erro
 //   - []types.Agent: agent list
 //   - error: possible errors (database query failure)
 func (s *AgentService) List(ctx context.Context, workspaceID uuid.UUID) ([]types.Agent, error) {
-	return s.svc.Store.ListAgents(ctx, workspaceID)
+	return s.svc.Store.ListAgentsWithStats(ctx, workspaceID)
+}
+
+// ListExecutions returns the agent's recent execution sessions with task context.
+func (s *AgentService) ListExecutions(ctx context.Context, agentID uuid.UUID, limit int32) ([]types.AgentExecution, error) {
+	return s.svc.Store.ListAgentExecutions(ctx, agentID, limit)
 }
 
 // Update updates the agent's basic info (name, instructions, model, etc.).

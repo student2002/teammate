@@ -37,8 +37,8 @@ func (reg *routeRegistrar) registerPublicRoutes(r chi.Router) {
 
 	r.Post("/api/webhooks/github", handler.NewWebhookHandler(svc).GitHub)
 
-	r.With(svcmw.AuthMiddleware(s.Config.JWTSecret, reg.apiKeyAuth, s.Redis), svcmw.WorkspaceAuthMiddlewareWithChecker(reg.wsChk)).
-		Get("/api/workspaces/{workspaceId}/runtimes/{runtimeId}/events", handler.NewSSEHandler(svc, s.Hub).Stream)
+	r.With(svcmw.AuthMiddleware(s.Config.JWTSecret, reg.apiKeyAuth, s.Redis, reg.effectiveAgentChk), svcmw.WorkspaceAuthMiddlewareWithChecker(reg.wsChk)).
+		Get("/api/workspaces/{workspaceId}/daemons/{id}/events", handler.NewSSEHandler(svc, s.Hub).Stream)
 
 	r.Get("/api/tasks/{taskId}/logs/ws", handler.NewWSHandler(s.Gateway, s.Config.JWTSecret, svc, reg.wsChk).HandleWS)
 }

@@ -21,7 +21,7 @@ func TestClaimSelfReview(t *testing.T) {
 	// Setup: project, workflow with code + review nodes
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)

@@ -293,41 +293,16 @@ func (s *AuthService) Whoami(ctx context.Context, ownerType string, ownerID uuid
 	return s.svc.Store.GetWhoamiInfo(ctx, ownerType, ownerID)
 }
 
-// UpdateRuntimePublicKey updates the runtime's public key, used for SSH authentication in Git operations.
-//
-// Parameters:
-//   - ctx: request context
-//   - runtimeID: runtime ID
-//   - publicKey: the new SSH public key
-//
-// Returns:
-//   - error: possible errors (runtime does not exist, database update failure)
-func (s *AuthService) UpdateRuntimePublicKey(ctx context.Context, runtimeID uuid.UUID, publicKey string) error {
-	return s.svc.Store.UpdateRuntimePublicKey(ctx, runtimeID, publicKey)
-}
-
-// GetRuntimeByID retrieves runtime info by ID.
-//
-// Parameters:
-//   - ctx: request context
-//   - runtimeID: runtime ID
-//
-// Returns:
-//   - types.Runtime: runtime info
-//   - error: possible errors (runtime does not exist)
-func (s *AuthService) GetRuntimeByID(ctx context.Context, runtimeID uuid.UUID) (types.Runtime, error) {
-	return s.svc.Store.GetRuntimeByID(ctx, runtimeID)
-}
-
-// GetLatestPublicKeyForAgent retrieves the latest public key for the specified agent.
+// GetLatestPublicKeyForAgent retrieves the public key of the daemon reporting
+// the specified agent (git credentials are encrypted with the daemon's key).
 //
 // Parameters:
 //   - ctx: request context
 //   - agentID: agent ID
 //
 // Returns:
-//   - string: the latest SSH public key
-//   - error: possible errors (agent does not exist, no public key record)
+//   - string: the RSA public key
+//   - error: possible errors (unmanaged agent, daemon not registered, no key)
 func (s *AuthService) GetLatestPublicKeyForAgent(ctx context.Context, agentID uuid.UUID) (string, error) {
 	return s.svc.Store.GetLatestPublicKeyForAgent(ctx, agentID)
 }
@@ -455,7 +430,7 @@ func (s *AuthService) AuthenticateAPIKey(ctx context.Context, tokenStr string) (
 		return APIKeyAuthResult{}, errors.New(errMsg)
 	}
 
-	if row.OwnerType != "member" && row.OwnerType != "agent" {
+	if row.OwnerType != "member" && row.OwnerType != "agent" && row.OwnerType != "daemon" {
 		return APIKeyAuthResult{}, errors.New("invalid owner_type in token record")
 	}
 

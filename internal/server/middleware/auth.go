@@ -45,19 +45,28 @@ const (
 // After the authentication middleware succeeds, this struct is injected into the request context
 // for use by subsequent middleware and handlers.
 type AuthClaims struct {
-	// UserID is the unique identifier of the user (a human member or an AI agent).
+	// UserID is the unique identifier of the user (a human member, an AI agent, or a daemon).
 	UserID uuid.UUID
-	// UserType identifies the user type: "member" (human member) or "agent" (AI agent).
-	UserType string // "member" or "agent"
+	// UserType identifies the user type: "member" (human member), "agent" (AI agent), or "daemon" (agentd instance).
+	UserType string // "member", "agent" or "daemon"
 	// WorkspaceID and Role can only be derived by the resource-scoped middleware based on database state.
 	// The JWT/API key parsing phase must NOT populate these two fields.
 	WorkspaceID uuid.UUID
 	Role        string
+	// ActingDaemonID is set when a daemon authenticates and acts on behalf of one of its
+	// reported agents via the X-Agent-ID header; the claims are rewritten to that agent's
+	// identity and this field records the originating daemon for auditing.
+	ActingDaemonID uuid.UUID
 }
 
 // APIKeyAuthenticator validates an API key or session token and returns the authenticated identity.
 // The server layer injects this function so the middleware does not depend on database access.
 type APIKeyAuthenticator func(ctx context.Context, apiKey string) (AuthClaims, error)
+
+// EffectiveAgentResolverFunc resolves the effective agent identity for a daemon-authenticated
+// request carrying X-Agent-ID. It must verify that the daemon owns the agent (the agent was
+// reported by this daemon) and return claims identifying that agent.
+type EffectiveAgentResolverFunc func(ctx context.Context, daemonID, agentID uuid.UUID) (AuthClaims, error)
 
 // WorkspaceContext holds the real-time authorization information of the authenticated identity
 // for the current resource's workspace. It can only be injected by the workspace/project/task/node
@@ -104,20 +113,25 @@ func withWorkspaceContext(ctx context.Context, ws WorkspaceContext) context.Cont
 //  1. Check the X-API-Key header first and authenticate with the API Key
 //  2. If no API Key, fall back to the Bearer Token in the Authorization header
 //  3. For member-type JWTs, additionally check whether the jti has been revoked in Redis (login/logout mechanism)
-//  4. On authentication failure return 401 Unauthorized
+//  4. For daemon-type identities carrying an X-Agent-ID header, resolve and rewrite the
+//     claims to the effective agent reported by that daemon (on-behalf-of access)
+//  5. On authentication failure return 401 Unauthorized
 //
 // Security notes:
 //   - When the Redis revocation check fails the request is allowed through, so a Redis outage does not disable all authentication
 //   - API Key uses a dual mechanism: SHA-256 hash index + bcrypt slow-hash verification
+//   - The daemon→agent ownership check is the single authorization point for on-behalf-of access:
+//     downstream agent checks operate on the rewritten identity unchanged
 //
 // Parameters:
 //   - jwtSecret: JWT signing secret, used to verify the Bearer Token signature
 //   - authenticateAPIKey: API Key lookup and verification function
 //   - rdb: Redis client for JWT jti revocation checks (may be nil, in which case revocation checks are skipped)
+//   - resolveEffectiveAgent: resolves X-Agent-ID for daemon identities (may be nil, denying on-behalf-of access)
 //
 // Returns:
 //   - func(http.Handler) http.Handler: chi middleware function
-func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rdb *redis.Client) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rdb *redis.Client, resolveEffectiveAgent EffectiveAgentResolverFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var claims AuthClaims
@@ -153,6 +167,29 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 				} else if exists == 0 {
 					response.Unauthorized(w, "token revoked or invalidated")
 					return
+				}
+			}
+
+			// Daemon identities may act on behalf of one of their reported agents via X-Agent-ID.
+			// On success the claims are rewritten to the agent's identity, so all downstream
+			// agent-oriented checks apply to the effective agent as-is.
+			if claims.UserType == "daemon" {
+				if agentHeader := r.Header.Get("X-Agent-ID"); agentHeader != "" {
+					if resolveEffectiveAgent == nil {
+						response.Forbidden(w, "daemon on-behalf-of access not configured")
+						return
+					}
+					agentID, parseErr := uuid.Parse(agentHeader)
+					if parseErr != nil {
+						response.Forbidden(w, "invalid X-Agent-ID header")
+						return
+					}
+					effective, resolveErr := resolveEffectiveAgent(r.Context(), claims.UserID, agentID)
+					if resolveErr != nil {
+						response.Forbidden(w, "daemon cannot act as this agent")
+						return
+					}
+					claims = effective
 				}
 			}
 

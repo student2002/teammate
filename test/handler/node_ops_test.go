@@ -31,7 +31,7 @@ func TestContinuationRightConflict(t *testing.T) {
 	agent2ID, agent2Token := createAgent(t, client, ts.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 	addAgentToProject(t, q, projID, agent1ID)
 	addAgentToProject(t, q, projID, agent2ID)
 	grantAgentAllTaskPermissions(t, client, ts.URL, wsID, agent1ID, token)
@@ -89,7 +89,7 @@ func TestContinuationRightHoldsForDeploy(t *testing.T) {
 	tplID := tplResult["template"].(map[string]interface{})["id"].(string)
 
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 	addAgentToProject(t, q, projID, agent1ID)
 	addAgentToProject(t, q, projID, agent2ID)
 	grantAgentAllTaskPermissions(t, client, ts.URL, wsID, agent1ID, token)
@@ -141,7 +141,7 @@ func TestSkipClaim(t *testing.T) {
 	tplID := tplResult["template"].(map[string]interface{})["id"].(string)
 
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 	addAgentToProject(t, q, projID, agent1ID)
 	addAgentToProject(t, q, projID, agent2ID)
 	grantAgentAllTaskPermissions(t, client, ts.URL, wsID, agent1ID, token)

@@ -17,8 +17,8 @@ import {
 const PAGE_SIZE = 20;
 
 const typeCls: Record<TaskType, string> = {
-  story: "bg-blue-500/20 text-blue-400",
-  bug: "bg-red-500/20 text-red-400",
+  story: "bg-primary/20 text-primary-fg",
+  bug: "bg-danger/20 text-danger-fg",
   task: "bg-green-500/20 text-green-400",
 };
 
@@ -29,7 +29,7 @@ const typeKeys: Record<TaskType, string> = {
 };
 
 const priorityCls: Record<Priority, string> = {
-  urgent: "bg-red-500/20 text-red-400",
+  urgent: "bg-danger/20 text-danger-fg",
   high: "bg-orange-500/20 text-orange-400",
   medium: "bg-yellow-500/20 text-yellow-400",
   low: "bg-gray-500/20 text-gray-400",
@@ -101,15 +101,15 @@ export default function HistoryPage() {
   return (
     <div className="flex flex-col h-full">
       {/* 顶部标题栏 */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-line/80">
         <div className="flex items-center gap-3">
-          <FileCheck className="w-5 h-5 text-slate-400" />
-          <h1 className="text-lg font-semibold text-white">{t("title")}</h1>
+          <FileCheck className="w-5 h-5 text-fg-subtle" />
+          <h1 className="text-lg font-semibold text-fg">{t("title")}</h1>
           {projectName && (
-            <span className="text-sm text-slate-400">— {projectName}</span>
+            <span className="text-sm text-fg-subtle">— {projectName}</span>
           )}
           {historyTotal > 0 && (
-            <span className="text-xs text-slate-500">{t("total", { count: historyTotal })}</span>
+            <span className="text-xs text-fg-faint">{t("total", { count: historyTotal })}</span>
           )}
         </div>
 
@@ -119,7 +119,7 @@ export default function HistoryPage() {
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="h-8 px-2 text-sm rounded-md border border-slate-700 bg-slate-800 text-slate-200"
+              className="h-8 px-2 text-sm rounded-md border border-line-strong bg-surface-2 text-fg-muted"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -131,14 +131,14 @@ export default function HistoryPage() {
 
           {/* 搜索框 */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t("searchPlaceholder")}
-              className="h-8 pl-8 pr-3 text-sm rounded-md border border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500 w-56 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="h-8 pl-8 pr-3 text-sm rounded-md border border-line-strong bg-surface-2 text-fg-muted placeholder:text-fg-faint w-56 focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </div>
@@ -148,10 +148,10 @@ export default function HistoryPage() {
       <div className="flex-1 overflow-y-auto">
         {historyLoading && historyTasks.length === 0 ? (
           <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-fg-faint" />
           </div>
         ) : historyTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+          <div className="flex flex-col items-center justify-center h-64 text-fg-faint">
             <FileCheck className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm">{t("empty")}</p>
             <div className="mt-8 w-full max-w-2xl text-left">
@@ -161,7 +161,7 @@ export default function HistoryPage() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400">
+              <tr className="border-b border-line text-fg-subtle">
                 <th className="text-left px-6 py-3 font-medium w-20">{t("thRef")}</th>
                 <th className="text-left px-4 py-3 font-medium">{t("thTitle")}</th>
                 <th className="text-left px-4 py-3 font-medium w-20">{t("thType")}</th>
@@ -181,8 +181,8 @@ export default function HistoryPage() {
 
       {/* 分页 */}
       {historyTotal > PAGE_SIZE && (
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800/80">
-          <span className="text-xs text-slate-500">
+        <div className="flex items-center justify-between px-6 py-3 border-t border-line/80">
+          <span className="text-xs text-fg-faint">
             {t("pageRange", {
               from: (historyPage - 1) * PAGE_SIZE + 1,
               to: Math.min(historyPage * PAGE_SIZE, historyTotal),
@@ -193,7 +193,7 @@ export default function HistoryPage() {
             <button
               onClick={() => goToPage(historyPage - 1)}
               disabled={historyPage <= 1}
-              className="p-1.5 rounded-md hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-md hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -201,7 +201,7 @@ export default function HistoryPage() {
             <button
               onClick={() => goToPage(historyPage + 1)}
               disabled={historyPage >= totalPages}
-              className="p-1.5 rounded-md hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-md hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -228,12 +228,12 @@ function TaskRow({ task }: { task: MappedTask }) {
   const completedAt = lastCompletedNode?.completed_at;
 
   return (
-    <tr className="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
-      <td className="px-6 py-3 font-mono text-xs text-slate-400">
+    <tr className="border-b border-line/60 hover:bg-surface-2/40 transition-colors">
+      <td className="px-6 py-3 font-mono text-xs text-fg-subtle">
         {task.taskRef}
       </td>
       <td className="px-4 py-3">
-        <span className="text-slate-200">{task.title}</span>
+        <span className="text-fg-muted">{task.title}</span>
       </td>
       <td className="px-4 py-3">
         <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${tbCls}`}>
@@ -245,10 +245,10 @@ function TaskRow({ task }: { task: MappedTask }) {
           {t(`priority.${task.priority}`)}
         </span>
       </td>
-      <td className="px-4 py-3 text-slate-400 text-xs">
+      <td className="px-4 py-3 text-fg-subtle text-xs">
         {task.workflowName || "-"}
       </td>
-      <td className="px-4 py-3 text-slate-400 text-xs">
+      <td className="px-4 py-3 text-fg-subtle text-xs">
         {completedAt ? new Date(completedAt).toLocaleString(locale) : "-"}
       </td>
     </tr>
@@ -275,7 +275,7 @@ function renderPageNumbers(
 
   return pages.map((p, i) =>
     typeof p === "string" ? (
-      <span key={`e${i}`} className="px-1 text-xs text-slate-500">
+      <span key={`e${i}`} className="px-1 text-xs text-fg-faint">
         ...
       </span>
     ) : (
@@ -284,8 +284,8 @@ function renderPageNumbers(
         onClick={() => goToPage(p)}
         className={`min-w-[28px] h-7 rounded text-xs ${
           p === current
-            ? "bg-blue-600 text-white"
-            : "hover:bg-slate-800 text-slate-400"
+            ? "bg-primary-strong text-fg"
+            : "hover:bg-surface-2 text-fg-subtle"
         }`}
       >
         {p}

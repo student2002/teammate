@@ -1,4 +1,5 @@
-// scheduler.go provides the runtime state queries required by the scheduler (e.g. marking stale runtimes, offline fallback for nodes).
+// scheduler.go provides the daemon/agent state queries required by the scheduler
+// (e.g. marking stale daemons offline, offline fallback for nodes).
 package store
 
 import (
@@ -18,20 +19,27 @@ type OfflineFallbackNode struct {
 	TaskID int32
 }
 
-func (s *Store) MarkStaleRuntimes(ctx context.Context, cutoff time.Time) ([]types.Runtime, error) {
-	rows, err := s.q.MarkStaleRuntimes(ctx, sql.NullTime{Time: cutoff, Valid: true})
+// MarkStaleDaemons marks daemons whose heartbeat is stale as offline and returns
+// their ids so the scheduler can bring their reported agents offline as well.
+func (s *Store) MarkStaleDaemons(ctx context.Context) ([]uuid.UUID, error) {
+	ids, err := s.q.MarkStaleDaemons(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("mark stale runtimes: %w", err)
+		return nil, fmt.Errorf("mark stale daemons: %w", err)
 	}
-	return ToDomainRuntimeSlice(rows)
+	return ids, nil
 }
 
-func (s *Store) UpdateOfflineAgents(ctx context.Context) ([]types.Agent, error) {
-	rows, err := s.q.UpdateOfflineAgents(ctx)
+// SetAgentsStatusByDaemon sets the status of all agents reported by a daemon
+// (used when a daemon goes offline or comes back online).
+func (s *Store) SetAgentsStatusByDaemon(ctx context.Context, daemonID uuid.UUID, status string) error {
+	_, err := s.q.SetAgentsStatusByDaemon(ctx, db.SetAgentsStatusByDaemonParams{
+		DaemonID: uuid.NullUUID{UUID: daemonID, Valid: true},
+		Status:   db.AgentStatus(status),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("update offline agents: %w", err)
+		return fmt.Errorf("set agents status by daemon: %w", err)
 	}
-	return ToDomainAgentSlice(rows)
+	return nil
 }
 
 func (s *Store) ClearExpiredReservations(ctx context.Context, cutoff time.Time) ([]types.TaskNode, error) {
@@ -250,10 +258,22 @@ func (s *Store) GetCompletedTasksOlderThan(ctx context.Context, cutoff time.Time
 	return out, nil
 }
 
-func (s *Store) GetRuntimeByAgent(ctx context.Context, agentID uuid.UUID) (types.Runtime, error) {
-	runtime, err := s.q.GetRuntimeByAgent(ctx, agentID)
+// GetDaemonIDByAgent resolves the daemon that reports the agent
+// (empty id and false when the agent is unmanaged).
+func (s *Store) GetDaemonIDByAgent(ctx context.Context, agentID uuid.UUID) (uuid.UUID, bool, error) {
+	id, err := s.q.GetDaemonIDByAgent(ctx, agentID)
 	if err != nil {
-		return types.Runtime{}, fmt.Errorf("get runtime by agent: %w", err)
+		return uuid.Nil, false, nil
 	}
-	return ToDomainRuntime(runtime)
+	return id, true, nil
+}
+
+// GetOnlineDaemonIDByAgent resolves the daemon when it is online
+// (false when the daemon is offline or the agent is unmanaged).
+func (s *Store) GetOnlineDaemonIDByAgent(ctx context.Context, agentID uuid.UUID) (uuid.UUID, bool, error) {
+	id, err := s.q.GetOnlineDaemonIDByAgent(ctx, agentID)
+	if err != nil {
+		return uuid.Nil, false, nil
+	}
+	return id, true, nil
 }

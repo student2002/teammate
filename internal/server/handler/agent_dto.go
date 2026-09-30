@@ -24,41 +24,67 @@ type createAgentRequest struct {
 
 // agentResponse agent response DTO, converts sql.NullXxx fields to plain types for JSON serialization.
 type agentResponse struct {
-	ID           uuid.UUID       `json:"id"`
-	WorkspaceID  uuid.UUID       `json:"workspace_id"`
-	Name         string          `json:"name"`
-	Provider     string          `json:"provider"`
-	Instructions string          `json:"instructions"`
-	Model        string          `json:"model"`
-	Status       string          `json:"status"`
-	CustomEnv    json.RawMessage `json:"custom_env,omitempty"`
-	ExtraArgs    []string        `json:"extra_args"`
-	GitName      string          `json:"git_name"`
-	GitEmail     string          `json:"git_email"`
-	InputTokens  int64           `json:"input_tokens"`
-	OutputTokens int64           `json:"output_tokens"`
-	CreatedAt    interface{}     `json:"created_at"`
-	UpdatedAt    interface{}     `json:"updated_at"`
+	ID              uuid.UUID             `json:"id"`
+	WorkspaceID     uuid.UUID             `json:"workspace_id"`
+	Name            string                `json:"name"`
+	Provider        string                `json:"provider"`
+	Instructions    string                `json:"instructions"`
+	Model           string                `json:"model"`
+	Status          string                `json:"status"`
+	CustomEnv       json.RawMessage       `json:"custom_env,omitempty"`
+	ExtraArgs       []string              `json:"extra_args"`
+	GitName         string                `json:"git_name"`
+	GitEmail        string                `json:"git_email"`
+	InputTokens     int64                 `json:"input_tokens"`
+	OutputTokens    int64                 `json:"output_tokens"`
+	CompletedNodes  int                   `json:"completed_nodes"`
+	CurrentTask     *agentCurrentTaskInfo `json:"current_task,omitempty"`
+	DaemonID        string                `json:"daemon_id,omitempty"`
+	DaemonName      string                `json:"daemon_name,omitempty"`
+	Origin          string                `json:"origin,omitempty"`
+	CreatedAt       interface{}           `json:"created_at"`
+	UpdatedAt       interface{}           `json:"updated_at"`
+}
+
+// agentCurrentTaskInfo describes the agent's currently active task node.
+type agentCurrentTaskInfo struct {
+	TaskID   int32  `json:"task_id"`
+	Title    string `json:"title"`
+	NodeName string `json:"node_name"`
 }
 
 // agentToResponse converts an agent database record to an API response, without custom_env.
 // Only used by read-only callers (viewer/agent) to prevent secret leakage.
 func agentToResponse(a types.Agent) agentResponse {
-	return agentResponse{
-		ID:           uuid.MustParse(a.ID),
-		WorkspaceID:  uuid.MustParse(a.WorkspaceID),
-		Name:         a.Name,
-		Provider:     a.Provider,
-		Instructions: a.Instructions,
-		Model:        a.Model,
-		Status:       a.Status,
-		CustomEnv:    nil, // defaults to nil; set by the caller based on permissions
-		ExtraArgs:    a.ExtraArgs,
-		GitName:      a.GitName,
-		GitEmail:     a.GitEmail,
-		CreatedAt:    a.CreatedAt,
-		UpdatedAt:    a.UpdatedAt,
+	resp := agentResponse{
+		ID:             uuid.MustParse(a.ID),
+		WorkspaceID:    uuid.MustParse(a.WorkspaceID),
+		Name:           a.Name,
+		Provider:       a.Provider,
+		Instructions:   a.Instructions,
+		Model:          a.Model,
+		Status:         a.Status,
+		CustomEnv:      nil, // defaults to nil; set by the caller based on permissions
+		ExtraArgs:      a.ExtraArgs,
+		GitName:        a.GitName,
+		GitEmail:       a.GitEmail,
+		InputTokens:    a.TotalInputTokens,
+		OutputTokens:   a.TotalOutputTokens,
+		CompletedNodes: a.TotalCompleted,
+		DaemonID:       a.DaemonID,
+		DaemonName:     a.DaemonName,
+		Origin:         a.Origin,
+		CreatedAt:      a.CreatedAt,
+		UpdatedAt:      a.UpdatedAt,
 	}
+	if a.CurrentTask != nil {
+		resp.CurrentTask = &agentCurrentTaskInfo{
+			TaskID:   a.CurrentTask.TaskID,
+			Title:    a.CurrentTask.Title,
+			NodeName: a.CurrentTask.NodeName,
+		}
+	}
+	return resp
 }
 
 // agentToResponseWithEnv converts an agent database record to an API response, including custom_env.

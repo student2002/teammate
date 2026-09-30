@@ -37,7 +37,7 @@ func setupAuthSessionTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 
 	// Authenticated routes — uses a different path prefix to avoid chi Mount conflicts
 	r.Group(func(r chi.Router) {
-		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
+		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil, nil))
 		r.Get("/api/auth/whoami", authHandler.Whoami)
 	})
 

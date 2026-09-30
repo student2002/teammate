@@ -649,6 +649,10 @@ func FromDomainCreateTokenUsageParams(p types.CreateTokenUsageParams) (db.Create
 
 // ToDomainAgent converts db.Agent to types.Agent.
 func ToDomainAgent(a db.Agent) (types.Agent, error) {
+	daemonID := ""
+	if a.DaemonID.Valid {
+		daemonID = a.DaemonID.UUID.String()
+	}
 	return types.Agent{
 		ID:            a.ID.String(),
 		WorkspaceID:   a.WorkspaceID.String(),
@@ -661,9 +665,33 @@ func ToDomainAgent(a db.Agent) (types.Agent, error) {
 		ExtraArgs:     a.ExtraArgs,
 		GitName:       a.GitName.String,
 		GitEmail:      a.GitEmail.String,
+		DaemonID:      daemonID,
+		Origin:        a.Origin,
 		CreatedAt:     a.CreatedAt,
 		UpdatedAt:     a.UpdatedAt,
 	}, nil
+}
+
+// ToDomainDaemon converts a generated daemon row to the domain Daemon type.
+func ToDomainDaemon(d db.Daemon) types.Daemon {
+	var lastHeartbeat *time.Time
+	if d.LastHeartbeat.Valid {
+		t := d.LastHeartbeat.Time
+		lastHeartbeat = &t
+	}
+	return types.Daemon{
+		ID:            d.ID,
+		WorkspaceID:   d.WorkspaceID,
+		Name:          d.Name,
+		DeviceName:    d.DeviceName,
+		Version:       d.Version,
+		Status:        string(d.Status),
+		PublicKey:     d.PublicKey,
+		Providers:     d.Providers,
+		LastHeartbeat: lastHeartbeat,
+		CreatedAt:     d.CreatedAt,
+		UpdatedAt:     d.UpdatedAt,
+	}
 }
 
 // toDomainAgentSlice converts []db.Agent to []types.Agent.
@@ -794,7 +822,6 @@ func ToDomainProject(p db.Project) (types.Project, error) {
 		Status:            string(p.Status),
 		RepoURL:           p.RepoUrl.String,
 		Context:           p.Context.String,
-		DefaultWorkflowID: nullUUIDToString(p.DefaultWorkflowID),
 		CreatedAt:         p.CreatedAt,
 		UpdatedAt:         p.UpdatedAt,
 	}, nil
@@ -836,16 +863,14 @@ func FromDomainUpdateProjectParams(p types.UpdateProjectParams) (db.UpdateProjec
 	if err != nil {
 		return db.UpdateProjectParams{}, fmt.Errorf("convert project id: %w", err)
 	}
-	wfID := stringToNullUUID(p.DefaultWorkflowID)
 	return db.UpdateProjectParams{
-		ID:                id,
-		Name:              p.Name,
-		Description:       ptrToNullString(p.Description),
-		Status:            db.ProjectStatus(p.Status),
-		RepoUrl:           ptrToNullString(p.RepoURL),
-		Context:           ptrToNullString(p.Context),
-		DefaultWorkflowID: wfID,
-		MaxReviewCycles:   ptrToNullInt32(p.MaxReviewCycles),
+		ID:              id,
+		Name:            p.Name,
+		Description:     ptrToNullString(p.Description),
+		Status:          db.ProjectStatus(p.Status),
+		RepoUrl:         ptrToNullString(p.RepoURL),
+		Context:         ptrToNullString(p.Context),
+		MaxReviewCycles: ptrToNullInt32(p.MaxReviewCycles),
 	}, nil
 }
 
@@ -1386,59 +1411,6 @@ func FromDomainUpdateSkillParams(p types.UpdateSkillParams) (db.UpdateSkillParam
 		Description:    ptrToNullString(p.Description),
 		Category:       ptrToNullString(p.Category),
 		PromptTemplate: ptrToNullString(p.PromptTemplate),
-	}, nil
-}
-
-// ===========================================================================
-// Runtime domain
-// ===========================================================================
-
-// ToDomainRuntime converts db.Runtime to types.Runtime.
-func ToDomainRuntime(r db.Runtime) (types.Runtime, error) {
-	return types.Runtime{
-		ID:               r.ID.String(),
-		AgentID:          r.AgentID.String(),
-		DaemonID:         r.DaemonID,
-		Provider:         string(r.Provider),
-		Version:          r.Version.String,
-		Status:           string(r.Status),
-		SessionTokenHash: r.SessionTokenHash.String,
-		SessionExpiresAt: nullTimeToPtr(r.SessionExpiresAt),
-		PublicKey:        r.PublicKey.String,
-		LastHeartbeat:    nullTimeToPtr(r.LastHeartbeat),
-		CreatedAt:        r.CreatedAt,
-		UpdatedAt:        r.UpdatedAt,
-	}, nil
-}
-
-// ToDomainRuntimeSlice converts []db.Runtime to []types.Runtime.
-func ToDomainRuntimeSlice(rs []db.Runtime) ([]types.Runtime, error) {
-	out := make([]types.Runtime, 0, len(rs))
-	for _, r := range rs {
-		d, err := ToDomainRuntime(r)
-		if err != nil {
-			return nil, fmt.Errorf("convert runtime: %w", err)
-		}
-		out = append(out, d)
-	}
-	return out, nil
-}
-
-// FromDomainCreateRuntimeParams converts types.CreateRuntimeParams to db.CreateRuntimeParams.
-func FromDomainCreateRuntimeParams(p types.CreateRuntimeParams) (db.CreateRuntimeParams, error) {
-	agentID, err := stringToUUID(p.AgentID)
-	if err != nil {
-		return db.CreateRuntimeParams{}, fmt.Errorf("convert agent id: %w", err)
-	}
-	return db.CreateRuntimeParams{
-		AgentID:          agentID,
-		DaemonID:         p.DaemonID,
-		Provider:         db.AgentProvider(p.Provider),
-		Version:          ptrToNullString(p.Version),
-		Status:           db.RuntimeStatus(p.Status),
-		SessionTokenHash: ptrToNullString(p.SessionTokenHash),
-		SessionExpiresAt: ptrToNullTime(p.SessionExpiresAt),
-		PublicKey:        ptrToNullString(p.PublicKey),
 	}, nil
 }
 
@@ -2048,7 +2020,7 @@ func ToDomainExecutionSession(s db.ExecutionSession) (types.ExecutionSession, er
 	_ = taskNodeID
 	return types.ExecutionSession{
 		ID:              s.ID.String(),
-		RuntimeID:       nullUUIDToString(s.RuntimeID),
+		DaemonID:        nullUUIDToString(s.DaemonID),
 		AgentID:         nullUUIDToString(s.AgentID),
 		TaskNodeID:      s.TaskNodeID.String(),
 		Attempt:         s.Attempt,
@@ -2072,7 +2044,7 @@ func FromDomainCreateExecutionSessionParams(p types.CreateExecutionSessionParams
 		return db.CreateExecutionSessionParams{}, fmt.Errorf("convert task_node_id: %w", err)
 	}
 	return db.CreateExecutionSessionParams{
-		RuntimeID:       stringToNullUUID(p.RuntimeID),
+		DaemonID:        stringToNullUUID(p.DaemonID),
 		AgentID:         stringToNullUUID(p.AgentID),
 		TaskNodeID:      taskNodeID,
 		Attempt:         p.Attempt,

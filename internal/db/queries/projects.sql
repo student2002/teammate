@@ -23,7 +23,6 @@ ORDER BY p.created_at DESC;
 -- name: UpdateProject :one
 UPDATE projects
 SET name = $2, description = $3, status = $4, repo_url = $5, context = $6,
-    default_workflow_id = COALESCE(sqlc.narg('default_workflow_id'), default_workflow_id),
     max_review_cycles = COALESCE(sqlc.narg('max_review_cycles'), max_review_cycles),
     updated_at = now()
 WHERE id = $1

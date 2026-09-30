@@ -88,7 +88,6 @@ func TestAutoStartFirstNode(t *testing.T) {
 		Status:            dbgen.ProjectStatusActive,
 		RepoUrl:           sql.NullString{},
 		Context:           sql.NullString{},
-		DefaultWorkflowID: uuid.NullUUID{UUID: autoTpl.ID, Valid: true},
 		MaxReviewCycles:   sql.NullInt32{Int32: 3, Valid: true},
 	})
 
@@ -112,7 +111,7 @@ func TestAutoStartFirstNode(t *testing.T) {
 
 	projID2 := createProject(t, client, srv.URL, wsID2, token2)
 	tplID2 := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID2, token2)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID2, projID2, tplID2, token2)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token2}, wsID2, projID2)
 
 	// Create task → verify first node is 'pending'
 	taskID2, nodes2 := createTask(t, client, srv.URL, projID2, tplID2, token2)

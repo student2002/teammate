@@ -41,21 +41,38 @@ func (h *recordingHub) recorded() ([]string, []types.SSEEvent) {
 	return subs, events
 }
 
-// createOnlineRuntime creates an online runtime for the specified agent and returns its ID.
-// publishToAgent delivers at runtime granularity (SSE connections subscribe by runtimeId),
-// and only sends to online runtimes (offline ones are discarded), so tests need to simulate the online scenario.
-func createOnlineRuntime(t *testing.T, svc *service.Service, agentID string) string {
+// onlineDaemonKey creates an online daemon reporting the specified agent and
+// returns the daemon's SSE subscriber key ("daemon:{id}").
+// publishToAgent delivers on the daemon stream; only online daemons receive
+// events, so tests need to simulate the online scenario.
+func onlineDaemonKey(t *testing.T, svc *service.Service, agentID string) string {
 	t.Helper()
-	rt, err := svc.Store.CreateRuntime(context.Background(), types.CreateRuntimeParams{
-		AgentID:  agentID,
-		DaemonID: "test-daemon-" + uuid.NewString()[:8],
-		Provider: "claude",
-		Status:   "online",
-	})
+
+	agent, err := svc.Store.GetAgent(context.Background(), uuid.MustParse(agentID))
 	if err != nil {
-		t.Fatalf("create runtime: %v", err)
+		t.Fatalf("get agent: %v", err)
 	}
-	return rt.ID
+	wsID, err := uuid.Parse(agent.WorkspaceID)
+	if err != nil {
+		t.Fatalf("parse agent workspace: %v", err)
+	}
+
+	daemon, _, err := svc.Store.CreateDaemon(context.Background(), wsID, "test-daemon-"+uuid.NewString()[:8])
+	if err != nil {
+		t.Fatalf("create daemon: %v", err)
+	}
+	if err := svc.Store.RegisterDaemonAgent(context.Background(), wsID, daemon.ID, uuid.MustParse(agentID)); err != nil {
+		t.Fatalf("bind agent to daemon: %v", err)
+	}
+	// simulate a registration heartbeat so the daemon counts as online
+	if _, err := svc.Store.UpdateDaemonRegistration(context.Background(), daemon.ID, types.DaemonRegistrationUpdate{
+		DeviceName: "test-box",
+		Version:    "1.0.0",
+		Providers:  json.RawMessage(`[]`),
+	}); err != nil {
+		t.Fatalf("set daemon online: %v", err)
+	}
+	return "daemon:" + daemon.ID.String()
 }
 
 // TestCommentCreate_PublishesMentionTrigger verifies that when a comment is created,
@@ -64,7 +81,7 @@ func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	hub := &recordingHub{}
 	svc.Hub = hub
-	agent1RuntimeID := createOnlineRuntime(t, svc, env.agent1ID)
+	agent1DaemonKey := onlineDaemonKey(t, svc, env.agent1ID)
 
 	commentSvc := service.NewCommentService(svc)
 	_, err := commentSvc.Create(context.Background(), types.CreateCommentParams{
@@ -86,8 +103,8 @@ func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 	if events[0].Event != types.EventMentionTrigger {
 		t.Fatalf("expected event %q, got %q", types.EventMentionTrigger, events[0].Event)
 	}
-	if len(subs) != 1 || subs[0] != agent1RuntimeID {
-		t.Fatalf("expected publish to agent %s runtime %s, got %v", env.agent1ID, agent1RuntimeID, subs)
+	if len(subs) != 1 || subs[0] != agent1DaemonKey {
+		t.Fatalf("expected publish to agent %s runtime %s, got %v", env.agent1ID, agent1DaemonKey, subs)
 	}
 
 	var payload map[string]interface{}
@@ -108,8 +125,8 @@ func TestCommentUpdate_PublishesOnlyNewMentions(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	hub := &recordingHub{}
 	svc.Hub = hub
-	agent1RuntimeID := createOnlineRuntime(t, svc, env.agent1ID)
-	agent2RuntimeID := createOnlineRuntime(t, svc, env.agent2ID)
+	agent1DaemonKey := onlineDaemonKey(t, svc, env.agent1ID)
+	agent2DaemonKey := onlineDaemonKey(t, svc, env.agent2ID)
 
 	commentSvc := service.NewCommentService(svc)
 	comment, err := commentSvc.Create(context.Background(), types.CreateCommentParams{
@@ -141,8 +158,8 @@ func TestCommentUpdate_PublishesOnlyNewMentions(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events total (1 create + 1 update), got %d", len(events))
 	}
-	if len(subs) != 2 || subs[0] != agent1RuntimeID || subs[1] != agent2RuntimeID {
-		t.Fatalf("expected first event to agent1 runtime %s, second to agent2 runtime %s, got %v",
-			agent1RuntimeID, agent2RuntimeID, subs)
+	if len(subs) != 2 || subs[0] != agent1DaemonKey || subs[1] != agent2DaemonKey {
+		t.Fatalf("expected first event to agent1 daemon %s, second to agent2 daemon %s, got %v",
+			agent1DaemonKey, agent2DaemonKey, subs)
 	}
 }

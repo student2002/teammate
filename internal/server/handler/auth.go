@@ -200,8 +200,8 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// validate Token format
-	if !strings.HasPrefix(req.APIToken, "tm_") {
+	// validate Token format (agent tm_ and daemon td_ tokens are both exchangeable)
+	if !strings.HasPrefix(req.APIToken, "tm_") && !strings.HasPrefix(req.APIToken, "td_") {
 		response.BadRequest(w, "invalid api_token format")
 		return
 	}

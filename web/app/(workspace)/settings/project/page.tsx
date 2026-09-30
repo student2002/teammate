@@ -1,5 +1,5 @@
 "use client";
-// 项目设置页：默认模板、成员/审查员管理及 Git 凭据配置。
+// 项目设置页：成员/审查员管理及 Git 凭据配置。
 
 import { useState, useEffect } from "react";
 import {
@@ -10,14 +10,14 @@ import {
   X,
   Shield,
   Users,
-  FileOutput,
   Trash2,
   GitBranch,
   Eye,
   EyeOff,
   Pencil,
 } from "lucide-react";
-import { useTranslations, useFormatter } from "next-intl";
+import ModalPortal from "@/lib/ModalPortal";
+import { useTranslations } from "next-intl";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import type { GitCredential } from "@/lib/types";
@@ -29,11 +29,9 @@ interface LocalProject {
   name: string;
   members: string[];
   reviewers: string[];
-  defaultTemplateId: string;
 }
 
 interface ProjectDraft {
-  defaultTemplateId: string;
   members: string[];
   reviewers: string[];
 }
@@ -60,7 +58,6 @@ export default function ProjectSettingsPage() {
     v: LocalProject[] | ((prev: LocalProject[]) => LocalProject[])
   ) => void;
   const agents = useAppStore((s) => s.agents);
-  const templates = useAppStore((s) => s.templates);
   const workspaceId = useAppStore((s) => s.currentWorkspaceId) || "";
 
   const [selectedProjectId, setSelectedProjectId] = useState(
@@ -97,7 +94,6 @@ export default function ProjectSettingsPage() {
   useEffect(() => {
     if (currentProject) {
       setDraft({
-        defaultTemplateId: currentProject.defaultTemplateId,
         members: [...(currentProject.members || [])],
         reviewers: [...(currentProject.reviewers || [])],
       });
@@ -184,7 +180,6 @@ export default function ProjectSettingsPage() {
         name: created.name || newProjectName.trim(),
         members: [],
         reviewers: [],
-        defaultTemplateId: "",
       };
       setProjects((prev: LocalProject[]) => [...prev, newProject]);
       setSelectedProjectId(created.id);
@@ -220,15 +215,15 @@ export default function ProjectSettingsPage() {
 
   if (!currentProject && projects.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-        <Settings className="w-12 h-12 mb-4 text-slate-600" />
-        <p className="text-lg font-medium text-slate-300 mb-2">{t("noProjects")}</p>
-        <p className="text-sm text-slate-500 mb-6">
+      <div className="h-full flex flex-col items-center justify-center text-fg-subtle p-8">
+        <Settings className="w-12 h-12 mb-4 text-fg-faint" />
+        <p className="text-lg font-medium text-fg-muted mb-2">{t("noProjects")}</p>
+        <p className="text-sm text-fg-faint mb-6">
           {t("noProjectsDesc")}
         </p>
         <button
           onClick={() => setShowNewProject(true)}
-          className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors-fast btn-press"
+          className="flex items-center px-5 py-2.5 bg-primary-strong hover:bg-primary text-fg rounded-xl text-sm font-medium transition-colors-fast btn-press"
         >
           <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
         </button>
@@ -237,77 +232,78 @@ export default function ProjectSettingsPage() {
         </div>
 
         {showNewProject && (
+          <ModalPortal>
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
             onClick={() => setShowNewProject(false)}
           >
             <div
-              className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
+              className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-5 border-b border-slate-800">
-                <h3 className="text-lg font-bold text-white">{t("newProject")}</h3>
+              <div className="p-5 border-b border-line">
+                <h3 className="text-lg font-bold text-fg">{t("newProject")}</h3>
               </div>
               <div className="p-5 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    {t("projectName")} <span className="text-red-400">*</span>
+                  <label className="block text-sm font-medium text-fg-muted mb-2">
+                    {t("projectName")} <span className="text-danger-fg">*</span>
                   </label>
                   <input
                     value={newProjectName}
                     onChange={(e) => setNewProjectName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                     placeholder={t("projectNamePlaceholder")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    {t("repoUrl")} <span className="text-red-400">*</span>
+                  <label className="block text-sm font-medium text-fg-muted mb-2">
+                    {t("repoUrl")} <span className="text-danger-fg">*</span>
                   </label>
                   <input
                     value={newRepoUrl}
                     onChange={(e) => setNewRepoUrl(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                     placeholder="https://github.com/org/repo.git"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-fg-muted mb-2">
                     {t("gitUsername")}
                   </label>
                   <input
                     value={newGitUsername}
                     onChange={(e) => setNewGitUsername(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                     placeholder="git"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Personal Access Token <span className="text-red-400">*</span>
+                  <label className="block text-sm font-medium text-fg-muted mb-2">
+                    Personal Access Token <span className="text-danger-fg">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showNewPat ? "text" : "password"}
                       value={newPat}
                       onChange={(e) => setNewPat(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 pr-10"
+                      className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
                       placeholder="ghp_xxxxxxxxxxxx"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPat((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
                     >
                       {showNewPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
               </div>
-              <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+              <div className="p-5 border-t border-line flex justify-end gap-3">
                 <button
                   onClick={() => setShowNewProject(false)}
-                  className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
+                  className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
                 >
                   {t("cancel")}
                 </button>
@@ -319,13 +315,14 @@ export default function ProjectSettingsPage() {
                     !newPat.trim() ||
                     creatingProject
                   }
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+                  className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
                 >
                   {creatingProject ? t("creating") : t("create")}
                 </button>
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
     );
@@ -347,12 +344,7 @@ export default function ProjectSettingsPage() {
     try {
       setError(null);
 
-      // 1. 通过 updateProject 保存默认模板
-      await api.updateProject(workspaceId, selectedProjectId, {
-        defaultTemplateId: draft.defaultTemplateId,
-      });
-
-      // 2. 对比并同步项目成员
+      // 1. 对比并同步项目成员
       const currentAgentMemberIds = serverMembers
         .filter((m) => m.member_type === "agent" && m.agent_id)
         .map((m) => m.agent_id!);
@@ -374,7 +366,7 @@ export default function ProjectSettingsPage() {
         await api.removeProjectMember(workspaceId, selectedProjectId, recordId);
       }
 
-      // 3. 对比并同步项目审查员
+      // 2. 对比并同步项目审查员
       const currentAgentReviewerIds = serverReviewers
         .filter((r) => r.member_type === "agent" && r.agent_id)
         .map((r) => r.agent_id!);
@@ -395,13 +387,13 @@ export default function ProjectSettingsPage() {
         await api.removeProjectReviewer(workspaceId, selectedProjectId, recordId);
       }
 
-      // 4. 从后端重新加载成员以同步状态
+      // 3. 从后端重新加载成员以同步状态
       await loadProjectMembers(selectedProjectId);
 
       setProjects((prev: LocalProject[]) =>
         prev.map((p) =>
           p.id === selectedProjectId
-            ? { ...p, defaultTemplateId: draft.defaultTemplateId, members: draft.members, reviewers: draft.reviewers }
+            ? { ...p, members: draft.members, reviewers: draft.reviewers }
             : p
         )
       );
@@ -506,12 +498,12 @@ export default function ProjectSettingsPage() {
       {/* 页头 */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-            <Settings className="w-5 h-5 text-indigo-400" />
+          <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <Settings className="w-5 h-5 text-accent-fg" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">{t("title")}</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h1 className="text-xl font-bold text-fg">{t("title")}</h1>
+            <p className="text-xs text-fg-subtle mt-0.5">
               {t("subtitle")}
             </p>
           </div>
@@ -519,7 +511,7 @@ export default function ProjectSettingsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowNewProject(true)}
-            className="flex items-center px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors-fast border border-slate-700"
+            className="flex items-center px-4 py-2.5 bg-surface-2 hover:bg-surface-3 text-fg-muted hover:text-fg rounded-xl text-sm font-medium transition-colors-fast border border-line-strong"
           >
             <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
           </button>
@@ -527,8 +519,8 @@ export default function ProjectSettingsPage() {
             onClick={handleSave}
             className={`flex items-center px-5 py-2.5 rounded-xl text-sm font-medium transition-colors-normal btn-press ${
               saved
-                ? "bg-emerald-600 text-white"
-                : "bg-blue-600 hover:bg-blue-500 text-white"
+                ? "bg-success-strong text-fg"
+                : "bg-primary-strong hover:bg-primary text-fg"
             }`}
           >
             <Save className="w-4 h-4 mr-2" />
@@ -538,21 +530,21 @@ export default function ProjectSettingsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+        <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger-fg">
           {error}
         </div>
       )}
 
       {/* 项目选择器 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label className="block text-sm font-medium text-fg-muted">
             {t("currentProject")}
           </label>
           {currentProject && (
             <button
               onClick={() => setDeletingProject(selectedProjectId)}
-              className="flex items-center px-2.5 py-1 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors-fast"
+              className="flex items-center px-2.5 py-1 text-[10px] text-danger-fg hover:text-danger-fg hover:bg-danger/10 rounded-lg transition-colors-fast"
             >
               <Trash2 className="w-3 h-3 mr-1" /> {t("deleteProject")}
             </button>
@@ -561,7 +553,7 @@ export default function ProjectSettingsPage() {
         <select
           value={selectedProjectId}
           onChange={(e) => setSelectedProjectId(e.target.value)}
-          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+          className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -571,64 +563,35 @@ export default function ProjectSettingsPage() {
         </select>
       </div>
 
-      {/* 默认模板 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
-        <div className="flex items-center gap-2 mb-4">
-          <FileOutput className="w-4 h-4 text-blue-400" />
-          <h2 className="text-sm font-bold text-white">{t("defaultTemplate")}</h2>
-        </div>
-        <select
-          value={draft.defaultTemplateId}
-          onChange={(e) => {
-            setDraft((prev) =>
-              prev
-                ? { ...prev, defaultTemplateId: e.target.value }
-                : prev
-            );
-            setSaved(false);
-          }}
-          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-        >
-          {templates.map((tpl) => (
-            <option key={tpl.id} value={tpl.id}>
-              {tpl.name} {tpl.isBuiltIn ? t("builtIn") : ""}
-            </option>
-          ))}
-        </select>
-        <p className="text-[10px] text-slate-500 mt-2">
-          {t("defaultTemplateHint")}
-        </p>
-      </div>
-
       {/* 成员管理 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-bold text-white">{t("members")}</h2>
-            <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
+            <Users className="w-4 h-4 text-success-fg" />
+            <h2 className="text-sm font-bold text-fg">{t("members")}</h2>
+            <span className="text-[10px] text-fg-faint bg-surface-3/50 px-2 py-0.5 rounded-full">
               {draft.members.length} / {agents.length}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={addAllMembers}
-              className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
+              className="flex items-center px-2.5 py-1 text-[10px] bg-surface-3/50 hover:bg-surface-3 text-fg-muted rounded-lg transition-colors-fast"
             >
               <Plus className="w-3 h-3 mr-1" /> {t("addAll")}
             </button>
             <button
               onClick={clearMembers}
-              className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
+              className="flex items-center px-2.5 py-1 text-[10px] bg-surface-3/50 hover:bg-surface-3 text-fg-muted rounded-lg transition-colors-fast"
             >
               <X className="w-3 h-3 mr-1" /> {t("clear")}
             </button>
           </div>
         </div>
         {loadingMembers ? (
-          <p className="text-sm text-slate-500 py-4 text-center">{t("loadingMembers")}</p>
+          <p className="text-sm text-fg-faint py-4 text-center">{t("loadingMembers")}</p>
         ) : agents.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center">
+          <p className="text-sm text-fg-faint py-4 text-center">
             {t("noAgentsHint")}
           </p>
         ) : (
@@ -640,26 +603,26 @@ export default function ProjectSettingsPage() {
                   key={agent.id}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors-normal ${
                     isMember
-                      ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
-                      : "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50"
+                      ? "bg-success/5 border-success/30 hover:bg-success/10"
+                      : "bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={isMember}
                     onChange={() => toggleMember(agent.id)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500/30"
+                    className="w-4 h-4 rounded border-line-strong bg-bg text-success focus:ring-success/30"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white font-medium">
+                      <span className="text-sm text-fg font-medium">
                         {agent.name}
                       </span>
-                      <span className="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] text-fg-faint bg-surface-3/50 px-1.5 py-0.5 rounded">
                         {agent.tool}
                       </span>
                       {isMember && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success-fg border border-success/20">
                           {t("joined")}
                         </span>
                       )}
@@ -668,10 +631,10 @@ export default function ProjectSettingsPage() {
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full ${
                       agent.status === "online" || agent.status === "busy"
-                        ? "bg-emerald-500/10 text-emerald-400"
+                        ? "bg-success/10 text-success-fg"
                         : agent.status === "paused"
-                          ? "bg-amber-500/10 text-amber-400"
-                          : "bg-slate-500/10 text-slate-400"
+                          ? "bg-warning/10 text-warning-fg"
+                          : "bg-fg-faint/10 text-fg-subtle"
                     }`}
                   >
                     {agent.status === "online"
@@ -690,20 +653,20 @@ export default function ProjectSettingsPage() {
       </div>
 
       {/* 审查员 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-4 h-4 text-amber-400" />
-          <h2 className="text-sm font-bold text-white">{t("reviewers")}</h2>
-          <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
+          <Shield className="w-4 h-4 text-warning-fg" />
+          <h2 className="text-sm font-bold text-fg">{t("reviewers")}</h2>
+          <span className="text-[10px] text-fg-faint bg-surface-3/50 px-2 py-0.5 rounded-full">
             {t("reviewerCount", { count: draft.reviewers.length })}
           </span>
         </div>
 
         {/* 自我审查警告条 */}
         {selfReviewAgents.length > 0 && (
-          <div className="flex items-start gap-2 mb-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs text-amber-300">
+          <div className="flex items-start gap-2 mb-4 p-3 bg-warning/5 border border-warning/20 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-warning-fg shrink-0 mt-0.5" />
+            <div className="text-xs text-warning-fg">
               <span className="font-medium">{t("selfReviewRisk")}</span>
               {t("selfReviewDesc")}{" "}
               {selfReviewAgents
@@ -715,7 +678,7 @@ export default function ProjectSettingsPage() {
         )}
 
         {agents.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center">
+          <p className="text-sm text-fg-faint py-4 text-center">
             {t("noAgentsHint")}
           </p>
         ) : (
@@ -729,23 +692,23 @@ export default function ProjectSettingsPage() {
                   key={agent.id}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors-normal ${
                     isReviewer
-                      ? "bg-amber-500/5 border-amber-500/30 hover:bg-amber-500/10"
-                      : "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50"
+                      ? "bg-warning/5 border-warning/30 hover:bg-warning/10"
+                      : "bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={isReviewer}
                     onChange={() => toggleReviewer(agent.id)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-950 text-amber-500 focus:ring-amber-500/30"
+                    className="w-4 h-4 rounded border-line-strong bg-bg text-warning focus:ring-warning/30"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white font-medium">
+                      <span className="text-sm text-fg font-medium">
                         {agent.name}
                       </span>
                       {isSelfReview && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-warning/10 text-warning-fg border border-warning/20">
                           <AlertTriangle className="w-3 h-3" />
                           {t("selfReviewBadge")}
                         </span>
@@ -760,53 +723,53 @@ export default function ProjectSettingsPage() {
       </div>
 
       {/* Git 凭据 */}
-      <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-700/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-violet-400" />
-            <h2 className="text-sm font-bold text-white">{t("gitCredentials")}</h2>
-            <span className="text-[10px] text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
+            <h2 className="text-sm font-bold text-fg">{t("gitCredentials")}</h2>
+            <span className="text-[10px] text-fg-faint bg-surface-3/50 px-2 py-0.5 rounded-full">
               {t("credCount", { count: gitCredentials.length })}
             </span>
           </div>
           <button
             onClick={openNewCred}
-            className="flex items-center px-2.5 py-1 text-[10px] bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors-fast"
+            className="flex items-center px-2.5 py-1 text-[10px] bg-surface-3/50 hover:bg-surface-3 text-fg-muted rounded-lg transition-colors-fast"
           >
             <Plus className="w-3 h-3 mr-1" /> {t("addCredential")}
           </button>
         </div>
-        <p className="text-[10px] text-slate-500 mb-4">
+        <p className="text-[10px] text-fg-faint mb-4">
           {t("gitCredHint")}
         </p>
 
         {loadingCreds ? (
-          <p className="text-sm text-slate-500 py-4 text-center">{t("loading")}</p>
+          <p className="text-sm text-fg-faint py-4 text-center">{t("loading")}</p>
         ) : gitCredentials.length === 0 ? (
           <div className="py-8 text-center">
-            <GitBranch className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-            <p className="text-sm text-slate-400 mb-1">{t("noRepoYet")}</p>
-            <p className="text-xs text-slate-500">{t("noRepoDesc")}</p>
+            <GitBranch className="w-8 h-8 text-fg-faint mx-auto mb-3" />
+            <p className="text-sm text-fg-subtle mb-1">{t("noRepoYet")}</p>
+            <p className="text-xs text-fg-faint">{t("noRepoDesc")}</p>
           </div>
         ) : (
           <div className="space-y-2">
             {gitCredentials.map((cred) => (
               <div
                 key={cred.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50 transition-colors-normal group card-hover"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50 transition-colors-normal group card-hover"
               >
                 <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
                   <GitBranch className="w-4 h-4 text-violet-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white font-medium truncate">
+                  <div className="text-sm text-fg font-medium truncate">
                     {cred.repo_url}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] text-fg-faint">
                       {t("credUser", { username: cred.username })}
                     </span>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] text-fg-faint">
                       {t("credToken", { token: cred.pat_masked || "****" })}
                     </span>
                   </div>
@@ -814,7 +777,7 @@ export default function ProjectSettingsPage() {
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => openEditCred(cred)}
-                    className="p-1.5 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors-fast"
+                    className="p-1.5 rounded-lg hover:bg-surface-3/50 text-fg-subtle hover:text-fg transition-colors-fast"
                     title={t("edit")}
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -828,77 +791,78 @@ export default function ProjectSettingsPage() {
 
       {/* 新建项目弹窗 */}
       {showNewProject && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
           onClick={() => setShowNewProject(false)}
         >
           <div
-            className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
+            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white">{t("newProject")}</h3>
+            <div className="p-5 border-b border-line">
+              <h3 className="text-lg font-bold text-fg">{t("newProject")}</h3>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t("projectName")} <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  {t("projectName")} <span className="text-danger-fg">*</span>
                 </label>
                 <input
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                   placeholder={t("projectNamePlaceholder")}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t("repoUrl")} <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  {t("repoUrl")} <span className="text-danger-fg">*</span>
                 </label>
                 <input
                   value={newRepoUrl}
                   onChange={(e) => setNewRepoUrl(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                   placeholder="https://github.com/org/repo.git"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-2">
                   {t("gitUsername")}
                 </label>
                 <input
                   value={newGitUsername}
                   onChange={(e) => setNewGitUsername(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                   placeholder="git"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Personal Access Token <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  Personal Access Token <span className="text-danger-fg">*</span>
                 </label>
                 <div className="relative">
                   <input
                     type={showNewPat ? "text" : "password"}
                     value={newPat}
                     onChange={(e) => setNewPat(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 pr-10"
+                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
                     placeholder="ghp_xxxxxxxxxxxx"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPat((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
                   >
                     {showNewPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
             </div>
-            <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+            <div className="p-5 border-t border-line flex justify-end gap-3">
               <button
                 onClick={() => setShowNewProject(false)}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
               >
                 {t("cancel")}
               </button>
@@ -910,104 +874,108 @@ export default function ProjectSettingsPage() {
                   !newPat.trim() ||
                   creatingProject
                 }
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+                className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
               >
                 {creatingProject ? t("creating") : t("create")}
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* 删除确认弹窗 */}
       {deletingProject && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
           onClick={() => setDeletingProject(null)}
         >
           <div
-            className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[400px] shadow-2xl"
+            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[400px] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-400" /> {t("deleteConfirmTitle")}
+            <div className="p-5 border-b border-line">
+              <h3 className="text-lg font-bold text-fg flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-danger-fg" /> {t("deleteConfirmTitle")}
               </h3>
             </div>
             <div className="p-5">
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-fg-muted">
                 {t("deleteConfirmPrefix")}{" "}
-                <span className="text-white font-medium">
+                <span className="text-fg font-medium">
                   {projects.find((p) => p.id === deletingProject)?.name}
                 </span>{" "}
                 {t("deleteConfirmSuffix")}
               </p>
             </div>
-            <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+            <div className="p-5 border-t border-line flex justify-end gap-3">
               <button
                 onClick={() => setDeletingProject(null)}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
               >
                 {t("cancel")}
               </button>
               <button
                 onClick={handleDeleteProject}
-                className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium btn-press"
+                className="px-5 py-2 bg-danger-strong hover:bg-danger text-fg rounded-lg text-sm font-medium btn-press"
               >
                 {t("delete")}
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Git 凭据弹窗 */}
       {showCredModal && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
           onClick={() => setShowCredModal(false)}
         >
           <div
-            className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
+            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white">
+            <div className="p-5 border-b border-line">
+              <h3 className="text-lg font-bold text-fg">
                 {editingCred ? t("editCredTitle") : t("addCredTitle")}
               </h3>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t("credRepoUrl")} <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  {t("credRepoUrl")} <span className="text-danger-fg">*</span>
                 </label>
                 <input
                   value={credForm.repo_url}
                   onChange={(e) => setCredForm((f) => ({ ...f, repo_url: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                   placeholder="https://github.com/org/repo.git"
                 />
-                <p className="text-[10px] text-slate-500 mt-1.5">
+                <p className="text-[10px] text-fg-faint mt-1.5">
                   {t("credRepoHint")}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-2">
                   {t("credUsername")}
                 </label>
                 <input
                   value={credForm.username}
                   onChange={(e) => setCredForm((f) => ({ ...f, username: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
                   placeholder="git"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-2">
                   {t("patLabel")}{" "}
-                  {!editingCred && <span className="text-red-400">*</span>}
+                  {!editingCred && <span className="text-danger-fg">*</span>}
                   {editingCred && (
-                    <span className="text-slate-500 font-normal">{t("patUnchanged")}</span>
+                    <span className="text-fg-faint font-normal">{t("patUnchanged")}</span>
                   )}
                 </label>
                 <div className="relative">
@@ -1015,39 +983,40 @@ export default function ProjectSettingsPage() {
                     type={showPat ? "text" : "password"}
                     value={credForm.pat}
                     onChange={(e) => setCredForm((f) => ({ ...f, pat: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 pr-10"
+                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
                     placeholder={editingCred ? t("patNewPlaceholder") : "ghp_xxxxxxxxxxxx"}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPat((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
                   >
                     {showPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1.5">
+                <p className="text-[10px] text-fg-faint mt-1.5">
                   {t("patHelp")}
                 </p>
               </div>
             </div>
-            <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+            <div className="p-5 border-t border-line flex justify-end gap-3">
               <button
                 onClick={() => setShowCredModal(false)}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
               >
                 {t("cancel")}
               </button>
               <button
                 onClick={handleSaveCred}
                 disabled={!credForm.repo_url.trim() || savingCred || (!editingCred && !credForm.pat)}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+                className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
               >
                 {savingCred ? t("saving") : editingCred ? t("update") : t("add")}
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

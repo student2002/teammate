@@ -6,7 +6,7 @@ Compact guide for AI coding agents. For full architecture details see `CLAUDE.md
 
 ```bash
 docker compose -f product/docker-compose.yml up -d    # PG on :15432, Redis on :16379
-source product/use-env.sh                              # MUST source — generates JWT secret + encryption key on first run
+TEAMMATE_DEV=true go run ./cmd/teammate-server         # dev mode: auto dev JWT secret & encryption key
 PGPASSWORD=teammate psql -h localhost -p 15432 -U postgres -d postgres -c "CREATE DATABASE teammate;"
 go run ./cmd/teammate-server migrate ./internal/db/migrations
 ```
@@ -42,9 +42,8 @@ CI 会执行 `sqlc generate` 后检查 `git diff --exit-code internal/db/generat
 pnpm install && pnpm dev    # dev server on :3000, proxies /api/* → localhost:8080
 pnpm lint                   # ESLint (next lint)
 pnpm build                  # production build
+pnpm test                   # vitest (lib/**/*.test.ts)
 ```
-
-No `pnpm test` — there are no frontend tests.
 
 ## Tests
 
@@ -84,7 +83,7 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - **Dual access control:** humans use role levels (owner>admin>member>viewer), agents use permission strings from `agent_permissions` table. Unified via `RequireAccessWithChecker`
 - **Env var prefixes:** `TEAMS_` for server config, `TEAMMATE_` for agent config
 - **Frontend path alias:** `@/*` maps to `web/*` root (not `web/src/*`)
-- **Tailwind v4 CSS-first config:** no `tailwind.config.js`; theming via `data-theme` attribute + CSS custom properties
+- **Tailwind v4 CSS-first config:** no `tailwind.config.js`; theming via `data-theme` attribute + CSS custom properties. Themes are pluggable modules under `web/lib/themes/<id>/` (metadata in `index.ts`, vars in `theme.css`); register a new theme by adding one line to `web/lib/themes/registry.ts`. Components use semantic utilities (`bg-surface`, `text-fg-muted`, `border-line`, `bg-primary/15`) — never raw palette classes
 - **Frontend UI language:** all labels and user-facing text are zh-CN
 - **Frontend state:** single flat Zustand store in `web/lib/store.ts` — no slices, no React Query/SWR
 - **Frontend API:** plain `fetch` wrapper in `web/lib/api.ts`; auth via Bearer token from localStorage
@@ -92,6 +91,25 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - **注释只描述当前行为，不记录修改历史**——注释里禁止出现"修改记录 / change log / Added in vX / renamed from Y / 旧逻辑是 Z"之类的历史叙述；代码演进历史由 git 提交记录承载，注释只写代码现在是什么、为什么这样设计
 - **不做向后兼容**——接口/函数/配置破坏性变更时直接替换并同步更新所有调用方，禁止保留旧接口别名、deprecated 包装层、兼容分支或双路径共存；不写 `deprecated` 标记后长期保留旧实现
 - **Doc-code consistency:** reviewing docs against code — every inconsistency found must be recorded in `docs/实现与设计偏差记录.md` (format follows its header; fix the doc if it's the wrong side)
+
+## 双平台支持规则（Windows / Linux）
+
+本项目须在 Windows 与 Linux 上均可开发、构建、运行。以下规则来自实测踩坑，新增代码/脚本/文档必须遵守：
+
+**路径与脚本**
+- Go 中路径拼接一律用 `filepath` 系列（`filepath.Join` / `filepath.Dir` 等），禁止手拼 `"/"` 或 `"\\"`；作为 CLI 参数传递的路径（如 migrate 的 `./internal/db/migrations`）保持相对路径形式，两平台通用
+- 文档与命令示例按 bash 语法书写，路径用正斜杠；Git Bash 下 `"D:\dir\"` 的尾部反斜杠会转义引号导致命令断裂
+
+**端口与连接**
+- 前端 dev 脚本固定 :3000（`web/package.json` 的 `dev`）；Windows 上 3000 可能被 Hyper-V 保留（报 `EACCES`）或与 Gitea 冲突，此时改用 `pnpm dev --port 4000`
+- 数据库/Redis 连接串主机名写 `127.0.0.1` 而非 `localhost`——Windows 上 `localhost` 可能优先解析到 IPv6 `::1`，若该端口被 WSL 端口转发（`wslrelay.exe`）占用，会连到错误实例（15432/16379 均已踩坑）
+
+**构建**
+- `pnpm build`（web/）因 `output: "standalone"` 在 Windows 需要符号链接特权，trace 复制阶段报 `EPERM: symlink`；**生产产物构建统一在 Linux/CI 执行**（或开启 Windows 开发者模式）。Windows 本地构建以 `Compiled successfully` + 17/17 页面生成为通过标准，末尾的 trace EPERM 警告可忽略
+- Go 二进制与 `sqlc`、`go test` 在两平台均可本地执行，无平台限制
+
+**行尾**
+- 仓库文件按 LF 提交；Windows 开发机 `core.autocrlf=true` 出现 "LF will be replaced by CRLF" 提示属正常现象，勿通过改文件行尾来消除提示，避免整文件无意义 diff
 
 ## sqlc type overrides
 

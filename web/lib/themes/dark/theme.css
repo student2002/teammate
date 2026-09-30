@@ -1,0 +1,31 @@
+/* 暗色主题（默认）：:root 与 [data-theme="dark"] 同值，未设置属性时兜底生效 */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #020617;
+  --surface: #0f172a;
+  --surface-2: #1e293b;
+  --surface-3: #334155;
+  --line: #1e293b;
+  --line-strong: #334155;
+  --fg: #ffffff;
+  --fg-muted: #cbd5e1;
+  --fg-subtle: #94a3b8;
+  --fg-faint: #64748b;
+  --primary: #3b82f6;
+  --primary-strong: #2563eb;
+  --primary-fg: #60a5fa;
+  --accent: #6366f1;
+  --accent-strong: #4f46e5;
+  --accent-fg: #818cf8;
+  --success: #10b981;
+  --success-strong: #059669;
+  --success-fg: #34d399;
+  --warning: #f59e0b;
+  --warning-strong: #d97706;
+  --warning-fg: #fbbf24;
+  --danger: #ef4444;
+  --danger-strong: #dc2626;
+  --danger-fg: #f87171;
+  --shadow: rgba(0, 0, 0, 0.2);
+}

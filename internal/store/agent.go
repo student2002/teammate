@@ -9,16 +9,11 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/teammate/server/internal/types"
 )
@@ -50,28 +45,9 @@ func (s *Store) CreateAgent(ctx context.Context, params types.CreateAgentParams)
 		return types.Agent{}, "", fmt.Errorf("create agent: %w", err)
 	}
 
-	// Generate the API Token: tm_{agent_id_short}_{40_hex_chars}
-	apiToken, err := GenerateAgentToken(agent.ID)
+	apiToken, err := s.issueOwnerToken(ctx, "agent", "tm", agent.ID)
 	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("generate agent token: %w", err)
-	}
-
-	// Store the bcrypt hash in auth_tokens (secure, salted, slow hash)
-	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(apiToken), bcrypt.DefaultCost)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("hash agent token: %w", err)
-	}
-
-	// Compute a SHA-256 lookup hash for efficient database queries
-	shaHash := sha256.Sum256([]byte(apiToken))
-	lookupHash := hex.EncodeToString(shaHash[:])
-
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO auth_tokens (token_hash, lookup_hash, token_type, owner_type, owner_id, expires_at)
-		 VALUES ($1, $2, 'api', 'agent', $3, NOW() + INTERVAL '365 days')`,
-		string(bcryptHash), lookupHash, agent.ID)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("insert auth token: %w", err)
+		return types.Agent{}, "", fmt.Errorf("issue agent token: %w", err)
 	}
 
 	domainAgent, err := ToDomainAgent(agent)
@@ -164,7 +140,7 @@ func (s *Store) UpdateAgentStatus(ctx context.Context, params types.UpdateAgentS
 // Steps:
 //  1. Clean up polymorphic references in the auth_tokens table (owner_type='agent')
 //  2. Delete the Agent record, triggering ON DELETE CASCADE to automatically clean up:
-//     - CASCADE deletes: runtimes, memories, project_members, agent_skills, etc.
+//     - CASCADE deletes: memories, project_members, agent_skills, etc.
 //     - SET NULL preserves: references in execution_sessions and task_nodes
 //
 // Parameters:
@@ -199,12 +175,12 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("clear task_nodes agent refs: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE execution_sessions SET runtime_id = NULL, agent_id = NULL
-		 WHERE runtime_id = $1 OR agent_id = $1`, id); err != nil {
+		`UPDATE execution_sessions SET daemon_id = NULL, agent_id = NULL
+		 WHERE agent_id = $1`, id); err != nil {
 		return fmt.Errorf("clear execution_sessions refs: %w", err)
 	}
 
-	// After deleting the Agent, remaining CASCADEs (cascading cleanup is preserved): runtimes, memories, project_members,
+	// After deleting the Agent, remaining CASCADEs (cascading cleanup is preserved): memories, project_members,
 	//   project_reviewers, agent_skills, agent_mcp_servers, agent_permissions, token_usage,
 	//   node_transitions (cascaded via task_nodes -> tasks)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, id); err != nil {
@@ -376,12 +352,7 @@ func (s *Store) UpdateSkill(ctx context.Context, params types.UpdateSkillParams)
 //   - string: the generated API Token plaintext
 //   - error: error returned when random number generation fails
 func GenerateAgentToken(agentID uuid.UUID) (string, error) {
-	idShort := strings.ReplaceAll(agentID.String(), "-", "")[:8]
-	randomBytes := make([]byte, 20)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("tm_%s_%s", idShort, hex.EncodeToString(randomBytes)), nil
+	return generateTokenPlaintext("tm", agentID)
 }
 
 // RevokeAgentTokens revokes all API Tokens of the specified Agent (deletes the related records in the auth_tokens table).
@@ -393,12 +364,7 @@ func GenerateAgentToken(agentID uuid.UUID) (string, error) {
 // Returns:
 //   - error: error returned when revocation fails
 func (s *Store) RevokeAgentTokens(ctx context.Context, agentID uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM auth_tokens WHERE owner_type = 'agent' AND owner_id = $1`, agentID)
-	if err != nil {
-		return fmt.Errorf("revoke agent tokens: %w", err)
-	}
-	return nil
+	return s.revokeOwnerTokens(ctx, "agent", agentID)
 }
 
 // RotateAgentToken revokes all old Tokens and generates a new Token.
@@ -418,35 +384,14 @@ func (s *Store) RevokeAgentTokens(ctx context.Context, agentID uuid.UUID) error 
 //   - string: the newly generated API Token plaintext
 //   - error: error returned when rotation fails
 func (s *Store) RotateAgentToken(ctx context.Context, agentID uuid.UUID) (string, error) {
-	// Revoke all existing Tokens
-	if err := s.RevokeAgentTokens(ctx, agentID); err != nil {
+	// Revoke all existing tokens before issuing the replacement
+	if err := s.revokeOwnerTokens(ctx, "agent", agentID); err != nil {
 		return "", err
 	}
-
-	// Generate a new API Token
-	apiToken, err := GenerateAgentToken(agentID)
+	apiToken, err := s.issueOwnerToken(ctx, "agent", "tm", agentID)
 	if err != nil {
-		return "", fmt.Errorf("generate agent token: %w", err)
+		return "", fmt.Errorf("issue agent token: %w", err)
 	}
-
-	// Store the new Token's hash (bcrypt)
-	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(apiToken), bcrypt.DefaultCost)
-	if err != nil {
-		return "", fmt.Errorf("hash agent token: %w", err)
-	}
-
-	// Compute a SHA-256 lookup hash for efficient database queries
-	shaHash := sha256.Sum256([]byte(apiToken))
-	lookupHash := hex.EncodeToString(shaHash[:])
-
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO auth_tokens (token_hash, lookup_hash, token_type, owner_type, owner_id, expires_at)
-		 VALUES ($1, $2, 'api', 'agent', $3, NOW() + INTERVAL '365 days')`,
-		string(bcryptHash), lookupHash, agentID)
-	if err != nil {
-		return "", fmt.Errorf("store new agent token: %w", err)
-	}
-
 	return apiToken, nil
 }
 

@@ -158,26 +158,30 @@ func (s *Scheduler) WithLock(ctx context.Context, name string, lockTTL time.Dura
 // Task implementations
 // ---------------------------------------------------------------------------
 
-// CheckHeartbeatTimeout marks stale runtimes offline and updates the status of all agents whose runtimes are offline.
-// It runs every 15 seconds, detecting runtimes that have not sent a heartbeat in over 100 seconds.
+// CheckHeartbeatTimeout marks daemons with stale heartbeats offline and brings
+// the agents they report offline as well.
+// It runs every 15 seconds, detecting daemons that have not sent a heartbeat in over 100 seconds.
 func (s *Scheduler) CheckHeartbeatTimeout(ctx context.Context) error {
-	staleRuntimes, err := s.Store.MarkStaleRuntimes(ctx, s.Clock.Now().Add(-100*time.Second))
+	staleDaemons, err := s.Store.MarkStaleDaemons(ctx)
 	if err != nil {
-		slog.Error("mark stale runtimes", "err", err)
-	} else if len(staleRuntimes) > 0 {
-		slog.Info("marked stale runtimes offline", "count", len(staleRuntimes))
+		slog.Error("mark stale daemons", "err", err)
+		return nil
+	}
+	if len(staleDaemons) > 0 {
+		slog.Info("marked stale daemons offline", "count", len(staleDaemons))
 	}
 
-	offlineAgents, err := s.Store.UpdateOfflineAgents(ctx)
-	if err != nil {
-		slog.Error("update offline agents", "err", err)
-	} else if len(offlineAgents) > 0 {
-		slog.Info("updated agents to offline", "count", len(offlineAgents))
+	offlineAgents := 0
+	for _, daemonID := range staleDaemons {
+		if err := s.Store.SetAgentsStatusByDaemon(ctx, daemonID, types.AgentStatusOffline); err != nil {
+			slog.Error("set agents offline by daemon", "daemon_id", daemonID, "err", err)
+			continue
+		}
 	}
 
 	slog.Info("heartbeat_timeout complete",
-		"stale_runtimes", len(staleRuntimes),
-		"offline_agents", len(offlineAgents),
+		"stale_daemons", len(staleDaemons),
+		"offline_agents", offlineAgents,
 	)
 	return nil
 }
@@ -303,8 +307,9 @@ func (s *Scheduler) lowConfidenceMemoryGC(ctx context.Context) error {
 }
 
 // RenotifyPendingNodes scans pending nodes that have gone unclaimed for a long time and re-publishes node:pending events to their project-member agents.
-// It runs every 30 seconds, compensating for SSE events lost while runtimes were offline.
-// Delivery is at the project granularity: only project-member agents are notified (consistent with service.publishToProject semantics).
+// It runs every 30 seconds, compensating for SSE events lost while daemons were offline.
+// Delivery is at the project granularity: only project-member agents are notified,
+// published on each agent's daemon stream with an agent_id envelope.
 func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-30 * time.Second)
 	projectIDs, err := s.Store.ListPendingRenotifyProjectIDs(ctx, cutoff)
@@ -314,22 +319,12 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 	}
 
 	for _, projectID := range projectIDs {
-		data, _ := json.Marshal(map[string]string{
-			"reason": "renotify_pending",
-		})
-		event := types.SSEEvent{
-			ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-			Event: types.EventNodePending,
-			Data:  data,
-		}
-
 		members, err := s.Store.ListProjectMembers(ctx, projectID)
 		if err != nil {
 			slog.Error("renotify list project members", "project_id", projectID, "err", err)
 			continue
 		}
 
-		onlineSent := false
 		for _, m := range members {
 			if m.MemberType != "agent" || m.AgentID == nil {
 				continue
@@ -338,39 +333,10 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
-			runtimeIDs, err := s.Store.ListOnlineRuntimeIDsByAgent(ctx, agentUUID)
-			if err != nil {
-				slog.Error("renotify list runtimes", "agent_id", m.AgentID, "err", err)
+			if err := s.publishToAgentDaemon(ctx, agentUUID, types.EventNodePending, map[string]string{
+				"reason": "renotify_pending",
+			}); err != nil {
 				continue
-			}
-			for _, runtimeID := range runtimeIDs {
-				if err := s.Hub.Publish(ctx, runtimeID.String(), event); err != nil {
-					slog.Error("renotify publish", "runtime_id", runtimeID, "err", err)
-					continue
-				}
-				onlineSent = true
-			}
-		}
-
-		// No online member runtimes: buffer to all runtimes of the member agents (including offline ones) for replay upon reconnection
-		if !onlineSent {
-			for _, m := range members {
-				if m.MemberType != "agent" || m.AgentID == nil {
-					continue
-				}
-				agentUUID, err := uuid.Parse(*m.AgentID)
-				if err != nil {
-					continue
-				}
-				runtimeIDs, err := s.Store.ListRuntimeIDsByAgent(ctx, agentUUID)
-				if err != nil {
-					continue
-				}
-				for _, runtimeID := range runtimeIDs {
-					if err := s.Hub.BufferEvent(ctx, runtimeID.String(), event); err != nil {
-						slog.Error("renotify buffer", "runtime_id", runtimeID, "err", err)
-					}
-				}
 			}
 		}
 	}
@@ -452,32 +418,60 @@ func (s *Scheduler) CleanupOldWorkspaces(ctx context.Context) error {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// publishNodeTimeout sends a node-timeout SSE event to the specified agent.
+// publishToAgentDaemon publishes an SSE event on the agent's daemon stream with
+// an agent_id envelope (daemon-side routing), buffering for offline replay.
+func (s *Scheduler) publishToAgentDaemon(ctx context.Context, agentID uuid.UUID, eventType string, payload interface{}) error {
+	if s.Hub == nil {
+		return nil
+	}
+
+	dataBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	envelope := map[string]json.RawMessage{
+		"agent_id": json.RawMessage(`"` + agentID.String() + `"`),
+		"payload":  json.RawMessage(dataBytes),
+	}
+	envelopeBytes, err := json.Marshal(envelope)
+	if err != nil {
+		return fmt.Errorf("marshal envelope: %w", err)
+	}
+	event := types.SSEEvent{
+		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
+		Event: eventType,
+		Data:  envelopeBytes,
+	}
+
+	daemonID, online, err := s.Store.GetOnlineDaemonIDByAgent(ctx, agentID)
+	if err != nil {
+		return fmt.Errorf("resolve agent daemon: %w", err)
+	}
+	key := "daemon:" + daemonID.String()
+	if !online {
+		if err := s.Hub.BufferEvent(ctx, key, event); err != nil {
+			slog.Error("buffer event for offline daemon", "daemon_id", daemonID, "err", err)
+		}
+		return nil
+	}
+	if err := s.Hub.Publish(ctx, key, event); err != nil {
+		slog.Error("publish event to daemon", "daemon_id", daemonID, "err", err)
+	}
+	return nil
+}
+
+// publishNodeTimeout sends a node-timeout SSE event to the specified agent's daemon stream.
 //
 // Parameters:
 //   - ctx: context
 //   - nodeID: the ID of the timed-out node
 //   - agentID: the ID of the node's agent
 func (s *Scheduler) publishNodeTimeout(ctx context.Context, nodeID, agentID uuid.UUID) {
-	rt, err := s.Store.GetRuntimeByAgent(ctx, agentID)
-	if err != nil {
-		slog.Error("get runtime for agent", "agent_id", agentID, "err", err)
-		return
-	}
-
-	runtimeID := rt.ID
-	data, _ := json.Marshal(map[string]string{
-		"node_id":  nodeID.String(),
-		"action":   "timeout",
-		"status":   "manual_intervention",
-		"agent_id": agentID.String(),
-	})
-
-	if err := s.Hub.Publish(ctx, runtimeID, types.SSEEvent{
-		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-		Event: types.EventNodeTimeout,
-		Data:  data,
+	if err := s.publishToAgentDaemon(ctx, agentID, types.EventNodeTimeout, map[string]string{
+		"node_id": nodeID.String(),
+		"action":  "timeout",
+		"status":  "manual_intervention",
 	}); err != nil {
-		slog.Error("publish SSE node timeout", "runtime_id", runtimeID, "err", err)
+		slog.Error("publish node timeout", "agent_id", agentID, "err", err)
 	}
 }

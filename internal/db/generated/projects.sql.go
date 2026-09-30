@@ -16,7 +16,7 @@ const createProject = `-- name: CreateProject :one
 
 INSERT INTO projects (workspace_id, name, description, icon, status, repo_url, context)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, workspace_id, name, description, icon, status, repo_url, context, default_workflow_id, max_review_cycles, created_at, updated_at
+RETURNING id, workspace_id, name, description, icon, status, repo_url, context, max_review_cycles, created_at, updated_at
 `
 
 type CreateProjectParams struct {
@@ -50,7 +50,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Status,
 		&i.RepoUrl,
 		&i.Context,
-		&i.DefaultWorkflowID,
 		&i.MaxReviewCycles,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -156,7 +155,7 @@ func (q *Queries) DeleteProjectReviewer(ctx context.Context, id uuid.UUID) error
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, workspace_id, name, description, icon, status, repo_url, context, default_workflow_id, max_review_cycles, created_at, updated_at FROM projects
+SELECT id, workspace_id, name, description, icon, status, repo_url, context, max_review_cycles, created_at, updated_at FROM projects
 WHERE id = $1
 `
 
@@ -172,7 +171,6 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 		&i.Status,
 		&i.RepoUrl,
 		&i.Context,
-		&i.DefaultWorkflowID,
 		&i.MaxReviewCycles,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -362,7 +360,7 @@ func (q *Queries) ListProjectReviewers(ctx context.Context, projectID uuid.UUID)
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, workspace_id, name, description, icon, status, repo_url, context, default_workflow_id, max_review_cycles, created_at, updated_at FROM projects
+SELECT id, workspace_id, name, description, icon, status, repo_url, context, max_review_cycles, created_at, updated_at FROM projects
 WHERE workspace_id = $1
 ORDER BY created_at DESC
 `
@@ -385,7 +383,6 @@ func (q *Queries) ListProjects(ctx context.Context, workspaceID uuid.UUID) ([]Pr
 			&i.Status,
 			&i.RepoUrl,
 			&i.Context,
-			&i.DefaultWorkflowID,
 			&i.MaxReviewCycles,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -404,7 +401,7 @@ func (q *Queries) ListProjects(ctx context.Context, workspaceID uuid.UUID) ([]Pr
 }
 
 const listProjectsByAgentMembership = `-- name: ListProjectsByAgentMembership :many
-SELECT p.id, p.workspace_id, p.name, p.description, p.icon, p.status, p.repo_url, p.context, p.default_workflow_id, p.max_review_cycles, p.created_at, p.updated_at FROM projects p
+SELECT p.id, p.workspace_id, p.name, p.description, p.icon, p.status, p.repo_url, p.context, p.max_review_cycles, p.created_at, p.updated_at FROM projects p
 JOIN project_members pm ON pm.project_id = p.id AND pm.member_type = 'agent' AND pm.agent_id = $2
 WHERE p.workspace_id = $1
 ORDER BY p.created_at DESC
@@ -433,7 +430,6 @@ func (q *Queries) ListProjectsByAgentMembership(ctx context.Context, arg ListPro
 			&i.Status,
 			&i.RepoUrl,
 			&i.Context,
-			&i.DefaultWorkflowID,
 			&i.MaxReviewCycles,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -454,22 +450,20 @@ func (q *Queries) ListProjectsByAgentMembership(ctx context.Context, arg ListPro
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
 SET name = $2, description = $3, status = $4, repo_url = $5, context = $6,
-    default_workflow_id = COALESCE($7, default_workflow_id),
-    max_review_cycles = COALESCE($8, max_review_cycles),
+    max_review_cycles = COALESCE($7, max_review_cycles),
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, description, icon, status, repo_url, context, default_workflow_id, max_review_cycles, created_at, updated_at
+RETURNING id, workspace_id, name, description, icon, status, repo_url, context, max_review_cycles, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
-	ID                uuid.UUID      `db:"id" json:"id"`
-	Name              string         `db:"name" json:"name"`
-	Description       sql.NullString `db:"description" json:"description"`
-	Status            ProjectStatus  `db:"status" json:"status"`
-	RepoUrl           sql.NullString `db:"repo_url" json:"repo_url"`
-	Context           sql.NullString `db:"context" json:"context"`
-	DefaultWorkflowID uuid.NullUUID  `db:"default_workflow_id" json:"default_workflow_id"`
-	MaxReviewCycles   sql.NullInt32  `db:"max_review_cycles" json:"max_review_cycles"`
+	ID              uuid.UUID      `db:"id" json:"id"`
+	Name            string         `db:"name" json:"name"`
+	Description     sql.NullString `db:"description" json:"description"`
+	Status          ProjectStatus  `db:"status" json:"status"`
+	RepoUrl         sql.NullString `db:"repo_url" json:"repo_url"`
+	Context         sql.NullString `db:"context" json:"context"`
+	MaxReviewCycles sql.NullInt32  `db:"max_review_cycles" json:"max_review_cycles"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -480,7 +474,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Status,
 		arg.RepoUrl,
 		arg.Context,
-		arg.DefaultWorkflowID,
 		arg.MaxReviewCycles,
 	)
 	var i Project
@@ -493,7 +486,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Status,
 		&i.RepoUrl,
 		&i.Context,
-		&i.DefaultWorkflowID,
 		&i.MaxReviewCycles,
 		&i.CreatedAt,
 		&i.UpdatedAt,

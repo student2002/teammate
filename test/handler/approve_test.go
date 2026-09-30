@@ -22,7 +22,7 @@ func TestApproveCascading(t *testing.T) {
 	// Prepare: project, workflow with 3 nodes (code -> review -> deploy)
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)

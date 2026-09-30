@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,7 +17,7 @@ const completeExecutionSession = `-- name: CompleteExecutionSession :one
 UPDATE execution_sessions
 SET status = 'completed', head_commit = $2, completed_at = now()
 WHERE id = $1
-RETURNING id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
+RETURNING id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
 `
 
 type CompleteExecutionSessionParams struct {
@@ -29,7 +30,7 @@ func (q *Queries) CompleteExecutionSession(ctx context.Context, arg CompleteExec
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -49,13 +50,13 @@ func (q *Queries) CompleteExecutionSession(ctx context.Context, arg CompleteExec
 
 const createExecutionSession = `-- name: CreateExecutionSession :one
 
-INSERT INTO execution_sessions (runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, claude_session_id)
+INSERT INTO execution_sessions (daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, claude_session_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
+RETURNING id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
 `
 
 type CreateExecutionSessionParams struct {
-	RuntimeID       uuid.NullUUID  `db:"runtime_id" json:"runtime_id"`
+	DaemonID        uuid.NullUUID  `db:"daemon_id" json:"daemon_id"`
 	AgentID         uuid.NullUUID  `db:"agent_id" json:"agent_id"`
 	TaskNodeID      uuid.UUID      `db:"task_node_id" json:"task_node_id"`
 	Attempt         int32          `db:"attempt" json:"attempt"`
@@ -69,7 +70,7 @@ type CreateExecutionSessionParams struct {
 // Execution session queries
 func (q *Queries) CreateExecutionSession(ctx context.Context, arg CreateExecutionSessionParams) (ExecutionSession, error) {
 	row := q.db.QueryRowContext(ctx, createExecutionSession,
-		arg.RuntimeID,
+		arg.DaemonID,
 		arg.AgentID,
 		arg.TaskNodeID,
 		arg.Attempt,
@@ -82,7 +83,7 @@ func (q *Queries) CreateExecutionSession(ctx context.Context, arg CreateExecutio
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -101,7 +102,7 @@ func (q *Queries) CreateExecutionSession(ctx context.Context, arg CreateExecutio
 }
 
 const getActiveSessionByAgentAndWorkdir = `-- name: GetActiveSessionByAgentAndWorkdir :one
-SELECT id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
+SELECT id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
 WHERE agent_id = $1 AND workdir = $2 AND status = 'completed' AND claude_session_id != ''
 ORDER BY completed_at DESC
 LIMIT 1
@@ -117,7 +118,7 @@ func (q *Queries) GetActiveSessionByAgentAndWorkdir(ctx context.Context, arg Get
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -136,7 +137,7 @@ func (q *Queries) GetActiveSessionByAgentAndWorkdir(ctx context.Context, arg Get
 }
 
 const getExecutionSession = `-- name: GetExecutionSession :one
-SELECT id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions WHERE id = $1
+SELECT id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions WHERE id = $1
 `
 
 func (q *Queries) GetExecutionSession(ctx context.Context, id uuid.UUID) (ExecutionSession, error) {
@@ -144,7 +145,7 @@ func (q *Queries) GetExecutionSession(ctx context.Context, id uuid.UUID) (Execut
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -163,7 +164,7 @@ func (q *Queries) GetExecutionSession(ctx context.Context, id uuid.UUID) (Execut
 }
 
 const getLatestCompletedSessionByAgent = `-- name: GetLatestCompletedSessionByAgent :one
-SELECT id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
+SELECT id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
 WHERE agent_id = $1 AND status = 'completed' AND claude_session_id != ''
 ORDER BY completed_at DESC
 LIMIT 1
@@ -174,7 +175,7 @@ func (q *Queries) GetLatestCompletedSessionByAgent(ctx context.Context, agentID 
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -193,7 +194,7 @@ func (q *Queries) GetLatestCompletedSessionByAgent(ctx context.Context, agentID 
 }
 
 const getSessionsByTaskNode = `-- name: GetSessionsByTaskNode :many
-SELECT id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
+SELECT id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at FROM execution_sessions
 WHERE task_node_id = $1
 ORDER BY started_at DESC
 `
@@ -209,7 +210,7 @@ func (q *Queries) GetSessionsByTaskNode(ctx context.Context, taskNodeID uuid.UUI
 		var i ExecutionSession
 		if err := rows.Scan(
 			&i.ID,
-			&i.RuntimeID,
+			&i.DaemonID,
 			&i.AgentID,
 			&i.TaskNodeID,
 			&i.Attempt,
@@ -241,7 +242,7 @@ const interruptExecutionSession = `-- name: InterruptExecutionSession :one
 UPDATE execution_sessions
 SET status = 'interrupted', interrupted_at = now()
 WHERE id = $1
-RETURNING id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
+RETURNING id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
 `
 
 func (q *Queries) InterruptExecutionSession(ctx context.Context, id uuid.UUID) (ExecutionSession, error) {
@@ -249,7 +250,7 @@ func (q *Queries) InterruptExecutionSession(ctx context.Context, id uuid.UUID) (
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -267,11 +268,73 @@ func (q *Queries) InterruptExecutionSession(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const listAgentExecutions = `-- name: ListAgentExecutions :many
+SELECT es.id, es.task_node_id, tn.name AS node_name,
+       t.id AS task_id, t.title AS task_title,
+       es.status, es.branch, es.started_at, es.completed_at
+FROM execution_sessions es
+LEFT JOIN task_nodes tn ON tn.id = es.task_node_id
+LEFT JOIN tasks t ON t.id = tn.task_id
+WHERE es.agent_id = $1
+ORDER BY es.started_at DESC
+LIMIT $2
+`
+
+type ListAgentExecutionsParams struct {
+	AgentID uuid.NullUUID `db:"agent_id" json:"agent_id"`
+	Limit   int32         `db:"limit" json:"limit"`
+}
+
+type ListAgentExecutionsRow struct {
+	ID          uuid.UUID      `db:"id" json:"id"`
+	TaskNodeID  uuid.UUID      `db:"task_node_id" json:"task_node_id"`
+	NodeName    sql.NullString `db:"node_name" json:"node_name"`
+	TaskID      sql.NullInt32  `db:"task_id" json:"task_id"`
+	TaskTitle   sql.NullString `db:"task_title" json:"task_title"`
+	Status      string         `db:"status" json:"status"`
+	Branch      sql.NullString `db:"branch" json:"branch"`
+	StartedAt   time.Time      `db:"started_at" json:"started_at"`
+	CompletedAt sql.NullTime   `db:"completed_at" json:"completed_at"`
+}
+
+func (q *Queries) ListAgentExecutions(ctx context.Context, arg ListAgentExecutionsParams) ([]ListAgentExecutionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentExecutions, arg.AgentID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentExecutionsRow{}
+	for rows.Next() {
+		var i ListAgentExecutionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskNodeID,
+			&i.NodeName,
+			&i.TaskID,
+			&i.TaskTitle,
+			&i.Status,
+			&i.Branch,
+			&i.StartedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateExecutionSession = `-- name: UpdateExecutionSession :one
 UPDATE execution_sessions
 SET status = $2, head_commit = $3, completed_at = $4, interrupted_at = $5, claude_session_id = $6
 WHERE id = $1
-RETURNING id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
+RETURNING id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
 `
 
 type UpdateExecutionSessionParams struct {
@@ -295,7 +358,7 @@ func (q *Queries) UpdateExecutionSession(ctx context.Context, arg UpdateExecutio
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,
@@ -317,7 +380,7 @@ const updateSessionClaudeID = `-- name: UpdateSessionClaudeID :one
 UPDATE execution_sessions
 SET claude_session_id = $2
 WHERE id = $1
-RETURNING id, runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
+RETURNING id, daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, head_commit, claude_session_id, started_at, completed_at, interrupted_at, created_at
 `
 
 type UpdateSessionClaudeIDParams struct {
@@ -330,7 +393,7 @@ func (q *Queries) UpdateSessionClaudeID(ctx context.Context, arg UpdateSessionCl
 	var i ExecutionSession
 	err := row.Scan(
 		&i.ID,
-		&i.RuntimeID,
+		&i.DaemonID,
 		&i.AgentID,
 		&i.TaskNodeID,
 		&i.Attempt,

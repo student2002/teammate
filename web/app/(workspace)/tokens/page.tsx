@@ -121,10 +121,10 @@ export default function TokenStatsPage() {
   if (!hasData) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
-        <Terminal className="w-12 h-12 text-slate-600 mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">{t("emptyTitle")}</h2>
-        <p className="text-slate-400 text-sm">{t("empty")}</p>
-        <p className="text-slate-500 text-xs mt-1">
+        <Terminal className="w-12 h-12 text-fg-faint mb-4" />
+        <h2 className="text-xl font-bold text-fg mb-2">{t("emptyTitle")}</h2>
+        <p className="text-fg-subtle text-sm">{t("empty")}</p>
+        <p className="text-fg-faint text-xs mt-1">
           {t("emptyHint")}
         </p>
       </div>
@@ -136,56 +136,56 @@ export default function TokenStatsPage() {
   return (
     <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
       <div className="mb-8 shrink-0">
-        <h1 className="text-2xl font-bold text-white mb-2">
+        <h1 className="text-2xl font-bold text-fg mb-2">
           {t("title")}
         </h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-subtle">
           {t("subtitle")}
         </p>
       </div>
 
       {/* 总览卡片 */}
       <div className="grid grid-cols-3 gap-6 mb-8 shrink-0">
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 card-hover">
-          <div className="text-slate-400 text-sm font-medium mb-1">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 card-hover">
+          <div className="text-fg-subtle text-sm font-medium mb-1">
             {t("totalTokens")}
           </div>
-          <div className="text-3xl font-bold text-white">
+          <div className="text-3xl font-bold text-fg">
             {stats.totalTokens.toLocaleString()}
           </div>
-          <div className="text-xs text-slate-500 mt-2">
+          <div className="text-xs text-fg-faint mt-2">
             {t("inputOutput", {
               input: formatTokens(stats.totalInput),
               output: formatTokens(stats.totalOutput),
             })}
           </div>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 card-hover">
-          <div className="text-slate-400 text-sm font-medium mb-1">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 card-hover">
+          <div className="text-fg-subtle text-sm font-medium mb-1">
             {t("taskProgress")}
           </div>
-          <div className="text-3xl font-bold text-white">
+          <div className="text-3xl font-bold text-fg">
             {stats.taskCompleted} / {stats.taskTotal}
           </div>
-          <div className="text-xs text-slate-500 mt-2">
+          <div className="text-xs text-fg-faint mt-2">
             {t("inProgressCount", { count: stats.taskInProgress })}
           </div>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 card-hover">
-          <div className="text-slate-400 text-sm font-medium mb-1">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 card-hover">
+          <div className="text-fg-subtle text-sm font-medium mb-1">
             {t("agentCount")}
           </div>
-          <div className="text-3xl font-bold text-white">
+          <div className="text-3xl font-bold text-fg">
             {agents ? agents.length : 0}
           </div>
-          <div className="text-xs text-slate-500 mt-2">{t("registeredAgents")}</div>
+          <div className="text-xs text-fg-faint mt-2">{t("registeredAgents")}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6 flex-1 min-h-0">
         {/* Agent 排名 */}
-        <div className="col-span-2 bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 flex flex-col card-hover">
-          <h3 className="font-semibold text-white mb-6">
+        <div className="col-span-2 bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 flex flex-col card-hover">
+          <h3 className="font-semibold text-fg mb-6">
             {t("agentRanking")}
           </h3>
           {stats.topAgents.length > 0 ? (
@@ -193,14 +193,14 @@ export default function TokenStatsPage() {
               {stats.topAgents.map((item) => (
                 <div key={item.name}>
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="text-slate-300 font-medium">
+                    <span className="text-fg-muted font-medium">
                       {item.name}
                     </span>
-                    <span className="text-slate-400">
+                    <span className="text-fg-subtle">
                       {formatTokens(item.tokens)}
                     </span>
                   </div>
-                  <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-surface h-2.5 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -214,12 +214,12 @@ export default function TokenStatsPage() {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-slate-500 text-sm">
+              <p className="text-fg-faint text-sm">
                 {t("noAgentData")}
               </p>
             </div>
           )}
-          <div className="mt-4 pt-4 border-t border-slate-800 text-[10px] text-slate-500 flex items-center">
+          <div className="mt-4 pt-4 border-t border-line text-[10px] text-fg-faint flex items-center">
             <Terminal className="w-3 h-3 mr-1" /> {t("basedOnReports")}
           </div>
         </div>
@@ -227,8 +227,8 @@ export default function TokenStatsPage() {
         {/* 右侧汇总 */}
         <div className="flex flex-col gap-6">
           {/* 输入/输出比例 */}
-          <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 card-hover">
-            <h3 className="font-semibold text-white mb-4">{t("inputOutputRatio")}</h3>
+          <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 card-hover">
+            <h3 className="font-semibold text-fg mb-4">{t("inputOutputRatio")}</h3>
             <div className="flex items-center gap-4">
               <div className="relative w-24 h-24 shrink-0">
                 <svg
@@ -251,23 +251,24 @@ export default function TokenStatsPage() {
                     fill="none"
                     stroke="#3b82f6"
                     strokeWidth="3"
+                    className="chart-ring-fg"
                     strokeDasharray={`${stats.inputPct * 0.97} ${stats.outputPct * 0.97}`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center flex-col">
-                  <span className="text-lg font-bold text-white">
+                  <span className="text-lg font-bold text-fg">
                     {stats.inputPct}%
                   </span>
                 </div>
               </div>
               <div className="space-y-2 text-xs">
                 <div className="flex items-center">
-                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2" />{" "}
+                  <div className="w-2.5 h-2.5 rounded-full bg-primary mr-2" />{" "}
                   {t("inputPct", { pct: stats.inputPct })}
                 </div>
                 <div className="flex items-center">
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-500 mr-2" />{" "}
+                  <div className="w-2.5 h-2.5 rounded-full bg-fg-faint mr-2" />{" "}
                   {t("outputPct", { pct: stats.outputPct })}
                 </div>
               </div>
@@ -275,29 +276,29 @@ export default function TokenStatsPage() {
           </div>
 
           {/* 任务状态分布 */}
-          <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl backdrop-blur-sm p-6 flex-1 card-hover">
-            <h3 className="font-semibold text-white mb-4">{t("taskStatusDist")}</h3>
+          <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl backdrop-blur-sm p-6 flex-1 card-hover">
+            <h3 className="font-semibold text-fg mb-4">{t("taskStatusDist")}</h3>
             {stats.taskTotal > 0 ? (
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-emerald-400">{t("completed")}</span>
-                  <span className="text-slate-400">{stats.taskCompleted}</span>
+                  <span className="text-success-fg">{t("completed")}</span>
+                  <span className="text-fg-subtle">{stats.taskCompleted}</span>
                 </div>
-                <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-surface h-2.5 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-emerald-500"
+                    className="h-full rounded-full bg-success"
                     style={{
                       width: `${stats.taskTotal > 0 ? (stats.taskCompleted / stats.taskTotal) * 100 : 0}%`,
                     }}
                   />
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-blue-400">{t("inProgress")}</span>
-                  <span className="text-slate-400">{stats.taskInProgress}</span>
+                  <span className="text-primary-fg">{t("inProgress")}</span>
+                  <span className="text-fg-subtle">{stats.taskInProgress}</span>
                 </div>
-                <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-surface h-2.5 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-blue-500"
+                    className="h-full rounded-full bg-primary"
                     style={{
                       width: `${stats.taskTotal > 0 ? (stats.taskInProgress / stats.taskTotal) * 100 : 0}%`,
                     }}
@@ -305,7 +306,7 @@ export default function TokenStatsPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500 text-sm">{t("noTaskData")}</p>
+              <p className="text-fg-faint text-sm">{t("noTaskData")}</p>
             )}
           </div>
         </div>

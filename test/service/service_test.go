@@ -127,18 +127,6 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	// Set project default workflow
-	_, err = svc.Store.UpdateProject(ctx, types.UpdateProjectParams{
-		ID:                proj.ID,
-		Name:              proj.Name,
-		Description:       &proj.Description,
-		Status:            proj.Status,
-		DefaultWorkflowID: &tpl.ID,
-	})
-	if err != nil {
-		t.Fatalf("update project workflow: %v", err)
-	}
-
 	// Create agents
 	agent1, _, err := svc.Store.CreateAgent(ctx, types.CreateAgentParams{
 		WorkspaceID:  ws.ID,

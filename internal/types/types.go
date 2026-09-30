@@ -17,6 +17,8 @@ package types
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ---------------------------------------------------------------------------
@@ -119,13 +121,6 @@ const (
 	ProjectStatusArchived  = "archived"  // Archived
 )
 
-// RuntimeStatus defines the status of a Runtime.
-const (
-	RuntimeStatusOnline  = "online"  // Online
-	RuntimeStatusOffline = "offline" // Offline
-	RuntimeStatusError   = "error"   // Error
-)
-
 // TokenType defines the type of an auth Token.
 const (
 	TokenTypeAPI     = "api"     // API Token (long-lived)
@@ -193,10 +188,60 @@ type Agent struct {
 	ExtraArgs     []string        `json:"extra_args" db:"extra_args"`      // Extra command-line arguments
 	TotalCompleted int            `json:"total_completed" db:"total_completed"` // Total completed tasks
 	TotalTokens   int64           `json:"total_tokens" db:"total_tokens"`   // Total token usage
+	TotalInputTokens  int64       `json:"total_input_tokens"`              // Aggregated input tokens (list assembly)
+	TotalOutputTokens int64       `json:"total_output_tokens"`             // Aggregated output tokens (list assembly)
+	CurrentTask   *AgentCurrentTask `json:"current_task,omitempty"`        // Currently active task node (list assembly)
 	GitName       string          `json:"git_name" db:"git_name"`          // Git commit author name
 	GitEmail      string          `json:"git_email" db:"git_email"`        // Git commit author email
+	DaemonID      string          `json:"daemon_id,omitempty" db:"daemon_id"` // Reporting daemon (agentd instance); empty when unmanaged
+	DaemonName    string          `json:"daemon_name,omitempty" db:"daemon_name"` // Name of the reporting daemon
+	Origin        string          `json:"origin,omitempty" db:"origin"`       // Creation path: "daemon" (machine-reported) or "server" (web-pushed)
 	CreatedAt     time.Time       `json:"created_at" db:"created_at"`      // Creation time
 	UpdatedAt     time.Time       `json:"updated_at" db:"updated_at"`      // Update time
+}
+
+// AgentCurrentTask describes the task node an agent is currently working on.
+type AgentCurrentTask struct {
+	TaskID   int32  `json:"task_id"`
+	Title    string `json:"title"`
+	NodeName string `json:"node_name"`
+}
+
+// DaemonRegistrationUpdate carries the machine-reported registration fields.
+type DaemonRegistrationUpdate struct {
+	DeviceName string
+	Version    string
+	PublicKey  string
+	Providers  json.RawMessage
+}
+
+// AgentExecution is one row of an agent's recent execution history.
+type AgentExecution struct {
+	ID          uuid.UUID  `json:"id"`
+	TaskID      int32      `json:"task_id"`
+	TaskTitle   string     `json:"task_title"`
+	NodeName    string     `json:"node_name"`
+	Status      string     `json:"status"`
+	Branch      string     `json:"branch"`
+	StartedAt   time.Time  `json:"started_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+// Daemon represents an agentd instance running on a work machine.
+// One daemon per machine; it registers once with a daemon token and reports
+// its local agent instances and detected tool providers to the server.
+type Daemon struct {
+	ID            uuid.UUID       `json:"id" db:"id"`                       // Daemon UUID
+	WorkspaceID   uuid.UUID       `json:"workspace_id" db:"workspace_id"`   // Owning workspace
+	Name          string          `json:"name" db:"name"`                   // Display name
+	DeviceName    string          `json:"device_name" db:"device_name"`     // Reported machine description
+	Version       string          `json:"version" db:"version"`             // agentd version
+	Status        string          `json:"status" db:"status"`               // online/offline derived from heartbeat freshness
+	PublicKey     string          `json:"public_key,omitempty" db:"public_key"` // Daemon RSA public key (git credential encryption)
+	Providers     json.RawMessage `json:"providers" db:"providers"`         // Latest detected tools snapshot [{provider,version,installed}]
+	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty" db:"last_heartbeat"` // Last heartbeat time
+	CreatedAt     time.Time       `json:"created_at" db:"created_at"`       // Creation time
+	UpdatedAt     time.Time       `json:"updated_at" db:"updated_at"`       // Update time
 }
 
 // WorkflowTemplate represents a reusable workflow definition template.
@@ -261,7 +306,6 @@ type Project struct {
 	Status             string    `json:"status" db:"status"`                       // Project status
 	RepoURL            string    `json:"repo_url" db:"repo_url"`                   // Repository URL
 	Context            string    `json:"context" db:"context"`                     // Project context description
-	DefaultWorkflowID  *string   `json:"default_workflow_id" db:"default_workflow_id"` // Default workflow template ID
 	CreatedAt          time.Time `json:"created_at" db:"created_at"`               // Creation time
 	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`               // Update time
 }
@@ -365,24 +409,6 @@ type Comment struct {
 	UpdatedAt    time.Time       `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// Runtime represents a running Agent daemon instance.
-//
-// Each Agent can have multiple Runtimes (deployed on different machines),
-// maintaining online status via heartbeats.
-type Runtime struct {
-	ID                string     `json:"id" db:"id"`                           // Runtime UUID
-	AgentID           string     `json:"agent_id" db:"agent_id"`               // Owning Agent ID
-	DaemonID          string     `json:"daemon_id" db:"daemon_id"`             // Daemon ID
-	Provider          string     `json:"provider" db:"provider"`               // AI provider
-	Version           string     `json:"version" db:"version"`                 // Daemon version
-	Status            string     `json:"status" db:"status"`                   // Running status
-	SessionTokenHash  string     `json:"session_token_hash" db:"session_token_hash"` // Session token hash
-	SessionExpiresAt  *time.Time `json:"session_expires_at" db:"session_expires_at"` // Session expiration time
-	PublicKey         string     `json:"public_key" db:"public_key"`           // RSA public key
-	LastHeartbeat     *time.Time `json:"last_heartbeat" db:"last_heartbeat"`   // Last heartbeat time
-	CreatedAt         time.Time  `json:"created_at" db:"created_at"`           // Creation time
-	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`           // Update time
-}
 
 // Skill represents a reusable skill definition.
 //
@@ -449,7 +475,6 @@ type AuthToken struct {
 	TokenType string     `json:"token_type" db:"token_type"`   // Token type
 	OwnerType string     `json:"owner_type" db:"owner_type"`   // Owner type
 	OwnerID   string     `json:"owner_id" db:"owner_id"`       // Owner ID
-	RuntimeID *string    `json:"runtime_id" db:"runtime_id"`   // Associated Runtime ID
 	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`   // Expiration time
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`   // Creation time
 }
@@ -546,7 +571,7 @@ type AuditLog struct {
 // ExecutionSession represents a node execution session, recording runtime information when an Agent executes a node.
 type ExecutionSession struct {
 	ID              string     `json:"id" db:"id"`                              // Session UUID
-	RuntimeID       *string    `json:"runtime_id" db:"runtime_id"`              // Associated Runtime ID
+	DaemonID        *string    `json:"daemon_id" db:"daemon_id"`                // Reporting daemon ID
 	AgentID         *string    `json:"agent_id" db:"agent_id"`                  // Executing Agent ID
 	TaskNodeID      string     `json:"task_node_id" db:"task_node_id"`          // Executed node ID
 	Attempt         int32      `json:"attempt" db:"attempt"`                    // Attempt count
@@ -577,11 +602,11 @@ type Invitation struct {
 
 // SseEventBuffer represents an SSE event buffer entry, used to replay lost events on reconnection.
 type SseEventBuffer struct {
-	ID        int64           `json:"id" db:"id"`                       // Buffer entry ID
-	RuntimeID string          `json:"runtime_id" db:"runtime_id"`      // Target Runtime ID
-	EventType string          `json:"event_type" db:"event_type"`      // Event type
-	EventData json.RawMessage `json:"event_data" db:"event_data"`      // Event data (JSON)
-	CreatedAt time.Time       `json:"created_at" db:"created_at"`      // Creation time
+	ID         int64           `json:"id" db:"id"`                        // Buffer entry ID
+	Subscriber string          `json:"runtime_id" db:"runtime_id"`       // Target subscriber key (daemon stream)
+	EventType  string          `json:"event_type" db:"event_type"`       // Event type
+	EventData  json.RawMessage `json:"event_data" db:"event_data"`       // Event data (JSON)
+	CreatedAt  time.Time       `json:"created_at" db:"created_at"`       // Creation time
 }
 
 // TaskLog represents a task execution log entry, recording key events during node execution.

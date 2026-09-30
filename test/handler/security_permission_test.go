@@ -86,8 +86,9 @@ func TestAgentCannotAccessNonMemberProjectGitCredentials(t *testing.T) {
 	}
 }
 
-// TestAgentCannotRegisterRuntimeForOtherAgent verifies that an agent cannot register a runtime for another agent.
-func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
+// TestAgentTokenRejectedOnDaemonAPI verifies that agent tokens cannot access
+// the machine-side daemon API (daemon principal required).
+func TestAgentTokenRejectedOnDaemonAPI(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
 
@@ -96,38 +97,24 @@ func TestAgentCannotRegisterRuntimeForOtherAgent(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// Create two agents
-	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
-	agent2ID, _ := createAgent(t, client, srv.URL, wsID, token)
+	_, agentToken := createAgent(t, client, srv.URL, wsID, token)
 
-	// Agent1 attempts to register a runtime for Agent2
+	// An agent API key is not a daemon credential: register must be rejected
 	body := map[string]interface{}{
-		"agent_id": agent2ID,
-		"provider": "claude",
-		"version":  "1.0.0",
-		"status":   "online",
+		"device_name": "fake-box",
+		"version":     "1.0.0",
+		"agents":      []map[string]string{},
 	}
-	url := srv.URL + "/api/workspaces/" + wsID + "/runtimes"
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body)
+	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost,
+		srv.URL+"/api/daemons/register", agentToken, body)
 	if status != http.StatusForbidden {
-		t.Errorf("agent registering runtime for other agent: expected 403, got %d", status)
-	}
-
-	// Agent1 can register a runtime for itself
-	body2 := map[string]interface{}{
-		"agent_id": agent1ID,
-		"provider": "claude",
-		"version":  "1.0.0",
-		"status":   "online",
-	}
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body2)
-	if status != http.StatusCreated {
-		t.Errorf("agent registering own runtime: expected 201, got %d", status)
+		t.Errorf("agent token on daemon register: expected 403, got %d", status)
 	}
 }
 
-// TestAgentCannotAccessOtherAgentRuntimeSSE verifies that an agent cannot subscribe to another agent's runtime SSE stream.
-func TestAgentCannotAccessOtherAgentRuntimeSSE(t *testing.T) {
+// TestDaemonCannotAccessOtherDaemonSSE verifies that a daemon cannot subscribe
+// to another daemon's SSE stream.
+func TestDaemonCannotAccessOtherDaemonSSE(t *testing.T) {
 	router, db, _ := setupTestRouter(t)
 	defer db.Close()
 
@@ -136,30 +123,26 @@ func TestAgentCannotAccessOtherAgentRuntimeSSE(t *testing.T) {
 	client := srv.Client()
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	// Create two agents
-	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
-	_, agent2Token := createAgent(t, client, srv.URL, wsID, token)
+	// Two daemons; daemon1 owns the event stream under test
+	agent1ID, _ := createAgent(t, client, srv.URL, wsID, token)
+	daemon1ID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID)
+	_, daemon2Token := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID)
 
-	// Agent1 registers a runtime
-	runtimeID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agent1ID, agent1Token)
-
-	// Agent2 attempts to subscribe to Agent1's runtime SSE
-	url := fmt.Sprintf("%s/api/workspaces/%s/runtimes/%s/events", srv.URL, wsID, runtimeID)
+	// Daemon2 attempts to subscribe to Daemon1's event stream
+	url := fmt.Sprintf("%s/api/workspaces/%s/daemons/%s/events", srv.URL, wsID, daemon1ID)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("create request: %v", err)
 	}
-	req.Header.Set("X-API-Key", agent2Token)
+	req.Header.Set("X-API-Key", daemon2Token)
 	req.Header.Set("Accept", "text/event-stream")
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("do request: %v", err)
 	}
 	defer resp.Body.Close()
-	// SSE route is not in the test router, so we expect 404
-	// In production, the SSE handler would return 403 for non-owner agents
 	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusNotFound {
-		t.Errorf("agent subscribing to other agent runtime: expected 403/404, got %d", resp.StatusCode)
+		t.Errorf("daemon subscribing to other daemon stream: expected 403/404, got %d", resp.StatusCode)
 	}
 }
 

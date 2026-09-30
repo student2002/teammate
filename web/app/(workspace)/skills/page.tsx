@@ -20,6 +20,7 @@ import {
   Server,
   AlertTriangle,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
@@ -37,27 +38,27 @@ interface DeleteConfirmState {
 
 // ── Category / type colour map ──────────────────────────────────────────────
 const categoryColors: Record<string, string> = {
-  "前端": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  "前端": "bg-primary/10 text-primary-fg border-primary/20",
   "后端": "bg-orange-500/10 text-orange-400 border-orange-500/20",
   "数据": "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  "安全": "bg-red-500/10 text-red-400 border-red-500/20",
-  "运维": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  "安全": "bg-danger/10 text-danger-fg border-danger/20",
+  "运维": "bg-warning/10 text-warning-fg border-warning/20",
   "文档": "bg-violet-500/10 text-violet-400 border-violet-500/20",
   "性能": "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
   "质量": "bg-teal-500/10 text-teal-400 border-teal-500/20",
   "设计": "bg-pink-500/10 text-pink-400 border-pink-500/20",
   "存储": "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  "代码": "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-  "数据库": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "代码": "bg-accent/10 text-accent-fg border-accent/20",
+  "数据库": "bg-success/10 text-success-fg border-success/20",
   "服务": "bg-purple-500/10 text-purple-400 border-purple-500/20",
   "CI/CD": "bg-lime-500/10 text-lime-400 border-lime-500/20",
-  sse: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  sse: "bg-success/10 text-success-fg border-success/20",
   http: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  streamable_http: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+  streamable_http: "bg-accent/10 text-accent-fg border-accent/20",
 };
 
 const getCategoryColor = (cat: string) =>
-  categoryColors[cat] || "bg-slate-500/10 text-slate-400 border-slate-500/20";
+  categoryColors[cat] || "bg-fg-faint/10 text-fg-subtle border-line-strong/20";
 
 // 分类数据值为中文（存库），显示层通过此映射转为翻译 key
 const categoryKeyMap: Record<string, string> = {
@@ -131,41 +132,41 @@ function SkillEditModal({
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[560px] shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[560px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-700/50 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-white flex items-center">
-            <Zap className="w-5 h-5 mr-2 text-indigo-400" />
+        <div className="p-5 border-b border-line-strong/50 flex justify-between items-center">
+          <h2 className="text-lg font-bold text-fg flex items-center">
+            <Zap className="w-5 h-5 mr-2 text-accent-fg" />
             {skill ? t("editTitle") : t("addTitle")}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white"
+            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t("nameLabel")} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
+              {t("nameLabel")} <span className="text-danger-fg">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-accent"
               placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("categoryLabel")}
             </label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-accent"
             >
               {categories.map((c) => (
                 <option key={c} value={c}>
@@ -175,41 +176,41 @@ function SkillEditModal({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("descLabel")}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 resize-none"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-accent resize-none"
               placeholder={t("descPlaceholder")}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("promptLabel")}
             </label>
             <textarea
               value={promptTemplate}
               onChange={(e) => setPromptTemplate(e.target.value)}
               rows={5}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 resize-y font-mono"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-accent resize-y font-mono"
               placeholder={t("promptPlaceholder")}
             />
           </div>
         </div>
-        <div className="p-5 border-t border-slate-700/50 flex justify-end gap-3">
+        <div className="p-5 border-t border-line-strong/50 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t("cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim() || saving}
-            className="flex items-center px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
+            className="flex items-center px-5 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
             <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
           </button>
@@ -283,53 +284,53 @@ function McpEditModal({
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[560px] shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[560px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-700/50 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-white flex items-center">
-            <Database className="w-5 h-5 mr-2 text-emerald-400" />
+        <div className="p-5 border-b border-line-strong/50 flex justify-between items-center">
+          <h2 className="text-lg font-bold text-fg flex items-center">
+            <Database className="w-5 h-5 mr-2 text-success-fg" />
             {mcp ? t("editTitle") : t("addTitle")}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white"
+            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t("nameLabel")} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
+              {t("nameLabel")} <span className="text-danger-fg">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
               placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t("urlLabel")} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
+              {t("urlLabel")} <span className="text-danger-fg">*</span>
             </label>
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 font-mono text-sm"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success font-mono text-sm"
               placeholder="https://mcp.example.com/sse"
             />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-fg-muted mb-1.5">
                 {t("typeLabel")}
               </label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as McpServerType)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
               >
                 <option value="sse">SSE</option>
                 <option value="http">HTTP</option>
@@ -337,13 +338,13 @@ function McpEditModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-fg-muted mb-1.5">
                 {t("authLabel")}
               </label>
               <select
                 value={authType}
                 onChange={(e) => setAuthType(e.target.value as McpAuthType)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
               >
                 <option value="none">{t("authNone")}</option>
                 <option value="api_key">API Key</option>
@@ -351,13 +352,13 @@ function McpEditModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-fg-muted mb-1.5">
                 {t("statusLabel")}
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
               >
                 <option value="active">{t("statusActive")}</option>
                 <option value="inactive">{t("statusInactive")}</option>
@@ -365,30 +366,30 @@ function McpEditModal({
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-sm font-medium text-fg-muted mb-1.5">
               {t("envLabel")}
             </label>
             <textarea
               value={envVarsText}
               onChange={(e) => setEnvVarsText(e.target.value)}
               rows={5}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-emerald-500 resize-y font-mono"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-success resize-y font-mono"
               placeholder={'{"API_KEY":"..."}'}
             />
-            {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+            {error && <p className="text-xs text-danger-fg mt-2">{error}</p>}
           </div>
         </div>
-        <div className="p-5 border-t border-slate-700/50 flex justify-end gap-3">
+        <div className="p-5 border-t border-line-strong/50 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t("cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim() || !url.trim() || saving}
-            className="flex items-center px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
+            className="flex items-center px-5 py-2 bg-success-strong hover:bg-success text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
             <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
           </button>
@@ -559,10 +560,10 @@ export default function SkillsPage() {
       {/* 头部 */}
       <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">
+          <h1 className="text-2xl font-bold text-fg mb-1">
             {t("title")}
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             {t("subtitle")}
           </p>
         </div>
@@ -570,61 +571,61 @@ export default function SkillsPage() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
-            <Zap className="w-5 h-5 text-indigo-400" />
-            <span className="text-xs text-slate-500">{t("skillsLabel")}</span>
+            <Zap className="w-5 h-5 text-accent-fg" />
+            <span className="text-xs text-fg-faint">{t("skillsLabel")}</span>
           </div>
-          <div className="text-2xl font-bold text-white">{skills.length}</div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-2xl font-bold text-fg">{skills.length}</div>
+          <div className="text-xs text-fg-faint mt-1">
             {t("categoryCount", { count: skillCategories.length })}
           </div>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
-            <Database className="w-5 h-5 text-emerald-400" />
-            <span className="text-xs text-slate-500">MCP</span>
+            <Database className="w-5 h-5 text-success-fg" />
+            <span className="text-xs text-fg-faint">MCP</span>
           </div>
-          <div className="text-2xl font-bold text-white">
+          <div className="text-2xl font-bold text-fg">
             {mcpServers.length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-xs text-fg-faint mt-1">
             {t("enabledCount", { count: mcpServers.filter((m) => m.status === "active").length })}
           </div>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
-            <Wifi className="w-5 h-5 text-blue-400" />
-            <span className="text-xs text-slate-500">{t("mcpStatusLabel")}</span>
+            <Wifi className="w-5 h-5 text-primary-fg" />
+            <span className="text-xs text-fg-faint">{t("mcpStatusLabel")}</span>
           </div>
-          <div className="text-2xl font-bold text-white">
+          <div className="text-2xl font-bold text-fg">
             {mcpServers.filter((m) => m.status === "active").length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-xs text-fg-faint mt-1">
             {t("disabledCount", { count: mcpServers.filter((m) => m.status !== "active").length })}
           </div>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
           <div className="flex items-center justify-between mb-2">
-            <Tag className="w-5 h-5 text-amber-400" />
-            <span className="text-xs text-slate-500">{t("categoryTab")}</span>
+            <Tag className="w-5 h-5 text-warning-fg" />
+            <span className="text-xs text-fg-faint">{t("categoryTab")}</span>
           </div>
-          <div className="text-2xl font-bold text-white">
+          <div className="text-2xl font-bold text-fg">
             {skillCategories.length + mcpTypes.length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">{t("skillPlusMcpTypes")}</div>
+          <div className="text-xs text-fg-faint mt-1">{t("skillPlusMcpTypes")}</div>
         </div>
       </div>
 
       {/* Tab 切换 + 搜索 + 添加 */}
       <div className="flex items-center gap-4 mb-6 shrink-0">
-        <div className="flex bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+        <div className="flex bg-surface-2/60 border border-line-strong/50 rounded-lg overflow-hidden">
           <button
             onClick={() => setActiveTab("skills")}
             className={`flex items-center px-4 py-2 text-sm font-medium transition-colors-fast ${
               activeTab === "skills"
-                ? "bg-indigo-600/20 text-indigo-400"
-                : "text-slate-400 hover:text-white"
+                ? "bg-accent-strong/20 text-accent-fg"
+                : "text-fg-subtle hover:text-fg"
             }`}
           >
             <Zap className="w-4 h-4 mr-2" /> {t("tabSkills", { count: skills.length })}
@@ -633,8 +634,8 @@ export default function SkillsPage() {
             onClick={() => setActiveTab("mcp")}
             className={`flex items-center px-4 py-2 text-sm font-medium transition-colors-fast ${
               activeTab === "mcp"
-                ? "bg-emerald-600/20 text-emerald-400"
-                : "text-slate-400 hover:text-white"
+                ? "bg-success-strong/20 text-success-fg"
+                : "text-fg-subtle hover:text-fg"
             }`}
           >
             <Database className="w-4 h-4 mr-2" /> {t("tabMcp", { count: mcpServers.length })}
@@ -642,11 +643,11 @@ export default function SkillsPage() {
         </div>
 
         <div className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-slate-500"
+            className="w-full bg-surface-2/60 border border-line-strong/50 rounded-lg pl-10 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-line-strong"
             placeholder={
               activeTab === "skills"
                 ? t("searchSkillsPlaceholder")
@@ -659,7 +660,7 @@ export default function SkillsPage() {
           onClick={() =>
             activeTab === "skills" ? setShowAddSkill(true) : setShowAddMcp(true)
           }
-          className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors-fast btn-press shadow-lg shadow-blue-500/20 text-sm shrink-0"
+          className="flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast btn-press shadow-lg shadow-primary/20 text-sm shrink-0"
         >
           <Plus className="w-4 h-4 mr-2" />
           {activeTab === "skills" ? t("addSkill") : t("addMcp")}
@@ -677,7 +678,7 @@ export default function SkillsPage() {
             return (
               <div
                 key={skill.id}
-                className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-blue-500/5 hover:border-slate-500/60"
+                className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-primary/5 hover:border-line-strong/60"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -688,7 +689,7 @@ export default function SkillsPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">
+                        <span className="font-medium text-fg">
                           {skill.name}
                         </span>
                         <span
@@ -697,12 +698,12 @@ export default function SkillsPage() {
                           {tCat(categoryKeyMap[skill.category] || skill.category)}
                         </span>
                         {isUsed && (
-                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/10 text-primary-fg border border-primary/20">
                             {t("usedByAgents", { count: usingAgentCount })}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-1 truncate">
+                      <p className="text-xs text-fg-faint mt-1 truncate">
                         {skill.description}
                       </p>
                     </div>
@@ -710,13 +711,13 @@ export default function SkillsPage() {
                   <div className="flex items-center gap-2 shrink-0 ml-4">
                     <button
                       onClick={() => setEditingSkill(skill)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors-fast"
+                      className="p-1.5 rounded-lg text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteSkill(skill.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors-fast"
+                      className="p-1.5 rounded-lg text-fg-subtle hover:text-danger-fg hover:bg-danger/10 transition-colors-fast"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -727,7 +728,7 @@ export default function SkillsPage() {
           })}
           {filteredSkills.length === 0 && (
             <div>
-              <div className="text-center py-8 text-slate-500">
+              <div className="text-center py-8 text-fg-faint">
                 <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p>{t("noSkillMatch")}</p>
               </div>
@@ -748,10 +749,10 @@ export default function SkillsPage() {
             return (
               <div
                 key={mcp.id}
-                className={`bg-slate-800/40 border rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-blue-500/5 ${
+                className={`bg-surface-2/40 border rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-primary/5 ${
                   mcp.status === "active"
-                    ? "border-slate-700/60 hover:border-slate-500/60"
-                    : "border-slate-700/30 opacity-60"
+                    ? "border-line-strong/60 hover:border-line-strong/60"
+                    : "border-line-strong/30 opacity-60"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -763,7 +764,7 @@ export default function SkillsPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">
+                        <span className="font-medium text-fg">
                           {mcp.name}
                         </span>
                         <span
@@ -772,25 +773,25 @@ export default function SkillsPage() {
                           {mcp.type}
                         </span>
                         {mcp.status === "active" ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-success/10 text-success-fg border border-success/20">
                             <Wifi className="w-3 h-3" /> {t("statusActive")}
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-slate-500/10 text-slate-500 border border-slate-500/20">
+                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-fg-faint/10 text-fg-faint border border-line-strong/20">
                             <WifiOff className="w-3 h-3" /> {t("statusInactive")}
                           </span>
                         )}
                         {isUsed && (
-                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/10 text-primary-fg border border-primary/20">
                             {t("usedByAgents", { count: usingAgentCount })}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1">
-                        <p className="text-xs text-slate-500 truncate">
+                        <p className="text-xs text-fg-faint truncate">
                           {mcp.authType}
                         </p>
-                        <code className="text-[10px] text-slate-600 font-mono shrink-0">
+                        <code className="text-[10px] text-fg-faint font-mono shrink-0">
                           {mcp.url}
                         </code>
                       </div>
@@ -799,7 +800,7 @@ export default function SkillsPage() {
                   <div className="flex items-center gap-2 shrink-0 ml-4">
                     <button
                       onClick={() => handleToggleMcp(mcp.id)}
-                      className={`p-1.5 rounded-lg transition-colors-fast ${mcp.status === "active" ? "text-emerald-400 hover:bg-emerald-500/10" : "text-slate-500 hover:bg-slate-700"}`}
+                      className={`p-1.5 rounded-lg transition-colors-fast ${mcp.status === "active" ? "text-success-fg hover:bg-success/10" : "text-fg-faint hover:bg-surface-3"}`}
                       title={mcp.status === "active" ? t("clickToDisable") : t("clickToEnable")}
                     >
                       {mcp.status === "active" ? (
@@ -810,13 +811,13 @@ export default function SkillsPage() {
                     </button>
                     <button
                       onClick={() => setEditingMcp(mcp)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors-fast"
+                      className="p-1.5 rounded-lg text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteMcp(mcp.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors-fast"
+                      className="p-1.5 rounded-lg text-fg-subtle hover:text-danger-fg hover:bg-danger/10 transition-colors-fast"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -826,7 +827,7 @@ export default function SkillsPage() {
             );
           })}
           {filteredMcps.length === 0 && (
-            <div className="text-center py-12 text-slate-500">
+            <div className="text-center py-12 text-fg-faint">
               <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p>{t("noMcpMatch")}</p>
             </div>
@@ -841,16 +842,16 @@ export default function SkillsPage() {
           onClick={() => setDeleteConfirm(null)}
         >
           <div
-            className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[440px] shadow-2xl"
+            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[440px] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-slate-700/50 flex items-center">
-              <AlertTriangle className="w-5 h-5 text-amber-400 mr-2" />
-              <h2 className="text-lg font-bold text-white">{t("cannotDelete")}</h2>
+            <div className="p-5 border-b border-line-strong/50 flex items-center">
+              <AlertTriangle className="w-5 h-5 text-warning-fg mr-2" />
+              <h2 className="text-lg font-bold text-fg">{t("cannotDelete")}</h2>
             </div>
             <div className="p-5">
-              <p className="text-sm text-slate-300 mb-3">
-                <span className="font-medium text-white">
+              <p className="text-sm text-fg-muted mb-3">
+                <span className="font-medium text-fg">
                   {deleteConfirm.item.name}
                 </span>{" "}
                 {t("inUseByAgents")}
@@ -859,22 +860,22 @@ export default function SkillsPage() {
                 {deleteConfirm.usingAgents.map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/50 rounded-lg p-2.5"
+                    className="flex items-center gap-2 bg-surface-2/60 border border-line-strong/50 rounded-lg p-2.5"
                   >
-                    <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center">
-                      <Zap className="w-3.5 h-3.5 text-blue-400" />
+                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+                      <Zap className="w-3.5 h-3.5 text-primary-fg" />
                     </div>
-                    <span className="text-sm text-white font-medium">
+                    <span className="text-sm text-fg font-medium">
                       {a.name}
                     </span>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="p-5 border-t border-slate-700/50 flex justify-end">
+            <div className="p-5 border-t border-line-strong/50 flex justify-end">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
               >
                 {t("acknowledge")}
               </button>
@@ -885,30 +886,38 @@ export default function SkillsPage() {
 
       {/* 编辑弹窗 */}
       {editingSkill && (
+        <ModalPortal>
         <SkillEditModal
           skill={editingSkill}
           onSave={handleSaveSkill}
           onClose={() => setEditingSkill(null)}
         />
+        </ModalPortal>
       )}
       {editingMcp && (
+        <ModalPortal>
         <McpEditModal
           mcp={editingMcp}
           onSave={handleSaveMcp}
           onClose={() => setEditingMcp(null)}
         />
+        </ModalPortal>
       )}
       {showAddSkill && (
+        <ModalPortal>
         <SkillEditModal
           onSave={handleSaveSkill}
           onClose={() => setShowAddSkill(false)}
         />
+        </ModalPortal>
       )}
       {showAddMcp && (
+        <ModalPortal>
         <McpEditModal
           onSave={handleSaveMcp}
           onClose={() => setShowAddMcp(false)}
         />
+        </ModalPortal>
       )}
     </div>
   );

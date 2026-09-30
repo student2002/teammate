@@ -1,7 +1,7 @@
 -- Execution session queries
 
 -- name: CreateExecutionSession :one
-INSERT INTO execution_sessions (runtime_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, claude_session_id)
+INSERT INTO execution_sessions (daemon_id, agent_id, task_node_id, attempt, status, workdir, branch, base_commit, claude_session_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
@@ -48,3 +48,14 @@ SELECT * FROM execution_sessions
 WHERE agent_id = $1 AND status = 'completed' AND claude_session_id != ''
 ORDER BY completed_at DESC
 LIMIT 1;
+
+-- name: ListAgentExecutions :many
+SELECT es.id, es.task_node_id, tn.name AS node_name,
+       t.id AS task_id, t.title AS task_title,
+       es.status, es.branch, es.started_at, es.completed_at
+FROM execution_sessions es
+LEFT JOIN task_nodes tn ON tn.id = es.task_node_id
+LEFT JOIN tasks t ON t.id = tn.task_id
+WHERE es.agent_id = $1
+ORDER BY es.started_at DESC
+LIMIT $2;

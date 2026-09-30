@@ -41,6 +41,7 @@ import {
   AtSign,
   X,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
 import { useTranslations, useFormatter } from "next-intl";
 
 
@@ -64,7 +65,6 @@ interface ReassignDialogProps {
 
 function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
   const t = useTranslations("dashboard");
-  const { dateTime } = useFormatter();
   const [selectedAgentId, setSelectedAgentId] = useState("");
 
   return (
@@ -73,24 +73,24 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
       onClick={onClose}
     >
       <div
-        className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[420px] shadow-2xl modal-content"
+        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[420px] shadow-2xl modal-content"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white flex items-center">
-            <ArrowRight className="w-5 h-5 mr-2 text-indigo-400" /> {t('reassignDialog.title')}
+        <div className="p-5 border-b border-line flex justify-between items-center">
+          <h3 className="text-lg font-bold text-fg flex items-center">
+            <ArrowRight className="w-5 h-5 mr-2 text-accent-fg" /> {t('reassignDialog.title')}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors-fast">
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="p-5">
-          <p className="text-sm text-slate-400 mb-4">
+          <p className="text-sm text-fg-subtle mb-4">
             {t('reassignDialog.description')}
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {agents.length === 0 ? (
-              <div className="py-8 text-center text-sm text-slate-500">{t('reassignDialog.noAgents')}</div>
+              <div className="py-8 text-center text-sm text-fg-faint">{t('reassignDialog.noAgents')}</div>
             ) : (
               agents.map((a) => (
                 <button
@@ -98,14 +98,14 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
                   onClick={() => setSelectedAgentId(a.id)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors-fast border ${
                     selectedAgentId === a.id
-                      ? "bg-blue-500/10 border-blue-500/40 text-blue-400"
-                      : "border-transparent text-slate-300 hover:bg-slate-800"
+                      ? "bg-primary/10 border-primary/40 text-primary-fg"
+                      : "border-transparent text-fg-muted hover:bg-surface-2"
                   }`}
                 >
                   <Cpu className="w-4 h-4 shrink-0" />
                   <span className="truncate flex-1">{a.name}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    a.status === "online" ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-500/15 text-slate-400"
+                    a.status === "online" ? "bg-success/15 text-success-fg" : "bg-fg-faint/15 text-fg-subtle"
                   }`}>
                     {a.status === "online" ? t('agentStatus.online') : a.status === "busy" ? t('agentStatus.busy') : t('agentStatus.offline')}
                   </span>
@@ -114,17 +114,17 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
             )}
           </div>
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
           >
             {t('common.cancel')}
           </button>
           <button
             onClick={() => onConfirm(selectedAgentId)}
             disabled={!selectedAgentId}
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
+            className="px-5 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
           >
             {t('reassignDialog.confirm')}
           </button>
@@ -136,7 +136,6 @@ function ReassignDialog({ agents, onConfirm, onClose }: ReassignDialogProps) {
 
 function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
   const t = useTranslations("dashboard");
-  const { dateTime } = useFormatter();
   const [targetNode, setTargetNode] = useState(Math.max(0, task.currentNode - 1));
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -155,20 +154,20 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[520px] shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white flex items-center">
+        <div className="p-5 border-b border-line flex justify-between items-center">
+          <h3 className="text-lg font-bold text-fg flex items-center">
             <ArrowRight className="w-5 h-5 mr-2 text-orange-400 rotate-180" /> {t('rejectDialog.title')}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
-            <XCircle className="w-5 h-5 text-slate-400" />
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded">
+            <XCircle className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-5 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">{t('rejectDialog.selectTarget')}</label>
+            <label className="block text-sm font-medium text-fg-muted mb-3">{t('rejectDialog.selectTarget')}</label>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {(task.nodeNames || [])
                 .slice(0, task.currentNode + 1)
@@ -183,25 +182,25 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
                       className={`w-full flex items-center p-3 rounded-lg border text-left transition-all ${
                         isActive
                           ? "bg-orange-500/10 border-orange-500/50 text-orange-300 ring-1 ring-orange-500/30"
-                          : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500"
+                          : "bg-surface-2/50 border-line-strong text-fg-subtle hover:border-line-strong"
                       }`}
                     >
                       <div
                         className={`w-7 h-7 rounded-full flex items-center justify-center mr-3 text-xs font-bold border ${
                           isActive
-                            ? "bg-orange-500 border-orange-500 text-white"
-                            : "bg-slate-700 border-slate-600"
+                            ? "bg-orange-500 border-orange-500 text-fg"
+                            : "bg-surface-3 border-line-strong"
                         }`}
                       >
                         {idx + 1}
                       </div>
                       <div className="flex-1">
                         <div className="text-sm font-medium">{name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="text-xs text-fg-faint mt-0.5">
                           {task.nodeAgents?.[idx] || t('common.unassigned')}
                         </div>
                       </div>
-                      {s === "completed" && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                      {s === "completed" && <CheckCircle2 className="w-4 h-4 text-success" />}
                       {s === "rejected" && <AlertCircle className="w-4 h-4 text-orange-400" />}
                     </button>
                   );
@@ -209,27 +208,27 @@ function RejectDialog({ task, onConfirm, onClose }: RejectDialogProps) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              {t('rejectDialog.reasonLabel')} <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t('rejectDialog.reasonLabel')} <span className="text-danger-fg">*</span>
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               autoFocus
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-300 focus:outline-none focus:border-orange-500 resize-none"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-3 text-sm text-fg-muted focus:outline-none focus:border-orange-500 resize-none"
               placeholder={t('rejectDialog.reasonPlaceholder')}
             />
           </div>
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg">
             {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={!reason.trim() || submitting}
-            className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+            className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {submitting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -255,7 +254,6 @@ interface EditTaskDialogProps {
 
 function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
   const t = useTranslations("dashboard");
-  const { dateTime } = useFormatter();
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description || "");
   const [priority, setPriority] = useState<string>(task.priority || "medium");
@@ -277,30 +275,30 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
       onClick={onClose}
     >
       <div
-        className="modal-content bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[500px] shadow-2xl"
+        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[500px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">{t('editTask.title')}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
-            <XCircle className="w-5 h-5 text-slate-400" />
+        <div className="p-5 border-b border-line flex justify-between items-center">
+          <h3 className="text-lg font-bold text-fg">{t('editTask.title')}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded">
+            <XCircle className="w-5 h-5 text-fg-subtle" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.titleLabel')}</label>
+            <label className="block text-sm font-medium text-fg-muted mb-2">{t('editTask.titleLabel')}</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-lg focus:outline-none focus:border-blue-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg text-lg focus:outline-none focus:border-primary"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.priorityLabel')}</label>
+            <label className="block text-sm font-medium text-fg-muted mb-2">{t('editTask.priorityLabel')}</label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
             >
               <option value="urgent">{t('priority.urgent')}</option>
               <option value="high">{t('priority.high')}</option>
@@ -309,23 +307,23 @@ function EditTaskDialog({ task, onSave, onClose }: EditTaskDialogProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">{t('editTask.descriptionLabel')}</label>
+            <label className="block text-sm font-medium text-fg-muted mb-2">{t('editTask.descriptionLabel')}</label>
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               rows={5}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary resize-none"
             />
           </div>
         </div>
-        <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg">
+        <div className="p-5 border-t border-line flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg">
             {t('common.cancel')}
           </button>
           <button
             onClick={handleSave}
             disabled={!title.trim() || saving}
-            className="flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
+            className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
           >
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {t('editTask.save')}
@@ -374,32 +372,32 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
   };
 
   return (
-    <div className="border border-slate-700/60 rounded-xl bg-slate-800/30">
-      <div className="px-5 py-3 border-b border-slate-700/60 flex items-center justify-between">
+    <div className="border border-line-strong/60 rounded-xl bg-surface-2/30">
+      <div className="px-5 py-3 border-b border-line-strong/60 flex items-center justify-between">
         <div className="flex items-center">
-          <GitBranch className="w-4 h-4 mr-2 text-indigo-400" />
-          <span className="text-sm font-medium text-slate-300">{t('subTasks.header', { count: subTasks.length })}</span>
+          <GitBranch className="w-4 h-4 mr-2 text-accent-fg" />
+          <span className="text-sm font-medium text-fg-muted">{t('subTasks.header', { count: subTasks.length })}</span>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center text-xs text-indigo-400 hover:text-indigo-300 transition-colors-fast"
+          className="flex items-center text-xs text-accent-fg hover:text-accent-fg transition-colors-fast"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> {t('subTasks.new')}
         </button>
       </div>
       {showForm && (
-        <div className="px-5 py-3 border-b border-slate-700/30 flex gap-2 animate-scale-in">
+        <div className="px-5 py-3 border-b border-line-strong/30 flex gap-2 animate-scale-in">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+            className="flex-1 bg-bg border border-line-strong rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent"
             placeholder={t('subTasks.titlePlaceholder')}
           />
           <button
             onClick={handleAdd}
             disabled={!title.trim()}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs disabled:opacity-50 btn-press"
+            className="px-3 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-xs disabled:opacity-50 btn-press"
           >
             {t('subTasks.create')}
           </button>
@@ -410,23 +408,23 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
           {subTasks.map((st) => (
             <div
               key={st.id}
-              className="flex items-center justify-between bg-slate-900/50 border border-slate-700/50 rounded-lg p-3"
+              className="flex items-center justify-between bg-surface/50 border border-line-strong/50 rounded-lg p-3"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <Activity className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <Activity className="w-3.5 h-3.5 text-primary-fg shrink-0" />
                 <div className="min-w-0">
-                  <div className="text-sm text-slate-200 truncate">{st.title}</div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">{st.gitBranch}</div>
+                  <div className="text-sm text-fg-muted truncate">{st.title}</div>
+                  <div className="text-[10px] text-fg-faint font-mono truncate">{st.gitBranch}</div>
                 </div>
               </div>
-              <div className="text-[10px] text-slate-500 shrink-0 ml-2">{st.createdAt}</div>
+              <div className="text-[10px] text-fg-faint shrink-0 ml-2">{st.createdAt}</div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="px-5 py-4 text-center text-xs text-slate-500">{t('subTasks.empty')}</div>
+        <div className="px-5 py-4 text-center text-xs text-fg-faint">{t('subTasks.empty')}</div>
       )}
-      <div className="px-5 py-2 border-t border-slate-700/30 text-[10px] text-slate-600">
+      <div className="px-5 py-2 border-t border-line-strong/30 text-[10px] text-fg-faint">
         {t('subTasks.gitIsolationInfo')}
       </div>
     </div>
@@ -487,10 +485,10 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
 
   if (loading) {
     return (
-      <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
+      <div className="border border-line-strong/60 rounded-xl bg-surface-2/30 p-5">
         <div className="flex items-center">
-          <MessageSquare className="w-4 h-4 mr-2 text-slate-400" />
-          <span className="text-sm font-medium text-slate-300">{t('comments.header')}</span>
+          <MessageSquare className="w-4 h-4 mr-2 text-fg-subtle" />
+          <span className="text-sm font-medium text-fg-muted">{t('comments.header')}</span>
         </div>
         <div className="mt-3 space-y-2">
           <div className="skeleton h-4 w-3/4 rounded" />
@@ -501,32 +499,32 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
   }
 
   return (
-    <div className="border border-slate-700/60 rounded-xl bg-slate-800/30">
-      <div className="px-5 py-3 border-b border-slate-700/60 flex items-center">
-        <MessageSquare className="w-4 h-4 mr-2 text-slate-400" />
-        <span className="text-sm font-medium text-slate-300">{t('comments.headerWithCount', { count: comments.length })}</span>
+    <div className="border border-line-strong/60 rounded-xl bg-surface-2/30">
+      <div className="px-5 py-3 border-b border-line-strong/60 flex items-center">
+        <MessageSquare className="w-4 h-4 mr-2 text-fg-subtle" />
+        <span className="text-sm font-medium text-fg-muted">{t('comments.headerWithCount', { count: comments.length })}</span>
       </div>
 
       {comments.length > 0 && (
-        <div className="px-5 py-3 space-y-3 max-h-64 overflow-y-auto border-b border-slate-700/30">
+        <div className="px-5 py-3 space-y-3 max-h-64 overflow-y-auto border-b border-line-strong/30">
           {comments.map((c) => {
             const isAgent = c.author_type === "agent";
             const authorName = isAgent ? `🤖 ${c.author_id?.slice(0, 8) || "Agent"}` : `👤 ${c.author_id?.slice(0, 8) || "User"}`;
             const time = c.created_at ? dateTime(new Date(c.created_at), { hour: "2-digit", minute: "2-digit" }) : "";
             return (
-              <div key={c.id} className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+              <div key={c.id} className="bg-bg border border-line rounded-lg p-3">
                 <div className="flex items-start gap-2">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
-                    isAgent ? "bg-blue-500/20 text-blue-400" : "bg-slate-700 text-slate-300"
+                    isAgent ? "bg-primary/20 text-primary-fg" : "bg-surface-3 text-fg-muted"
                   }`}>
                     {isAgent ? "🤖" : "👤"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium ${isAgent ? "text-blue-400" : "text-slate-300"}`}>{authorName}</span>
-                      <span className="text-[10px] text-slate-600">{time}</span>
+                      <span className={`text-xs font-medium ${isAgent ? "text-primary-fg" : "text-fg-muted"}`}>{authorName}</span>
+                      <span className="text-[10px] text-fg-faint">{time}</span>
                     </div>
-                    <div className="text-sm text-slate-400 mt-1 whitespace-pre-wrap">
+                    <div className="text-sm text-fg-subtle mt-1 whitespace-pre-wrap">
                       <ReactMarkdown
                         components={{
                           p: ({ children }) => <span>{children}</span>,
@@ -535,7 +533,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                               const parts = children.split(/(@[\w\-]+)/g);
                               return parts.map((part, i) =>
                                 part.startsWith("@") ? (
-                                  <span key={i} className="text-blue-400 font-medium">{part}</span>
+                                  <span key={i} className="text-primary-fg font-medium">{part}</span>
                                 ) : (
                                   part
                                 )
@@ -550,7 +548,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                     </div>
                     <button
                       onClick={() => setReplyTo(c.id)}
-                      className="text-[10px] text-blue-400 hover:text-blue-300 mt-1"
+                      className="text-[10px] text-primary-fg hover:text-primary-fg mt-1"
                     >
                       {t('comments.reply')}
                     </button>
@@ -570,12 +568,12 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
               return (
                 <span
                   key={id}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-[10px] text-blue-400"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/30 rounded-full text-[10px] text-primary-fg"
                 >
                   @{agent?.name || id.slice(0, 8)}
                   <button
                     onClick={() => toggleMention(id)}
-                    className="hover:text-white"
+                    className="hover:text-fg"
                     aria-label={t('comments.removeMention')}
                   >
                     <X className="w-3 h-3" />
@@ -593,15 +591,15 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
               e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())
             }
             placeholder={t('comments.inputPlaceholder')}
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500 placeholder-slate-600"
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2 text-sm text-fg-muted focus:outline-none focus:border-primary placeholder-fg-faint"
           />
           <div className="relative">
             <button
               onClick={() => setShowAgentPicker(!showAgentPicker)}
               className={`px-2.5 py-2 rounded-lg border transition-colors-fast btn-press ${
                 mentions.length > 0
-                  ? "bg-blue-500/15 border-blue-500/40 text-blue-400"
-                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+                  ? "bg-primary/15 border-primary/40 text-primary-fg"
+                  : "bg-surface-2 border-line-strong text-fg-subtle hover:text-fg"
               }`}
               title={t('comments.mentionAgent')}
             >
@@ -609,14 +607,16 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
             </button>
             {showAgentPicker && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowAgentPicker(false)} />
-                <div className="absolute right-0 bottom-full mb-1 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
-                  <div className="px-3 py-2 text-[10px] text-slate-500 border-b border-slate-700/60">
+                <ModalPortal>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowAgentPicker(false)} />
+                </ModalPortal>
+                <div className="absolute right-0 bottom-full mb-1 w-56 bg-surface-2 border border-line-strong rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
+                  <div className="px-3 py-2 text-[10px] text-fg-faint border-b border-line-strong/60">
                     {t('comments.mentionAgentTooltip')}
                   </div>
                   <div className="max-h-48 overflow-y-auto">
                     {agents.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-slate-500">{t('comments.noAgents')}</div>
+                      <div className="px-3 py-4 text-center text-xs text-fg-faint">{t('comments.noAgents')}</div>
                     ) : (
                       agents.map((a) => {
                         const selected = mentions.includes(a.id);
@@ -626,13 +626,13 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                             onClick={() => toggleMention(a.id)}
                             className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors-fast ${
                               selected
-                                ? "bg-blue-500/10 text-blue-400"
-                                : "text-slate-300 hover:bg-slate-700/50"
+                                ? "bg-primary/10 text-primary-fg"
+                                : "text-fg-muted hover:bg-surface-3/50"
                             }`}
                           >
                             <Cpu className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate flex-1">{a.name}</span>
-                            {selected && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                            {selected && <CheckCircle2 className="w-3.5 h-3.5 text-primary-fg shrink-0" />}
                           </button>
                         );
                       })
@@ -645,18 +645,18 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
           <button
             onClick={handleSend}
             disabled={!text.trim()}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast btn-press"
+            className="px-3 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast btn-press"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
         {replyTo && (
-          <div className="flex items-center gap-2 mt-2 pl-4 border-l-2 border-blue-500/30">
-            <span className="text-xs text-blue-400">{t('comments.replying')}</span>
+          <div className="flex items-center gap-2 mt-2 pl-4 border-l-2 border-primary/30">
+            <span className="text-xs text-primary-fg">{t('comments.replying')}</span>
             <input
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-bg border border-line-strong rounded px-3 py-1.5 text-sm text-fg focus:outline-none focus:border-primary"
               placeholder={t('comments.replyPlaceholder')}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && replyText.trim()) {
@@ -666,7 +666,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
                 }
               }}
             />
-            <button onClick={() => setReplyTo(null)} className="text-slate-500 hover:text-white">
+            <button onClick={() => setReplyTo(null)} className="text-fg-faint hover:text-fg">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -686,15 +686,14 @@ interface NodeSummaryPanelProps {
 
 function NodeSummaryPanel({ summary, nodeName }: NodeSummaryPanelProps) {
   const t = useTranslations("dashboard");
-  const { dateTime } = useFormatter();
   if (!summary) return null;
   return (
-    <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
+    <div className="border border-line-strong/60 rounded-xl bg-surface-2/30 p-5">
       <div className="flex items-center mb-3">
-        <Bot className="w-4 h-4 mr-2 text-blue-400" />
-        <span className="text-sm font-medium text-slate-300">{t('nodeSummary.header', { nodeName })}</span>
+        <Bot className="w-4 h-4 mr-2 text-primary-fg" />
+        <span className="text-sm font-medium text-fg-muted">{t('nodeSummary.header', { nodeName })}</span>
       </div>
-      <div className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">
+      <div className="text-sm text-fg-subtle whitespace-pre-wrap leading-relaxed">
         {summary}
       </div>
     </div>
@@ -715,10 +714,10 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
   const { dateTime } = useFormatter();
   if (loading) {
     return (
-      <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
+      <div className="border border-line-strong/60 rounded-xl bg-surface-2/30 p-5">
         <div className="flex items-center">
-          <History className="w-4 h-4 mr-2 text-slate-400" />
-          <span className="text-sm font-medium text-slate-300">{t('dataFlow.header')}</span>
+          <History className="w-4 h-4 mr-2 text-fg-subtle" />
+          <span className="text-sm font-medium text-fg-muted">{t('dataFlow.header')}</span>
         </div>
         <div className="mt-3 space-y-2">
           <div className="skeleton h-4 w-3/4 rounded" />
@@ -731,11 +730,11 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
   if (transitions.length === 0 && !task.gitBranch) return null;
 
   const actionLabels: Record<string, { label: string; cls: string; icon: string }> = {
-    approve: { label: t('dataFlow.action.approve'), cls: "text-emerald-400 bg-emerald-500/10", icon: "✅" },
+    approve: { label: t('dataFlow.action.approve'), cls: "text-success-fg bg-success/10", icon: "✅" },
     reject: { label: t('dataFlow.action.reject'), cls: "text-orange-400 bg-orange-500/10", icon: "❌" },
-    manual: { label: t('dataFlow.action.manual'), cls: "text-red-400 bg-red-500/10", icon: "🚩" },
-    reclaim: { label: t('dataFlow.action.reclaim'), cls: "text-blue-400 bg-blue-500/10", icon: "🔄" },
-    timeout: { label: t('dataFlow.action.timeout'), cls: "text-amber-400 bg-amber-500/10", icon: "⏰" },
+    manual: { label: t('dataFlow.action.manual'), cls: "text-danger-fg bg-danger/10", icon: "🚩" },
+    reclaim: { label: t('dataFlow.action.reclaim'), cls: "text-primary-fg bg-primary/10", icon: "🔄" },
+    timeout: { label: t('dataFlow.action.timeout'), cls: "text-warning-fg bg-warning/10", icon: "⏰" },
   };
 
   // 将节点 ID 映射为名称
@@ -748,18 +747,18 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
   rawNodes.forEach((n, i) => { nodeIdxMap[n.id] = i + 1; });
 
   return (
-    <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-5">
+    <div className="border border-line-strong/60 rounded-xl bg-surface-2/30 p-5">
       <div className="flex items-center mb-4">
-        <History className="w-4 h-4 mr-2 text-slate-400" />
-        <span className="text-sm font-medium text-slate-300">{t('dataFlow.header')}</span>
+        <History className="w-4 h-4 mr-2 text-fg-subtle" />
+        <span className="text-sm font-medium text-fg-muted">{t('dataFlow.header')}</span>
       </div>
 
       {/* 节点流转时间线 */}
       {transitions.length > 0 && (
         <div className="space-y-3 mb-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.transitionTitle')}</div>
+          <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">{t('dataFlow.transitionTitle')}</div>
           {transitions.map((tr, i) => {
-            const act = actionLabels[tr.action] || { label: tr.action, cls: "text-slate-400 bg-slate-500/10", icon: "•" };
+            const act = actionLabels[tr.action] || { label: tr.action, cls: "text-fg-subtle bg-fg-faint/10", icon: "•" };
             const nodeName = nodeMap[tr.taskNodeId] || t('dataFlow.nodeFallback', { index: nodeIdxMap[tr.taskNodeId] || "?" });
             const targetName = tr.targetNodeId ? (nodeMap[tr.targetNodeId] || t('dataFlow.nodeFallback', { index: nodeIdxMap[tr.targetNodeId] || "?" })) : null;
             const time = tr.createdAt ? dateTime(new Date(tr.createdAt), { hour: "2-digit", minute: "2-digit" }) : "";
@@ -767,28 +766,28 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
               <div key={tr.id || i} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div className={`w-3 h-3 rounded-full border-2 ${
-                    tr.action === "approve" ? "border-emerald-500 bg-emerald-500/30"
+                    tr.action === "approve" ? "border-success bg-success/30"
                     : tr.action === "reject" ? "border-orange-500 bg-orange-500/30"
-                    : "border-red-500 bg-red-500/30"
+                    : "border-danger bg-danger/30"
                   }`} />
-                  {i < transitions.length - 1 && <div className="w-0.5 flex-1 bg-slate-700 my-1" />}
+                  {i < transitions.length - 1 && <div className="w-0.5 flex-1 bg-surface-3 my-1" />}
                 </div>
                 <div className="flex-1 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-200">{nodeName}</span>
+                    <span className="text-sm font-medium text-fg-muted">{nodeName}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${act.cls}`}>
                       {act.icon} {act.label}
                     </span>
                     {targetName && (
                       <>
-                        <ArrowRight className="w-3 h-3 text-slate-500" />
-                        <span className="text-sm text-slate-300">{targetName}</span>
+                        <ArrowRight className="w-3 h-3 text-fg-faint" />
+                        <span className="text-sm text-fg-muted">{targetName}</span>
                       </>
                     )}
-                    <span className="text-[10px] text-slate-500">{time}</span>
+                    <span className="text-[10px] text-fg-faint">{time}</span>
                   </div>
-                  {tr.comment && <div className="text-xs text-slate-400 mt-1">{tr.comment}</div>}
-                  <div className="text-[10px] text-slate-500 mt-0.5">
+                  {tr.comment && <div className="text-xs text-fg-subtle mt-1">{tr.comment}</div>}
+                  <div className="text-[10px] text-fg-faint mt-0.5">
                     {tr.operatorType === "agent" ? "🤖 Agent" : "👤 Human"}
                   </div>
                 </div>
@@ -801,8 +800,8 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
       {/* Git 代码传递 */}
       {task.gitBranch && (
         <div className="mb-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.gitTransfer')}</div>
-          <div className="flex items-center gap-2 text-sm text-blue-300 font-mono">
+          <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">{t('dataFlow.gitTransfer')}</div>
+          <div className="flex items-center gap-2 text-sm text-primary-fg font-mono">
             <GitBranch className="w-3.5 h-3.5" />
             <span className="truncate">{task.gitBranch}</span>
           </div>
@@ -814,9 +813,9 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
                 <span
                   key={n.id}
                   className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                    isCompleted ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/5"
-                    : isCurrent ? "border-blue-500/30 text-blue-400 bg-blue-500/5"
-                    : "border-slate-700 text-slate-500"
+                    isCompleted ? "border-success/30 text-success-fg bg-success/5"
+                    : isCurrent ? "border-primary/30 text-primary-fg bg-primary/5"
+                    : "border-line-strong text-fg-faint"
                   }`}
                 >
                   node-{i + 1}-start {isCompleted ? "✓" : isCurrent ? "..." : ""}
@@ -830,10 +829,10 @@ function NodeDataFlowPanel({ task, transitions, loading }: NodeDataFlowPanelProp
       {/* 续作权 */}
       {task.reservedForAgent && (
         <div>
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('dataFlow.continuationRight')}</div>
-          <div className="flex items-center text-xs text-indigo-400 bg-indigo-500/10 p-2 rounded border border-indigo-500/30">
+          <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">{t('dataFlow.continuationRight')}</div>
+          <div className="flex items-center text-xs text-accent-fg bg-accent/10 p-2 rounded border border-accent/30">
             <Lock className="w-3.5 h-3.5 mr-1.5 shrink-0" />
-            <span>{t('dataFlow.reservedFor')} <span className="font-semibold text-indigo-300">{task.reservedForAgent}</span></span>
+            <span>{t('dataFlow.reservedFor')} <span className="font-semibold text-accent-fg">{task.reservedForAgent}</span></span>
           </div>
         </div>
       )}
@@ -852,7 +851,6 @@ interface ClaimButtonProps {
 
 function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
   const t = useTranslations("dashboard");
-  const { dateTime } = useFormatter();
   if (task.nodesStatus[nodeIndex] !== "pending") return null;
   if (
     task.reservedForAgent &&
@@ -864,7 +862,7 @@ function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
       Math.floor((new Date(task.reservationExpiresAt).getTime() - Date.now()) / 1000)
     );
     return (
-      <div className="absolute -top-2 right-2 px-2 py-0.5 bg-indigo-500/80 text-white text-[10px] rounded-full font-bold flex items-center gap-1">
+      <div className="absolute -top-2 right-2 px-2 py-0.5 bg-accent/80 text-fg text-[10px] rounded-full font-bold flex items-center gap-1">
         <Lock className="w-2.5 h-2.5" /> {task.reservedForAgent} ({remaining}s)
       </div>
     );
@@ -872,7 +870,7 @@ function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
   return (
     <button
       onClick={() => onClaim(task.id, nodeIndex)}
-      className="absolute -top-2 right-2 px-2 py-0.5 bg-indigo-500/80 hover:bg-indigo-500 text-white text-[10px] rounded-full font-bold transition-colors-fast shadow-lg shadow-indigo-500/30 cursor-pointer"
+      className="absolute -top-2 right-2 px-2 py-0.5 bg-accent/80 hover:bg-accent text-fg text-[10px] rounded-full font-bold transition-colors-fast shadow-lg shadow-accent/30 cursor-pointer"
     >
       {t('claimButton.claimNode')}
     </button>
@@ -1087,11 +1085,11 @@ function WorkflowDetailsPanel({
   };
 
   const badgeMap: Record<string, string> = {
-    completed: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-    cancelled: "bg-slate-500/10 text-slate-400 border-slate-500/30",
-    manual_intervention: "bg-red-500/10 text-red-400 border-red-500/30",
+    completed: "bg-success/10 text-success-fg border-success/30",
+    cancelled: "bg-fg-faint/10 text-fg-subtle border-line-strong/30",
+    manual_intervention: "bg-danger/10 text-danger-fg border-danger/30",
     rejected: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-    in_progress: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    in_progress: "bg-primary/10 text-primary-fg border-primary/30",
   };
   const badgeLabelMap: Record<string, string> = {
     completed: t('status.completed'),
@@ -1105,29 +1103,29 @@ function WorkflowDetailsPanel({
   const completedCount = task.nodesStatus.filter((s) => s === "completed").length;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-slate-900/95 backdrop-blur-xl border-t border-slate-700 panel-shadow z-50 animate-fade-in-up">
+    <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-surface/95 backdrop-blur-xl border-t border-line-strong panel-shadow z-50 animate-fade-in-up">
       {/* 页头 */}
-      <div className="p-4 border-b border-slate-700/60 flex justify-between items-center bg-slate-800/60 backdrop-blur-sm shrink-0">
+      <div className="p-4 border-b border-line-strong/60 flex justify-between items-center bg-surface-2/60 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-wrap">
-          <span className="text-blue-400 font-mono text-sm bg-blue-400/10 px-2 py-1 rounded shrink-0">
+          <span className="text-primary-fg font-mono text-sm bg-primary-fg/10 px-2 py-1 rounded shrink-0">
             {task.taskRef}
           </span>
-          <h2 className="text-lg font-semibold text-white truncate">{task.title}</h2>
+          <h2 className="text-lg font-semibold text-fg truncate">{task.title}</h2>
           <span
-            className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${badgeMap[task.priorityState] || "bg-slate-500/10 text-slate-400"}`}
+            className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${badgeMap[task.priorityState] || "bg-fg-faint/10 text-fg-subtle"}`}
           >
             {badgeLabelMap[task.priorityState]}
           </span>
-          <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded font-mono shrink-0">
+          <span className="text-xs text-fg-faint bg-surface-2 px-2 py-0.5 rounded font-mono shrink-0">
             {task.type?.toUpperCase() || "TASK"}
           </span>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-fg-faint">
             {completedCount}/{totalNodes}
           </span>
           {/* 截止日期 */}
           {task.dueDate && (
             <span
-              className={`text-xs flex items-center gap-1 ${isOverdue ? "text-red-400 bg-red-500/10 px-2 py-0.5 rounded" : "text-slate-400"}`}
+              className={`text-xs flex items-center gap-1 ${isOverdue ? "text-danger-fg bg-danger/10 px-2 py-0.5 rounded" : "text-fg-subtle"}`}
             >
               <Calendar className="w-3 h-3" />
               {task.dueDate}
@@ -1147,14 +1145,14 @@ function WorkflowDetailsPanel({
             <>
               <button
                 onClick={() => setShowEditDialog(true)}
-                className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-blue-400 transition-colors-fast"
+                className="p-1.5 hover:bg-surface-3 rounded text-fg-subtle hover:text-primary-fg transition-colors-fast"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
               {!isInterrupted && (
                 <button
                   onClick={() => handleDoManual("cancel")}
-                  className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg transition-colors-fast flex items-center"
+                  className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center"
                 >
                   <Ban className="w-3.5 h-3.5 mr-1" />
                   {t('actions.cancelTask')}
@@ -1168,13 +1166,13 @@ function WorkflowDetailsPanel({
                 onDeleteTask(task.id);
                 onClose();
               }}
-              className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg transition-colors-fast flex items-center"
+              className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center"
             >
               <Trash2 className="w-3.5 h-3.5 mr-1" />
               {t('actions.deleteTask')}
             </button>
           )}
-          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg">
             <XCircle className="w-6 h-6" />
           </button>
         </div>
@@ -1186,18 +1184,18 @@ function WorkflowDetailsPanel({
           <div className="col-span-2 space-y-6">
             {/* 子任务标记 */}
             {task.parentTask && (
-              <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 text-xs text-indigo-300 flex items-center">
+              <div className="bg-accent/5 border border-accent/20 rounded-xl p-3 text-xs text-accent-fg flex items-center">
                 <Bot className="w-3.5 h-3.5 mr-2" /> {t('subTasks.parentInfo', { parentTask: task.parentTask })}
               </div>
             )}
 
             {/* 工作流进度条 */}
             <div className="overflow-x-auto max-w-full">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center justify-between">
+              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-4 flex items-center justify-between">
                 <span>{t('workflow.progress')}</span>
-                <div className="w-1/3 h-1.5 bg-slate-800 rounded-full overflow-hidden shrink-0 ml-4">
+                <div className="w-1/3 h-1.5 bg-surface-2 rounded-full overflow-hidden shrink-0 ml-4">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all"
+                    className="h-full bg-gradient-to-r from-primary to-success rounded-full transition-all"
                     style={{ width: `${(completedCount / totalNodes) * 100}%` }}
                   />
                 </div>
@@ -1205,19 +1203,19 @@ function WorkflowDetailsPanel({
               <div className="flex items-center min-w-max space-x-2 pb-2">
                 {nodeNames.map((stepName: string, index: number) => {
                   const status = (task.nodesStatus || [])[index] || "pending";
-                  let color = "text-slate-500 border-slate-700 bg-slate-800/50";
-                  let icon: React.ReactNode = <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />;
+                  let color = "text-fg-faint border-line-strong bg-surface-2/50";
+                  let icon: React.ReactNode = <div className="w-2.5 h-2.5 rounded-full bg-surface-3" />;
                   if (status === "completed") {
-                    color = "text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
+                    color = "text-success-fg border-success/30 bg-success/10";
                     icon = <CheckCircle2 className="w-4 h-4" />;
                   } else if (status === "in_progress") {
-                    color = "text-blue-400 border-blue-500 bg-blue-500/20 ring-2 ring-blue-500/30";
+                    color = "text-primary-fg border-primary bg-primary/20 ring-2 ring-primary/30";
                     icon = <Activity className="w-4 h-4 animate-pulse" />;
                   } else if (status === "rejected") {
                     color = "text-orange-400 border-orange-500 bg-orange-500/20";
                     icon = <XCircle className="w-4 h-4" />;
                   } else if (status === "manual_intervention") {
-                    color = "text-red-400 border-red-500 bg-red-500/20 ring-2 ring-red-500/50 animate-pulse";
+                    color = "text-danger-fg border-danger bg-danger/20 ring-2 ring-danger/50 animate-pulse";
                     icon = <ShieldAlert className="w-4 h-4" />;
                   }
 
@@ -1225,36 +1223,36 @@ function WorkflowDetailsPanel({
                     <React.Fragment key={index}>
                       <div
                         onClick={() => status !== "pending" && handleNodeClick(index)}
-                        className={`flex flex-col items-center p-3 rounded-lg border w-32 relative cursor-pointer transition-all ${color} ${activeTerminalNode === index ? "ring-1 ring-white shadow-lg" : ""} ${status === "pending" ? "opacity-50 cursor-not-allowed" : ""}`}
+                        className={`flex flex-col items-center p-3 rounded-lg border w-32 relative cursor-pointer transition-all ${color} ${activeTerminalNode === index ? "ring-1 ring-fg shadow-lg" : ""} ${status === "pending" ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         {status === "in_progress" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-blue-500 text-white text-[10px] rounded-full font-bold">
+                          <div className="absolute -top-2 px-2 py-0.5 bg-primary text-fg text-[10px] rounded-full font-bold">
                             {t('nodeStatus.active')}
                           </div>
                         )}
                         {status === "rejected" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-orange-500 text-white text-[10px] rounded-full font-bold">
+                          <div className="absolute -top-2 px-2 py-0.5 bg-orange-500 text-fg text-[10px] rounded-full font-bold">
                             {t('nodeStatus.needsRework')}
                           </div>
                         )}
                         {status === "manual_intervention" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-bold">
+                          <div className="absolute -top-2 px-2 py-0.5 bg-danger text-fg text-[10px] rounded-full font-bold">
                             {t('nodeStatus.blocked')}
                           </div>
                         )}
                         <div className="mb-2">{icon}</div>
                         <span className="text-xs font-medium text-center line-clamp-2">{stepName}</span>
-                        <span className="text-[9px] text-slate-500 mt-1 text-center">
+                        <span className="text-[9px] text-fg-faint mt-1 text-center">
                           {task.nodeAgents?.[index] || ""}
                         </span>
                         {(task.nodeTokens as Record<string, unknown>)?.[index] !== undefined && (task.nodeTokens as Record<string, unknown>)?.[index] !== null && (
-                          <span className="text-[8px] text-slate-600 mt-0.5 font-mono">
+                          <span className="text-[8px] text-fg-faint mt-0.5 font-mono">
                             ⧗ {String((task.nodeTokens as Record<string, unknown>)[index])}
                           </span>
                         )}
                         {(task.nodeTimeouts as Record<string, number>)?.[index] &&
                           (task.nodeTimeouts as Record<string, number>)[index] > 0 && (
-                            <span className="text-[8px] text-slate-600 mt-0.5">
+                            <span className="text-[8px] text-fg-faint mt-0.5">
                               {t('nodeStatus.timeout', { minutes: (task.nodeTimeouts as Record<string, number>)[index] })}
                             </span>
                           )}
@@ -1262,7 +1260,7 @@ function WorkflowDetailsPanel({
                       </div>
                       {index < nodeNames.length - 1 && (
                         <div
-                          className={`w-8 h-px shrink-0 ${task.currentNode > index ? "bg-emerald-500/50" : "bg-slate-700"}`}
+                          className={`w-8 h-px shrink-0 ${task.currentNode > index ? "bg-success/50" : "bg-surface-3"}`}
                         />
                       )}
                     </React.Fragment>
@@ -1281,13 +1279,13 @@ function WorkflowDetailsPanel({
               const rawNodes = (task._rawNodes || []) as { id: string; name: string }[];
               const nodeName = rawNodes.find((n) => n.id === latest.taskNodeId)?.name || "";
               return (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                <div className="bg-danger/10 border border-danger/30 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <ShieldAlert className="w-4 h-4 text-red-400" />
-                    <span className="text-sm font-semibold text-red-400">{t('manualIntervention.title')}</span>
-                    {nodeName && <span className="text-xs text-red-300/70">— {nodeName}</span>}
+                    <ShieldAlert className="w-4 h-4 text-danger-fg" />
+                    <span className="text-sm font-semibold text-danger-fg">{t('manualIntervention.title')}</span>
+                    {nodeName && <span className="text-xs text-danger-fg/70">— {nodeName}</span>}
                   </div>
-                  <div className="text-sm text-red-200 whitespace-pre-wrap leading-relaxed">
+                  <div className="text-sm text-danger-fg whitespace-pre-wrap leading-relaxed">
                     {latest.comment}
                   </div>
                 </div>
@@ -1296,11 +1294,11 @@ function WorkflowDetailsPanel({
 
             {/* 完整描述 */}
             {task.description && (
-              <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4">
-                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4">
+                <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
                   {t('taskDescription')}
                 </div>
-                <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                <div className="text-sm text-fg-muted whitespace-pre-wrap leading-relaxed">
                   {task.description}
                 </div>
               </div>
@@ -1309,11 +1307,11 @@ function WorkflowDetailsPanel({
             {/* 标签 */}
             {task.labels && task.labels.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <Tag className="w-4 h-4 text-slate-400" />
+                <Tag className="w-4 h-4 text-fg-subtle" />
                 {task.labels.map((l: string) => (
                   <span
                     key={l}
-                    className="text-xs px-2 py-1 bg-slate-700/50 text-slate-300 rounded-full border border-slate-600/50"
+                    className="text-xs px-2 py-1 bg-surface-3/50 text-fg-muted rounded-full border border-line-strong/50"
                   >
                     {l}
                   </span>
@@ -1322,38 +1320,38 @@ function WorkflowDetailsPanel({
             )}
 
             {/* 终端日志 */}
-            <div className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950 terminal-bg shadow-2xl">
-              <div className="bg-slate-800 terminal-titlebar px-4 py-2.5 border-b border-slate-800/80 flex items-center select-none">
+            <div className="border border-line-strong/80 rounded-xl overflow-hidden bg-bg shadow-2xl">
+              <div className="bg-surface-2 px-4 py-2.5 border-b border-line/80 flex items-center select-none">
                 <div className="flex items-center space-x-2 w-16">
                   <div className="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] shadow-sm" />
                   <div className="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] shadow-sm" />
                   <div className="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] shadow-sm" />
                 </div>
                 <div className="flex items-center flex-1 justify-center">
-                  <Terminal className="w-3.5 h-3.5 text-slate-500 mr-2" />
-                  <span className="text-xs font-medium text-slate-400 font-mono">
+                  <Terminal className="w-3.5 h-3.5 text-fg-faint mr-2" />
+                  <span className="text-xs font-medium text-fg-subtle font-mono">
                     bash — {nodeNames[activeTerminalNode] || "terminal"}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-600 font-mono w-16 text-right">
+                <span className="text-[10px] text-fg-faint font-mono w-16 text-right">
                   {t('terminal.nodeLabel', { index: activeTerminalNode + 1 })}
                 </span>
               </div>
-              <div ref={terminalRef} className="p-5 h-52 overflow-y-auto font-mono text-[13px] leading-relaxed relative selection:bg-blue-500/30">
+              <div ref={terminalRef} className="p-5 h-52 overflow-y-auto font-mono text-[13px] leading-relaxed relative selection:bg-primary/30">
                 {(logsByIndex[activeTerminalNode] || [
                   `> ${t('terminal.noLogs')}`,
                 ]).map((log: string, i: number) => {
-                  let cls = "text-slate-300";
+                  let cls = "text-fg-muted";
                   let prompt = false;
                   if (log.startsWith("✖")) {
-                    cls = "text-red-400 font-medium";
+                    cls = "text-danger-fg font-medium";
                   } else if (log.startsWith("✔")) {
-                    cls = "text-emerald-400 font-medium";
+                    cls = "text-success-fg font-medium";
                   } else if (log.startsWith(">")) {
-                    cls = "text-blue-300";
+                    cls = "text-primary-fg";
                     prompt = true;
                   } else if (log.includes("added") || log.includes("audited")) {
-                    cls = "text-slate-500";
+                    cls = "text-fg-faint";
                   }
                   return (
                     <div key={i} className={`${cls} mb-1.5 flex items-start`}>
@@ -1367,9 +1365,9 @@ function WorkflowDetailsPanel({
                   );
                 })}
                 {task.currentNode === activeTerminalNode && task.priorityState === "in_progress" && (
-                  <div className="flex items-center text-emerald-500/80 mt-3 font-medium">
+                  <div className="flex items-center text-success/80 mt-3 font-medium">
                     <span className="w-5 shrink-0 text-fuchsia-500">❯</span>
-                    <span className="w-2.5 h-4 bg-emerald-500/80 animate-pulse cursor-blink" />
+                    <span className="w-2.5 h-4 bg-success/80 animate-pulse cursor-blink" />
                   </div>
                 )}
               </div>
@@ -1394,20 +1392,20 @@ function WorkflowDetailsPanel({
           {/* ============ 右列 (col-span-1) ============ */}
           <div className="col-span-1 space-y-4">
             {/* 当前节点操作面板 */}
-            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            <div className="bg-bg/80 p-4 rounded-xl border border-line">
+              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3">
                 {t('nodeActions.title')}
               </div>
               <div className="space-y-2">
-                <div className="text-sm text-slate-300 flex items-center">
-                  <span className="text-slate-400">{t('nodeActions.status')}</span>
+                <div className="text-sm text-fg-muted flex items-center">
+                  <span className="text-fg-subtle">{t('nodeActions.status')}</span>
                   <span
-                    className={`ml-2 text-xs px-2 py-0.5 rounded-full border font-medium ${badgeMap[task.priorityState] || "bg-slate-500/10 text-slate-400"}`}
+                    className={`ml-2 text-xs px-2 py-0.5 rounded-full border font-medium ${badgeMap[task.priorityState] || "bg-fg-faint/10 text-fg-subtle"}`}
                   >
                     {badgeLabelMap[task.priorityState]}
                   </span>
                 </div>
-                <div className="text-sm text-slate-300">{task.message}</div>
+                <div className="text-sm text-fg-muted">{task.message}</div>
                 {(() => {
                   const nodes = (task._rawNodes || []) as Array<{
                     readonly_dirs?: unknown;
@@ -1420,13 +1418,13 @@ function WorkflowDetailsPanel({
                   return (
                     <div className="mt-2 space-y-1 text-[11px]">
                       {roDirs.length > 0 && (
-                        <div className="text-amber-400/90">
+                        <div className="text-warning-fg/90">
                           <Lock className="w-3 h-3 inline mr-1" />
                           {t('nodeActions.readonlyDirs')} {roDirs.join(", ")}
                         </div>
                       )}
                       {fcDirs.length > 0 && (
-                        <div className="text-emerald-400/90">
+                        <div className="text-success-fg/90">
                           <Cpu className="w-3 h-3 inline mr-1" />
                           {t('nodeActions.fullControl')} {fcDirs.join(", ")}
                         </div>
@@ -1435,29 +1433,29 @@ function WorkflowDetailsPanel({
                   );
                 })()}
                 {task.nodeAgents?.[task.currentNode] && (
-                  <div className="flex items-center text-xs text-blue-400 mt-1">
+                  <div className="flex items-center text-xs text-primary-fg mt-1">
                     <Bot className="w-3 h-3 mr-1.5" /> {t('nodeActions.executor')} {task.nodeAgents[task.currentNode]}
                   </div>
                 )}
                 {!isCompleted && !isCancelled && (
-                  <div className="flex flex-col gap-2 pt-3 border-t border-slate-800 mt-3">
+                  <div className="flex flex-col gap-2 pt-3 border-t border-line mt-3">
                     {isInterrupted ? (
                       <>
                         <button
                           onClick={() => handleDoManual("resume")}
-                          className="flex items-center justify-center px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-sm font-medium border border-emerald-500/30 transition-colors-fast"
+                          className="flex items-center justify-center px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast"
                         >
                           <Activity className="w-4 h-4 mr-2" /> {t('actions.resume')}
                         </button>
                         <button
                           onClick={() => setShowReassignDialog(true)}
-                          className="flex items-center justify-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-sm font-medium border border-indigo-500/30 transition-colors-fast"
+                          className="flex items-center justify-center px-4 py-2 bg-accent-strong/20 hover:bg-accent-strong/30 text-accent-fg rounded-lg text-sm font-medium border border-accent/30 transition-colors-fast"
                         >
                           <ArrowRight className="w-4 h-4 mr-2" /> {t('actions.reassign')}
                         </button>
                         <button
                           onClick={() => handleDoManual("cancel")}
-                          className="flex items-center justify-center px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm font-medium border border-red-500/30 transition-colors-fast"
+                          className="flex items-center justify-center px-4 py-2 bg-danger-strong/20 hover:bg-danger-strong/30 text-danger-fg rounded-lg text-sm font-medium border border-danger/30 transition-colors-fast"
                         >
                           <XCircle className="w-4 h-4 mr-2" /> {t('actions.cancelTask')}
                         </button>
@@ -1468,20 +1466,20 @@ function WorkflowDetailsPanel({
                           <>
                             <button
                               onClick={handleDoApprove}
-                              className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-colors-fast btn-press"
+                              className="flex items-center justify-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium shadow-lg shadow-primary/20 transition-colors-fast btn-press"
                             >
                               <CheckCircle2 className="w-4 h-4 mr-2" /> {t('actions.approve')}
                             </button>
                             <button
                               onClick={() => setShowRejectDialog(true)}
-                              className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-orange-400 rounded-lg text-sm font-medium border border-slate-700 transition-colors-fast"
+                              className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-surface-3 text-orange-400 rounded-lg text-sm font-medium border border-line-strong transition-colors-fast"
                             >
                               <ArrowRight className="w-4 h-4 mr-2 rotate-180" /> {t('actions.rejectTo')}
                             </button>
                             {nodeInProgress && (
                               <button
                                 onClick={() => handleDoManual("manual_intervention")}
-                                className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-amber-900/50 text-amber-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-amber-500/50 transition-colors-fast"
+                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast"
                               >
                                 <Pause className="w-4 h-4 mr-2" /> {t('actions.manualIntervention')}
                               </button>
@@ -1489,7 +1487,7 @@ function WorkflowDetailsPanel({
                             {nodeInProgress && (
                               <button
                                 onClick={() => handleDoManual("interrupt")}
-                                className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-red-900/50 text-red-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-red-500/50 transition-colors-fast"
+                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-danger-strong/50 text-danger-fg rounded-lg text-sm font-medium border border-line-strong hover:border-danger/50 transition-colors-fast"
                               >
                                 <Ban className="w-3.5 h-3.5 mr-2" /> {t('actions.interrupt')}
                               </button>
@@ -1498,7 +1496,7 @@ function WorkflowDetailsPanel({
                         ) : (
                           <button
                             onClick={() => handleDoManual("manual_intervention")}
-                            className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-amber-900/50 text-amber-400 rounded-lg text-sm font-medium border border-slate-700 hover:border-amber-500/50 transition-colors-fast"
+                            className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast"
                           >
                             <AlertCircle className="w-4 h-4 mr-2" /> {t('actions.markManual')}
                           </button>
@@ -1511,43 +1509,43 @@ function WorkflowDetailsPanel({
             </div>
 
             {/* 属性面板 */}
-            <div className="bg-slate-800/30 border border-slate-700/60 rounded-xl p-4">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{t('attributes.title')}</div>
+            <div className="bg-surface-2/30 border border-line-strong/60 rounded-xl p-4">
+              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3">{t('attributes.title')}</div>
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.type')}</span>
-                  <span className="text-white font-mono">{task.type || "story"}</span>
+                  <span className="text-fg-subtle">{t('attributes.type')}</span>
+                  <span className="text-fg font-mono">{task.type || "story"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.priority')}</span>
+                  <span className="text-fg-subtle">{t('attributes.priority')}</span>
                   <span
                     className={`font-medium ${
                       (task.priority as string) === "urgent"
                         ? "text-orange-400"
                         : task.priority === "high"
-                          ? "text-amber-400"
+                          ? "text-warning-fg"
                           : task.priority === "medium"
-                            ? "text-yellow-400" : "text-slate-400"
+                            ? "text-yellow-400" : "text-fg-subtle"
                     }`}
                   >
                     {task.priority || "medium"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.workflow')}</span>
-                  <span className="text-slate-300 text-right max-w-[120px] truncate">
+                  <span className="text-fg-subtle">{t('attributes.workflow')}</span>
+                  <span className="text-fg-muted text-right max-w-[120px] truncate">
                     {task.workflowName || "-"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.dueDate')}</span>
-                  <span className={`${isOverdue ? "text-red-400" : "text-slate-300"}`}>
+                  <span className="text-fg-subtle">{t('attributes.dueDate')}</span>
+                  <span className={`${isOverdue ? "text-danger-fg" : "text-fg-muted"}`}>
                     {task.dueDate || "-"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.labels')}</span>
-                  <span className="text-slate-300">{t('attributes.labelCount', { count: task.labels?.length || 0 })}</span>
+                  <span className="text-fg-subtle">{t('attributes.labels')}</span>
+                  <span className="text-fg-muted">{t('attributes.labelCount', { count: task.labels?.length || 0 })}</span>
                 </div>
                 {task.rejectCount > 0 && (
                   <div className="flex justify-between text-orange-400">
@@ -1556,8 +1554,8 @@ function WorkflowDetailsPanel({
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('attributes.progress')}</span>
-                  <span className="text-slate-300">
+                  <span className="text-fg-subtle">{t('attributes.progress')}</span>
+                  <span className="text-fg-muted">
                     {completedCount}/{totalNodes}
                   </span>
                 </div>
@@ -1566,12 +1564,12 @@ function WorkflowDetailsPanel({
 
             {/* Git 分支信息 */}
             {task.gitBranch && (
-              <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
-                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
-                  <GitBranch className="w-3.5 h-3.5 mr-1 text-slate-400" /> {t('gitBranch.title')}
+              <div className="bg-surface-2/30 border border-line-strong/50 rounded-xl p-4">
+                <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center">
+                  <GitBranch className="w-3.5 h-3.5 mr-1 text-fg-subtle" /> {t('gitBranch.title')}
                 </div>
-                <div className="text-sm text-blue-300 font-mono truncate">{task.gitBranch}</div>
-                <div className="text-[10px] text-slate-500 mt-1">
+                <div className="text-sm text-primary-fg font-mono truncate">{task.gitBranch}</div>
+                <div className="text-[10px] text-fg-faint mt-1">
                   {t('gitBranch.baseline', { ref: task.taskRef, index: task.currentNode })}
                 </div>
               </div>
@@ -1579,11 +1577,11 @@ function WorkflowDetailsPanel({
 
             {/* 约束与警告 */}
             {task.constraints && (
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
-                <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 flex items-center">
+              <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
+                <div className="text-xs font-semibold text-warning-fg uppercase tracking-wider mb-2 flex items-center">
                   <AlertTriangle className="w-3.5 h-3.5 mr-1" /> {t('constraints.title')}
                 </div>
-                <div className="text-sm text-amber-200 whitespace-pre-wrap leading-relaxed">
+                <div className="text-sm text-warning-fg whitespace-pre-wrap leading-relaxed">
                   {task.constraints}
                 </div>
               </div>
@@ -1591,21 +1589,21 @@ function WorkflowDetailsPanel({
 
             {/* 节点级 Token 用量 */}
             {task.nodeTokens && Object.keys(task.nodeTokens).length > 0 && (
-              <div className="border border-slate-700/60 rounded-xl bg-slate-800/30 p-4">
+              <div className="border border-line-strong/60 rounded-xl bg-surface-2/30 p-4">
                 <div className="flex items-center mb-3">
-                  <Cpu className="w-4 h-4 mr-2 text-blue-400" />
-                  <span className="text-xs font-semibold text-slate-300">{t('tokenUsage.title')}</span>
+                  <Cpu className="w-4 h-4 mr-2 text-primary-fg" />
+                  <span className="text-xs font-semibold text-fg-muted">{t('tokenUsage.title')}</span>
                 </div>
                 <div className="space-y-2">
                   {Object.entries(task.nodeTokens).map(([nodeIdx, tokens]) => (
                     <div
                       key={nodeIdx}
-                      className="flex items-center justify-between bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2"
+                      className="flex items-center justify-between bg-surface/50 border border-line-strong/50 rounded-lg px-3 py-2"
                     >
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-fg-faint">
                         {nodeNames[parseInt(nodeIdx)]}
                       </span>
-                      <span className="text-xs font-bold text-white">{tokens as string}</span>
+                      <span className="text-xs font-bold text-fg">{tokens as string}</span>
                     </div>
                   ))}
                 </div>
@@ -1616,12 +1614,17 @@ function WorkflowDetailsPanel({
       </div>
 
       {showRejectDialog && (
+        <ModalPortal>
         <RejectDialog task={task} onConfirm={handleRejectConfirm} onClose={() => setShowRejectDialog(false)} />
+        </ModalPortal>
       )}
       {showEditDialog && (
+        <ModalPortal>
         <EditTaskDialog task={task} onSave={onEditTask} onClose={() => setShowEditDialog(false)} />
+        </ModalPortal>
       )}
       {showReassignDialog && (
+        <ModalPortal>
         <ReassignDialog
           agents={agents || []}
           onConfirm={(agentId) => {
@@ -1630,6 +1633,7 @@ function WorkflowDetailsPanel({
           }}
           onClose={() => setShowReassignDialog(false)}
         />
+        </ModalPortal>
       )}
     </div>
   );
@@ -1661,7 +1665,7 @@ function ContinuationBadge({ agentName, expiresAt }: ContinuationBadgeProps) {
   if (remaining <= 0) return null;
 
   return (
-    <div className="mt-2 flex items-center text-xs text-indigo-400 bg-indigo-500/10 p-2 rounded border border-indigo-500/30">
+    <div className="mt-2 flex items-center text-xs text-accent-fg bg-accent/10 p-2 rounded border border-accent/30">
       <Lock className="w-3.5 h-3.5 mr-1.5 shrink-0" />
       <span>
         {t('continuationBadge.waiting', { agentName, seconds: remaining })}
@@ -1684,18 +1688,18 @@ interface TaskColumnProps {
 function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProps) {
   const t = useTranslations("dashboard");
   const styles: Record<string, string> = {
-    manual: "border-red-500/30 bg-red-500/5",
+    manual: "border-danger/30 bg-danger/5",
     rejected: "border-orange-500/30 bg-orange-500/5",
-    progress: "border-blue-500/30 bg-blue-500/5",
-    pending: "border-slate-500/30 bg-slate-500/5",
-    completed: "border-emerald-500/30 bg-emerald-500/5",
+    progress: "border-primary/30 bg-primary/5",
+    pending: "border-line-strong/30 bg-fg-faint/5",
+    completed: "border-success/30 bg-success/5",
   };
   const badgeStyles: Record<string, string> = {
-    manual: "bg-red-500",
+    manual: "bg-danger",
     rejected: "bg-orange-500",
-    progress: "bg-blue-500",
-    pending: "bg-slate-500",
-    completed: "bg-emerald-500",
+    progress: "bg-primary",
+    pending: "bg-fg-faint",
+    completed: "bg-success",
   };
   const icons: Record<string, React.ReactNode> = {
     manual: <ShieldAlert className="w-3.5 h-3.5" />,
@@ -1707,16 +1711,16 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
 
   return (
     <div className={`w-80 flex flex-col rounded-xl border ${styles[type]} shrink-0 backdrop-blur-sm`}>
-      <div className="p-4 border-b border-slate-700/40 flex items-center justify-between">
-        <h3 className="font-semibold text-slate-200">{title}</h3>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-bold text-white ${badgeStyles[type]}`}>
+      <div className="p-4 border-b border-line-strong/40 flex items-center justify-between">
+        <h3 className="font-semibold text-fg-muted">{title}</h3>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-bold text-fg ${badgeStyles[type]}`}>
           {tasks.length}
         </span>
       </div>
       <div className="p-3 flex-1 overflow-y-auto space-y-3 min-h-[200px] stagger-children">
         {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-24 text-slate-600 text-xs">
-            <div className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center mb-2">
+          <div className="flex flex-col items-center justify-center h-24 text-fg-faint text-xs">
+            <div className="w-8 h-8 rounded-full bg-surface-2/50 flex items-center justify-center mb-2">
               {icons[type]}
             </div>
             {t('taskColumn.empty')}
@@ -1737,15 +1741,15 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                 onClick={() => onSelect(task)}
                 className={`p-4 rounded-lg border transition-all cursor-pointer card-hover ${
                   selectedId === task.id
-                    ? "border-blue-500/60 bg-blue-500/5 shadow-lg shadow-blue-500/10"
-                    : "border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-600/60"
+                    ? "border-primary/60 bg-primary/5 shadow-lg shadow-primary/10"
+                    : "border-line-strong/50 bg-surface-2/30 hover:bg-surface-2/50 hover:border-line-strong/60"
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-mono text-slate-400">{task.taskRef}</span>
+                    <span className="text-xs font-mono text-fg-subtle">{task.taskRef}</span>
                     {task.type === "bug" && (
-                      <span className="text-[10px] text-red-400 bg-red-400/10 px-1.5 rounded">BUG</span>
+                      <span className="text-[10px] text-danger-fg bg-danger-fg/10 px-1.5 rounded">BUG</span>
                     )}
                     {(task.priority as string) === "urgent" && (
                       <span className="text-[10px] text-orange-400 bg-orange-400/10 px-1.5 rounded">{t('badge.urgent')}</span>
@@ -1754,23 +1758,23 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                       <span className="text-[10px] text-purple-400 bg-purple-400/10 px-1.5 rounded">{t('badge.review')}</span>
                     )}
                   </div>
-                  <span className="text-xs text-slate-500 shrink-0">
+                  <span className="text-xs text-fg-faint shrink-0">
                     {completedNodes}/{totalNodes}
                   </span>
                 </div>
-                <h4 className="font-medium text-white mb-3 text-sm leading-snug line-clamp-2">{task.title}</h4>
+                <h4 className="font-medium text-fg mb-3 text-sm leading-snug line-clamp-2">{task.title}</h4>
                 {task.reservedForAgent &&
                   task.reservationExpiresAt &&
                   new Date(task.reservationExpiresAt).getTime() > Date.now() && (
-                    <div className="flex items-center gap-1.5 mt-2 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                      <Clock className="w-3 h-3 text-blue-400" />
-                      <span className="text-[10px] text-blue-300 font-medium">
+                    <div className="flex items-center gap-1.5 mt-2 px-2 py-1 bg-primary/10 border border-primary/20 rounded-md">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary-fg animate-pulse" />
+                      <Clock className="w-3 h-3 text-primary-fg" />
+                      <span className="text-[10px] text-primary-fg font-medium">
                         {t('taskCard.priorityRenewal', { agentName: task.reservedForAgent, seconds: Math.ceil((new Date(task.reservationExpiresAt).getTime() - Date.now()) / 1000) })}
                       </span>
                     </div>
                   )}
-                <div className="flex items-center text-xs text-slate-400 mb-2">
+                <div className="flex items-center text-xs text-fg-subtle mb-2">
                   <Bot className="w-3 h-3 mr-1.5" />{" "}
                   {task.nodeAgents?.[task.currentNode] || task.agent || t('taskCard.awaitingClaim')}
                 </div>
@@ -1780,7 +1784,7 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                     {task.labels.map((l: string) => (
                       <span
                         key={l}
-                        className="text-[9px] px-1.5 py-0.5 bg-slate-700/50 text-slate-400 rounded"
+                        className="text-[9px] px-1.5 py-0.5 bg-surface-3/50 text-fg-subtle rounded"
                       >
                         {l}
                       </span>
@@ -1789,17 +1793,17 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                 )}
                 {/* 截止日期 */}
                 {task.dueDate && (
-                  <div className={`flex items-center text-[10px] mb-2 ${isOverdue ? "text-red-400" : "text-slate-500"}`}>
+                  <div className={`flex items-center text-[10px] mb-2 ${isOverdue ? "text-danger-fg" : "text-fg-faint"}`}>
                     <Calendar className="w-3 h-3 mr-1" />
                     {task.dueDate}
                     {isOverdue && (
-                      <span className="ml-1 bg-red-500/10 text-red-400 px-1 rounded">{t('overdue')}</span>
+                      <span className="ml-1 bg-danger/10 text-danger-fg px-1 rounded">{t('overdue')}</span>
                     )}
                   </div>
                 )}
                 {/* 节点超时 */}
                 {currentTimeout && task.priorityState === "in_progress" && (
-                  <div className="flex items-center text-[10px] text-slate-500 mb-2">
+                  <div className="flex items-center text-[10px] text-fg-faint mb-2">
                     <Timer className="w-3 h-3 mr-1" /> {t('taskCard.nodeTimeout', { minutes: currentTimeout })}
                   </div>
                 )}
@@ -1809,14 +1813,14 @@ function TaskColumn({ title, type, tasks, onSelect, selectedId }: TaskColumnProp
                     <AlertOctagon className="w-3 h-3 mr-1" /> {t('taskCard.rejectedCount', { count: task.rejectCount })}
                   </div>
                 )}
-                <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-surface-3 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-blue-500/70 rounded-full transition-all"
+                    className="h-full bg-primary/70 rounded-full transition-all"
                     style={{ width: `${(completedNodes / totalNodes) * 100}%` }}
                   />
                 </div>
                 {type === "manual" && task.message && (
-                  <div className="mt-2 text-xs text-red-400 bg-red-400/10 p-2 rounded flex items-start">
+                  <div className="mt-2 text-xs text-danger-fg bg-danger-fg/10 p-2 rounded flex items-start">
                     <ShieldAlert className="w-3.5 h-3.5 mr-1.5 shrink-0 mt-0.5" />
                     <span className="line-clamp-2">{task.message}</span>
                   </div>
@@ -1874,12 +1878,12 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
   });
 
   const statusMap: Record<string, { label: string; cls: string }> = {
-    manual_intervention: { label: t('status.manualIntervention'), cls: "bg-red-500/10 text-red-400 border-red-500/20" },
+    manual_intervention: { label: t('status.manualIntervention'), cls: "bg-danger/10 text-danger-fg border-danger/20" },
     rejected: { label: t('status.rejected'), cls: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
-    in_progress: { label: t('status.inProgress'), cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-    pending: { label: t('status.pending'), cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
-    completed: { label: t('status.completed'), cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-    cancelled: { label: t('status.cancelled'), cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
+    in_progress: { label: t('status.inProgress'), cls: "bg-primary/10 text-primary-fg border-primary/20" },
+    pending: { label: t('status.pending'), cls: "bg-fg-faint/10 text-fg-subtle border-line-strong/20" },
+    completed: { label: t('status.completed'), cls: "bg-success/10 text-success-fg border-success/20" },
+    cancelled: { label: t('status.cancelled'), cls: "bg-fg-faint/10 text-fg-faint border-line-strong/20" },
   };
 
   return (
@@ -1889,7 +1893,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none cursor-pointer"
+          className="bg-surface-2 border border-line-strong rounded-lg px-3 py-1.5 text-xs text-fg-muted focus:outline-none cursor-pointer"
         >
           <option value="all">{t('filters.allTypes')}</option>
           <option value="story">Story</option>
@@ -1899,7 +1903,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none cursor-pointer"
+          className="bg-surface-2 border border-line-strong rounded-lg px-3 py-1.5 text-xs text-fg-muted focus:outline-none cursor-pointer"
         >
           <option value="all">{t('filters.allStatuses')}</option>
           <option value="manual_intervention">{t('filters.manualIntervention')}</option>
@@ -1910,14 +1914,14 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
           <option value="cancelled">{t('filters.cancelled')}</option>
         </select>
         <div className="flex-1" />
-        <span className="text-xs text-slate-500">{t('filters.taskCount', { count: sorted.length })}</span>
+        <span className="text-xs text-fg-faint">{t('filters.taskCount', { count: sorted.length })}</span>
       </div>
 
       {/* 表格 */}
-      <div className="flex-1 overflow-y-auto rounded-xl border border-slate-700/60">
+      <div className="flex-1 overflow-y-auto rounded-xl border border-line-strong/60">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/80 sticky top-0 z-10">
-            <tr className="text-xs text-slate-400 uppercase tracking-wider">
+          <thead className="bg-surface-2/80 sticky top-0 z-10">
+            <tr className="text-xs text-fg-subtle uppercase tracking-wider">
               <th className="text-left px-4 py-3 font-medium">ID</th>
               <th className="text-left px-4 py-3 font-medium">{t('table.header.title')}</th>
               <th className="text-left px-4 py-3 font-medium">{t('table.header.type')}</th>
@@ -1928,7 +1932,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                     setSortBy("priority");
                     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
                   }}
-                  className="flex items-center gap-1 hover:text-white"
+                  className="flex items-center gap-1 hover:text-fg"
                 >
                   {t('table.header.status')} {sortBy === "priority" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </button>
@@ -1939,7 +1943,7 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
               <th className="text-left px-4 py-3 font-medium">{t('table.header.actions')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-line">
             {sorted.map((task) => {
               const total = task.nodeNames?.length || 7;
               const done = task.nodesStatus.filter((s) => s === "completed").length;
@@ -1953,23 +1957,23 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                 <tr
                   key={task.id}
                   onClick={() => onSelect(task)}
-                  className={`hover:bg-slate-800/50 cursor-pointer transition-colors-normal card-hover ${selectedId === task.id ? "bg-blue-500/5" : ""} ${isOverdue ? "border-l-2 border-l-red-500" : ""}`}
+                  className={`hover:bg-surface-2/50 cursor-pointer transition-colors-normal card-hover ${selectedId === task.id ? "bg-primary/5" : ""} ${isOverdue ? "border-l-2 border-l-danger" : ""}`}
                 >
-                  <td className="px-4 py-3 font-mono text-blue-400 text-xs">{task.taskRef}</td>
-                  <td className="px-4 py-3 text-white font-medium max-w-[200px]">
+                  <td className="px-4 py-3 font-mono text-primary-fg text-xs">{task.taskRef}</td>
+                  <td className="px-4 py-3 text-fg font-medium max-w-[200px]">
                     <div className="truncate">{task.title}</div>
                     {task.labels && task.labels.length > 0 && (
                       <div className="flex gap-1 mt-1">
                         {task.labels.slice(0, 3).map((l: string) => (
                           <span
                             key={l}
-                            className="text-[9px] px-1 py-0.5 bg-slate-700/50 text-slate-400 rounded"
+                            className="text-[9px] px-1 py-0.5 bg-surface-3/50 text-fg-subtle rounded"
                           >
                             {l}
                           </span>
                         ))}
                         {task.labels.length > 3 && (
-                          <span className="text-[9px] text-slate-500">+{task.labels.length - 3}</span>
+                          <span className="text-[9px] text-fg-faint">+{task.labels.length - 3}</span>
                         )}
                       </div>
                     )}
@@ -1978,10 +1982,10 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded ${
                         task.type === "bug"
-                          ? "bg-red-400/10 text-red-400"
+                          ? "bg-danger-fg/10 text-danger-fg"
                           : task.type === "story"
-                            ? "bg-blue-400/10 text-blue-400"
-                            : "bg-slate-400/10 text-slate-400"
+                            ? "bg-primary-fg/10 text-primary-fg"
+                            : "bg-fg-subtle/10 text-fg-subtle"
                       }`}
                     >
                       {task.type || "task"}
@@ -1993,10 +1997,10 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                         (task.priority as string) === "urgent"
                           ? "text-orange-400"
                           : task.priority === "high"
-                            ? "text-amber-400"
+                            ? "text-warning-fg"
                             : task.priority === "medium"
                               ? "text-yellow-400"
-                              : "text-slate-400"
+                              : "text-fg-subtle"
                       }`}
                     >
                       {task.priority || "medium"}
@@ -2007,21 +2011,21 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                       {sm.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">
+                  <td className="px-4 py-3 text-fg-muted text-xs">
                     {(task.nodeNames || [])[task.currentNode] || "-"}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                  <td className="px-4 py-3 text-xs text-fg-subtle">
                     {task.nodeAgents?.[task.currentNode] || task.agent || "-"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-blue-500/70 rounded-full"
+                          className="h-full bg-primary/70 rounded-full"
                           style={{ width: `${(done / total) * 100}%` }}
                         />
                       </div>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-fg-faint">
                         {done}/{total}
                       </span>
                     </div>
@@ -2034,20 +2038,20 @@ function TaskListView({ tasks, onSelect, selectedId, onClaim }: TaskListViewProp
                             e.stopPropagation();
                             onClaim(task.id, task.currentNode);
                           }}
-                          className="text-[10px] px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded border border-indigo-500/30 transition-colors-fast"
+                          className="text-[10px] px-2 py-1 bg-accent/20 hover:bg-accent/30 text-accent-fg rounded border border-accent/30 transition-colors-fast"
                         >
                           {t('table.claim')}
                         </button>
                       ) : task.reservedForAgent ? (
-                        <span className="text-[10px] text-indigo-400 flex items-center">
+                        <span className="text-[10px] text-accent-fg flex items-center">
                           <Lock className="w-3 h-3 mr-0.5" />
                           {task.reservedForAgent}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-600">-</span>
+                        <span className="text-[10px] text-fg-faint">-</span>
                       )}
                       {task.dueDate && (
-                        <span className={`text-[10px] ${isOverdue ? "text-red-400" : "text-slate-500"}`}>
+                        <span className={`text-[10px] ${isOverdue ? "text-danger-fg" : "text-fg-faint"}`}>
                           <Calendar className="w-3 h-3 inline mr-0.5" />
                           {task.dueDate}
                         </span>
@@ -2345,35 +2349,35 @@ export default function DashboardPage() {
   if (viewMode === "list") {
     return (
       <div className="flex flex-col h-full relative page-enter">
-        <div className="px-6 py-3 border-b border-slate-800/60 bg-slate-900/30 shrink-0">
+        <div className="px-6 py-3 border-b border-line/60 bg-surface/30 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+            <div className="flex bg-surface-2 rounded-lg p-0.5 border border-line-strong">
               <button
                 onClick={() => setActiveTab("active")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-primary/20 text-primary-fg" : "text-fg-subtle hover:text-fg"}`}
               >
                 {t('tabs.active')}
               </button>
               <button
                 onClick={() => setActiveTab("archived")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-primary/20 text-primary-fg" : "text-fg-subtle hover:text-fg"}`}
               >
                 {t('tabs.archived')}
               </button>
             </div>
             <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-fg-faint absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('search.placeholder')}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-surface-2 border border-line-strong rounded-lg pl-9 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-primary"
               />
             </div>
             <select
               value={currentProjectId || ""}
               onChange={(e) => setCurrentProjectId(e.target.value || null)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
+              className="bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-xs text-fg-muted focus:outline-none cursor-pointer"
             >
               <option value="">{t('projects.allProjects')}</option>
               {projects.map((p) => (
@@ -2385,7 +2389,7 @@ export default function DashboardPage() {
             <select
               value={filterAgent || ""}
               onChange={(e) => setFilterAgent(e.target.value || null)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
+              className="bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-xs text-fg-muted focus:outline-none cursor-pointer"
             >
               <option value="">{t('agents.allAgents')}</option>
               {agents.map((a) => (
@@ -2396,7 +2400,7 @@ export default function DashboardPage() {
             </select>
             <button
               onClick={() => setViewMode(viewMode === "list" ? "kanban" : "list")}
-              className="flex items-center px-3 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors-fast"
+              className="flex items-center px-3 py-2 text-xs text-fg-subtle hover:text-fg bg-surface-2 hover:bg-surface-3 border border-line-strong rounded-lg transition-colors-fast"
             >
               <ListTree className="w-3.5 h-3.5 mr-1" /> {t('view.kanban')}
             </button>
@@ -2431,35 +2435,35 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full relative page-enter">
-      <div className="px-6 py-3 border-b border-slate-800/60 bg-slate-900/30 shrink-0">
+      <div className="px-6 py-3 border-b border-line/60 bg-surface/30 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+          <div className="flex bg-surface-2 rounded-lg p-0.5 border border-line-strong">
             <button
               onClick={() => setActiveTab("active")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "active" ? "bg-primary/20 text-primary-fg" : "text-fg-subtle hover:text-fg"}`}
             >
               {t('tabs.active')}
             </button>
             <button
               onClick={() => setActiveTab("archived")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-white"}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors-normal ${activeTab === "archived" ? "bg-primary/20 text-primary-fg" : "text-fg-subtle hover:text-fg"}`}
             >
               {t('tabs.archived')}
             </button>
           </div>
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-fg-faint absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('search.placeholder')}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-surface-2 border border-line-strong rounded-lg pl-9 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-primary"
             />
           </div>
           <select
               value={currentProjectId || ""}
               onChange={(e) => setCurrentProjectId(e.target.value || null)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
+              className="bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-xs text-fg-muted focus:outline-none cursor-pointer"
             >
               <option value="">{t('projects.allProjects')}</option>
               {projects.map((p) => (
@@ -2471,7 +2475,7 @@ export default function DashboardPage() {
             <select
               value={filterAgent || ""}
               onChange={(e) => setFilterAgent(e.target.value || null)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none cursor-pointer"
+              className="bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-xs text-fg-muted focus:outline-none cursor-pointer"
             >
               <option value="">{t('agents.allAgents')}</option>
               {agents.map((a) => (
@@ -2482,7 +2486,7 @@ export default function DashboardPage() {
             </select>
             <button
               onClick={() => setViewMode(viewMode === "list" ? "kanban" : "list")}
-              className="flex items-center px-3 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors-fast"
+              className="flex items-center px-3 py-2 text-xs text-fg-subtle hover:text-fg bg-surface-2 hover:bg-surface-3 border border-line-strong rounded-lg transition-colors-fast"
             >
               <ListTree className="w-3.5 h-3.5 mr-1" /> {t('view.kanban')}
             </button>

@@ -32,7 +32,7 @@ func setupAuthTestRouter(t *testing.T) (chi.Router, *httptest.Server) {
 
 	// Authenticated routes
 	r.Route("/api", func(r chi.Router) {
-		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
+		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil, nil))
 
 		// Workspace management - admin only
 		r.Group(func(r chi.Router) {

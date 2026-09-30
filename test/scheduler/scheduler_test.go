@@ -397,41 +397,41 @@ func TestHeartbeatTimeout(t *testing.T) {
 	fakeClock := clock.NewFakeClock(time.Now())
 	staleHeartbeat := fakeClock.Now().Add(-5 * time.Minute)
 
-	rt, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
-		AgentID:  agent.ID,
-		DaemonID: "daemon-heartbeat-test",
-		Provider: types.AgentProviderClaude,
-		Status:   types.RuntimeStatusOnline,
-	})
+	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "daemon-heartbeat-test")
 	if err != nil {
-		t.Fatalf("create runtime: %v", err)
+		t.Fatalf("create daemon: %v", err)
 	}
-
-	_, err = db.New(pgDB).UpdateRuntimeHeartbeat(ctx, db.UpdateRuntimeHeartbeatParams{
-		ID:            uuid.MustParse(rt.ID),
-		LastHeartbeat: sql.NullTime{Time: staleHeartbeat, Valid: true},
-	})
+	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, uuid.MustParse(agent.ID)); err != nil {
+		t.Fatalf("bind agent to daemon: %v", err)
+	}
+	_, err = pgDB.ExecContext(ctx,
+		`UPDATE daemons SET last_heartbeat = $1, status = 'online' WHERE id = $2`,
+		staleHeartbeat, daemon.ID)
 	if err != nil {
-		t.Fatalf("update runtime heartbeat: %v", err)
+		t.Fatalf("set stale daemon heartbeat: %v", err)
 	}
 
-	staleCutoff := fakeClock.Now().Add(-100 * time.Second)
-	staleRuntimes, err := s.MarkStaleRuntimes(ctx, staleCutoff)
+	staleDaemons, err := s.MarkStaleDaemons(ctx)
 	if err != nil {
-		t.Fatalf("mark stale runtimes: %v", err)
+		t.Fatalf("mark stale daemons: %v", err)
 	}
 
-	if len(staleRuntimes) == 0 {
-		t.Fatal("expected at least 1 stale runtime to be marked offline, got 0")
+	if len(staleDaemons) == 0 {
+		t.Fatal("expected at least 1 stale daemon to be marked offline, got 0")
 	}
 
-	t.Logf("heartbeat timeout: %d stale runtimes marked offline", len(staleRuntimes))
+	t.Logf("heartbeat timeout: %d stale daemons marked offline", len(staleDaemons))
 
-	offlineAgents, err := s.UpdateOfflineAgents(ctx)
+	if err := s.SetAgentsStatusByDaemon(ctx, daemon.ID, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agents offline by daemon: %v", err)
+	}
+	updated, err := s.GetAgent(ctx, uuid.MustParse(agent.ID))
 	if err != nil {
-		t.Fatalf("update offline agents: %v", err)
+		t.Fatalf("get agent after offline: %v", err)
 	}
-	t.Logf("offline agents updated: %d", len(offlineAgents))
+	if updated.Status != types.AgentStatusOffline {
+		t.Fatalf("expected agent offline after daemon timeout, got %q", updated.Status)
+	}
 }
 
 // TestSchedulerCheckHeartbeatTimeout tests the full scheduler task.
@@ -1262,22 +1262,19 @@ func TestRenotifyPendingNodes(t *testing.T) {
 		t.Fatalf("add agent to project: %v", err)
 	}
 
-	rt, err := s.CreateRuntime(ctx, types.CreateRuntimeParams{
-		AgentID:  agent.ID,
-		DaemonID: "daemon-renotify-test",
-		Provider: types.AgentProviderClaude,
-		Status:   types.RuntimeStatusOnline,
-	})
+	// Daemon-first model: an online daemon reports the agent
+	renotifyDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "daemon-renotify-test")
 	if err != nil {
-		t.Fatalf("create runtime: %v", err)
+		t.Fatalf("create daemon: %v", err)
 	}
-
-	_, err = db.New(pgDB).UpdateRuntimeHeartbeat(ctx, db.UpdateRuntimeHeartbeatParams{
-		ID:            uuid.MustParse(rt.ID),
-		LastHeartbeat: sql.NullTime{Time: time.Now(), Valid: true},
-	})
+	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(wksp.ID), renotifyDaemon.ID, uuid.MustParse(agent.ID)); err != nil {
+		t.Fatalf("bind agent to daemon: %v", err)
+	}
+	_, err = pgDB.ExecContext(ctx,
+		`UPDATE daemons SET last_heartbeat = $1, status = 'online' WHERE id = $2`,
+		time.Now(), renotifyDaemon.ID)
 	if err != nil {
-		t.Fatalf("update runtime heartbeat: %v", err)
+		t.Fatalf("set daemon heartbeat: %v", err)
 	}
 
 	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{

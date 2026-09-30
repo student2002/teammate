@@ -72,7 +72,7 @@ func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	taskID, _ := createTask(t, client, srv.URL, projID, tplID, token)
 
@@ -101,7 +101,7 @@ func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -149,7 +149,7 @@ func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)

@@ -32,8 +32,8 @@ func TestAgentFullWorkflow(t *testing.T) {
 	// Step 3: Create workflow template: code(standard) -> review(review) -> deploy(standard)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
 
-	// Step 4: Set project default workflow
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	// Step 4: Update project settings
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	// Step 5: Create two agents (code+deploy agent, review agent)
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
@@ -180,7 +180,7 @@ func TestAgentRejectWorkflow(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -310,7 +310,7 @@ func TestAgentContinuationRight(t *testing.T) {
 	json.Unmarshal(respBody, &tplResult)
 	tplID := tplResult["template"].(map[string]interface{})["id"].(string)
 
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -409,7 +409,7 @@ func TestAgentSkipClaim(t *testing.T) {
 	json.Unmarshal(respBody, &tplResult)
 	tplID := tplResult["template"].(map[string]interface{})["id"].(string)
 
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -459,7 +459,7 @@ func TestAgentInterruptAndResolve(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, q, projID, agent1ID)
@@ -518,7 +518,7 @@ func TestAgentDoubleClaimRejected(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -558,7 +558,7 @@ func TestAgentClaimAccessControl(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	// Agent in same workspace (must be added to project_members)
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
@@ -578,8 +578,9 @@ func TestAgentClaimAccessControl(t *testing.T) {
 	deleteTask(t, client, srv.URL, projID, taskID, token)
 }
 
-// TestRuntimeRegistrationAndClaim verifies that after registering a runtime, an agent can discover and claim pending nodes via the sync API.
-func TestRuntimeRegistrationAndClaim(t *testing.T) {
+// TestDaemonRegistrationAndClaim verifies that after a daemon registers reporting
+// the agent, the agent can discover and claim pending nodes.
+func TestDaemonRegistrationAndClaim(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
 
@@ -591,31 +592,30 @@ func TestRuntimeRegistrationAndClaim(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, q, projID, agentID)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
-	// Step 1: Create task before registering runtime
+	// Step 1: Create task before daemon registration
 	// (Simulates user creating task before starting daemon)
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	node1ID := nodes[0]["id"].(string)
-	t.Logf("Task created before runtime registration: task=%d, node1=%s", taskID, node1ID)
+	t.Logf("Task created before daemon registration: task=%d, node1=%s", taskID, node1ID)
 
 	// Verify node is pending
 	if nodes[0]["status"] != "pending" {
 		t.Fatalf("expected node status 'pending', got %q", nodes[0]["status"])
 	}
 
-	// Step 2: Register runtime (simulate daemon startup)
-	runtimeID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agentID, agentToken)
-	t.Logf("Runtime registered: %s", runtimeID)
+	// Step 2: Daemon registers reporting the agent (simulate agentd startup)
+	daemonID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agentID)
+	t.Logf("Daemon registered: %s", daemonID)
 
-	// Step 3: Sync runtime to discover pending nodes
-	syncResult := syncRuntime(t, client, srv.URL, wsID, runtimeID, token)
-	pendingNodes, _ := syncResult["pending_nodes"].([]interface{})
-	t.Logf("Sync found %d pending nodes", len(pendingNodes))
+	// Step 3: Discover pending nodes (member node view replaces old runtime sync)
+	pendingNodes := pendingNodesForTasks(t, client, srv.URL, token, taskID)
+	t.Logf("Discovery found %d pending nodes", len(pendingNodes))
 
 	// Step 4: Agent claims pending node
 	claimedNode := claimNode(t, client, srv.URL, taskID, node1ID, agentID, agentToken)
@@ -631,8 +631,9 @@ func TestRuntimeRegistrationAndClaim(t *testing.T) {
 	deleteTask(t, client, srv.URL, projID, taskID, token)
 }
 
-// TestRuntimeSyncDiscoversPendingNodes verifies that the sync API correctly returns pending nodes for an agent after runtime registration.
-func TestRuntimeSyncDiscoversPendingNodes(t *testing.T) {
+// TestDaemonDiscoverPendingNodes verifies that pending nodes across tasks are
+// discoverable after a daemon registers reporting the agent.
+func TestDaemonDiscoverPendingNodes(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
 
@@ -644,9 +645,9 @@ func TestRuntimeSyncDiscoversPendingNodes(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
-	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
+	agentID, _ := createAgent(t, client, srv.URL, wsID, token)
 	addAgentToProject(t, q, projID, agentID)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 
@@ -655,32 +656,28 @@ func TestRuntimeSyncDiscoversPendingNodes(t *testing.T) {
 	taskID2, _ := createTask(t, client, srv.URL, projID, tplID, token)
 	t.Logf("Created tasks: %d, %d", taskID1, taskID2)
 
-	// Register runtime
-	runtimeID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agentID, agentToken)
+	// Daemon registers reporting the agent
+	_, _ = createDaemonForAgent(t, client, srv.URL, wsID, token, agentID)
 
-	// Sync should find pending nodes from both tasks
-	syncResult := syncRuntime(t, client, srv.URL, wsID, runtimeID, token)
-	pendingNodes, _ := syncResult["pending_nodes"].([]interface{})
+	// Node discovery should find pending nodes from both tasks
+	pendingNodes := pendingNodesForTasks(t, client, srv.URL, token, taskID1, taskID2)
 	if len(pendingNodes) < 2 {
-		t.Fatalf("expected at least 2 pending nodes from sync, got %d", len(pendingNodes))
+		t.Fatalf("expected at least 2 pending nodes, got %d", len(pendingNodes))
 	}
-	t.Logf("Sync correctly discovered %d pending nodes across tasks", len(pendingNodes))
+	t.Logf("Discovery found %d pending nodes across tasks", len(pendingNodes))
 
 	// Verify pending node fields
-	firstNode := pendingNodes[0].(map[string]interface{})
+	firstNode := pendingNodes[0]
 	if firstNode["status"] != "pending" {
-		t.Fatalf("expected sync node status 'pending', got %q", firstNode["status"])
-	}
-	if firstNode["task_id"] == nil {
-		t.Fatal("expected sync node to have task_id")
+		t.Fatalf("expected node status 'pending', got %q", firstNode["status"])
 	}
 
 	deleteTask(t, client, srv.URL, projID, taskID1, token)
 	deleteTask(t, client, srv.URL, projID, taskID2, token)
 }
 
-// TestRuntimeHeartbeatKeepsAgentOnline verifies that sending heartbeats keeps the runtime and agent in online status.
-func TestRuntimeHeartbeatKeepsAgentOnline(t *testing.T) {
+// TestDaemonHeartbeatKeepsAgentOnline verifies that daemon heartbeats keep the daemon and its reported agent online.
+func TestDaemonHeartbeatKeepsAgentOnline(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
 
@@ -690,18 +687,12 @@ func TestRuntimeHeartbeatKeepsAgentOnline(t *testing.T) {
 
 	token, wsID := registerTestUser(t, client, srv.URL)
 
-	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
+	agentID, _ := createAgent(t, client, srv.URL, wsID, token)
 
-	// Register runtime
-	runtimeID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agentID, agentToken)
-
-	// Send heartbeat
-	heartbeatURL := fmt.Sprintf("%s/api/workspaces/%s/runtimes/%s/heartbeat", srv.URL, wsID, runtimeID)
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, heartbeatURL, token, nil)
-	if status != http.StatusOK {
-		t.Fatalf("heartbeat: expected 200, got %d, body: %s", status, respBody)
-	}
-	t.Logf("Heartbeat sent successfully for runtime %s", runtimeID)
+	// Daemon registers reporting the agent, then heartbeats
+	daemonID, daemonToken := createDaemonForAgent(t, client, srv.URL, wsID, token, agentID)
+	daemonHeartbeat(t, client, srv.URL, daemonToken)
+	t.Logf("Heartbeat sent successfully for daemon %s", daemonID)
 
 	// Verify agent status is online via dbgen.Queries
 	agent, err := q.GetAgent(context.Background(), uuid.MustParse(agentID))
@@ -711,11 +702,11 @@ func TestRuntimeHeartbeatKeepsAgentOnline(t *testing.T) {
 	if agent.Status != dbgen.AgentStatusOnline {
 		t.Fatalf("expected agent status 'online', got %q", agent.Status)
 	}
-	t.Logf("Agent status is online after heartbeat")
+	t.Logf("Agent status is online after daemon heartbeat")
 }
 
-// TestAgentWorkflowWithRuntime tests the complete agent lifecycle including runtime registration, sync, claim, and approval.
-func TestAgentWorkflowWithRuntime(t *testing.T) {
+// TestAgentWorkflowWithDaemon tests the complete agent lifecycle including daemon registration, discovery, claim, and approval.
+func TestAgentWorkflowWithDaemon(t *testing.T) {
 	router, db, q := setupTestRouter(t)
 	defer db.Close()
 
@@ -727,7 +718,7 @@ func TestAgentWorkflowWithRuntime(t *testing.T) {
 
 	projID := createProject(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 
 	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
 	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
@@ -736,35 +727,33 @@ func TestAgentWorkflowWithRuntime(t *testing.T) {
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent1ID, token)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
 
-	// Simulate daemon startup: register runtime for both agents
-	runtime1ID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agent1ID, agent1Token)
-	runtime2ID := registerRuntimeWithAgentToken(t, client, srv.URL, wsID, agent2ID, agent2Token)
-	t.Logf("Runtimes registered: agent1=%s, agent2=%s", runtime1ID, runtime2ID)
+	// Simulate daemon startup: a daemon per agent reports it (daemon-first model)
+	daemon1ID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID)
+	daemon2ID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agent2ID)
+	t.Logf("Daemons registered: agent1=%s, agent2=%s", daemon1ID, daemon2ID)
 
 	// Create task (this triggers SSE events, but since we don't have
-	// a real SSE client, we rely on sync to discover pending nodes)
+	// a real SSE client, we rely on node discovery)
 	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
 	node1ID := nodes[0]["id"].(string)
 	node2ID := nodes[1]["id"].(string)
 	node3ID := nodes[2]["id"].(string)
 
-	// Agent1 syncs and discovers pending nodes
-	syncResult := syncRuntime(t, client, srv.URL, wsID, runtime1ID, token)
-	pendingNodes, _ := syncResult["pending_nodes"].([]interface{})
+	// Agent1 discovers pending nodes
+	pendingNodes := pendingNodesForTasks(t, client, srv.URL, token, taskID)
 	if len(pendingNodes) == 0 {
-		t.Fatal("expected sync to find pending nodes")
+		t.Fatal("expected discovery to find pending nodes")
 	}
-	t.Logf("Agent1 sync found %d pending nodes", len(pendingNodes))
+	t.Logf("Agent1 discovery found %d pending nodes", len(pendingNodes))
 
 	// Agent1 claims code node
 	claimNode(t, client, srv.URL, taskID, node1ID, agent1ID, agent1Token)
 	approveNode(t, client, srv.URL, taskID, node1ID, agent1ID, agent1Token)
 	t.Logf("Agent1 completed code node")
 
-	// Agent2 syncs and discovers review node
-	syncResult2 := syncRuntime(t, client, srv.URL, wsID, runtime2ID, token)
-	pendingNodes2, _ := syncResult2["pending_nodes"].([]interface{})
-	t.Logf("Agent2 sync found %d pending nodes", len(pendingNodes2))
+	// Agent2 discovers review node
+	pendingNodes2 := pendingNodesForTasks(t, client, srv.URL, token, taskID)
+	t.Logf("Agent2 discovery found %d pending nodes", len(pendingNodes2))
 
 	// Agent2 claims and approves review node
 	claimNode(t, client, srv.URL, taskID, node2ID, agent2ID, agent2Token)
@@ -785,7 +774,7 @@ func TestAgentWorkflowWithRuntime(t *testing.T) {
 	if taskResult["status"] != "completed" {
 		t.Fatalf("expected task status 'completed', got %q", taskResult["status"])
 	}
-	t.Logf("Full workflow with runtime registration completed!")
+	t.Logf("Full workflow with daemon registration completed!")
 
 	deleteTask(t, client, srv.URL, projID, taskID, token)
 }

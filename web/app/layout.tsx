@@ -1,7 +1,9 @@
 // 根布局：定义全局 HTML 结构与元数据。
 import type { Metadata } from "next";
+import { ThemeProvider } from "next-themes";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import "@/lib/themes/registry";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,17 +26,17 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var theme=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',theme);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
-          }}
-        />
-      </head>
       <body className="font-sans antialiased">
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
+        <ThemeProvider
+          attribute="data-theme"
+          defaultTheme="dark"
+          storageKey="theme"
+          disableTransitionOnChange
+        >
+          <NextIntlClientProvider messages={messages}>
+            {children}
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

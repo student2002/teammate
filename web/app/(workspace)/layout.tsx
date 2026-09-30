@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations, useFormatter, useLocale } from "next-intl";
-import { useRouter as useLocaleRouter } from "@/i18n/navigation";
 import {
   LayoutDashboard,
   Cpu,
@@ -15,8 +14,6 @@ import {
   Settings,
   BarChart3,
   Globe,
-  Sun,
-  Moon,
   LogOut,
   Plus,
   Brain,
@@ -29,6 +26,8 @@ import {
   Search,
   History,
 } from "lucide-react";
+import ModalPortal from "@/lib/ModalPortal";
+import ThemeSwitcher from "@/lib/themes/ThemeSwitcher";
 import { useAppStore } from "@/lib/store";
 import { usePermission } from "@/lib/use-permission";
 import api from "@/lib/api";
@@ -54,10 +53,7 @@ export default function WorkspaceLayout({
   const t = useTranslations("nav");
   const { dateTime } = useFormatter();
   const locale = useLocale();
-  const routerLocale = useLocaleRouter();
   const pathname = usePathname();
-  // 固定初始值避免 SSR 与 hydrate 首帧不一致；真实主题由下方 useEffect 从 localStorage 读取
-  const [theme, setTheme] = useState("dark");
   const [showWsOverview, setShowWsOverview] = useState(false);
   const [showWsSwitcher, setShowWsSwitcher] = useState(false);
   const [showCreateWs, setShowCreateWs] = useState(false);
@@ -89,20 +85,6 @@ export default function WorkspaceLayout({
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
-
-  // 水合后读取持久化的主题，避免不一致
-  useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved) {
-      setTheme(saved);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 尽快将主题同步到 document，防止闪烁
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -151,19 +133,13 @@ export default function WorkspaceLayout({
     return () => clearTimeout(timer);
   }, [searchQuery, currentWs?.id]);
 
-  const toggleTheme = () => {
-    setTheme((t) => {
-      const next = t === "dark" ? "light" : "dark";
-      localStorage.setItem("theme", next);
-      return next;
-    });
-  };
-
   const toggleLocale = () => {
     const next = locale === "zh-CN" ? "en-US" : "zh-CN";
-    // 项目未启用 next-intl 中间件，语言切换通过 NEXT_LOCALE cookie 生效
+    // 项目未启用 next-intl 中间件：给导航 API 显式传 locale 会被强制加上
+    // /en-US 前缀（无对应路由 → 404），因此只写 NEXT_LOCALE cookie 并刷新，
+    // 由 i18n/request.ts 按新 cookie 在服务端重渲染
     document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000; samesite=lax`;
-    routerLocale.replace(pathname, { locale: next });
+    router.refresh();
   };
 
   const handleCreateWorkspace = async () => {
@@ -195,18 +171,15 @@ export default function WorkspaceLayout({
   };
 
   return (
-    <div
-      data-theme={theme}
-      className="flex h-screen bg-slate-950 text-slate-300 font-sans overflow-hidden selection:bg-blue-500/30"
-    >
+    <div className="flex h-screen bg-bg text-fg-muted font-sans overflow-hidden selection:bg-primary/30">
       {/* 侧边栏 */}
-      <div className="w-64 bg-slate-900/95 backdrop-blur-sm border-r border-slate-800/80 flex flex-col shrink-0 relative z-20">
+      <div className="w-64 bg-surface/95 backdrop-blur-sm border-r border-line/80 flex flex-col shrink-0 relative z-20">
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-800">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mr-3 font-bold text-white shadow-lg shadow-blue-500/25 animate-fade-in">
+        <div className="h-16 flex items-center px-6 border-b border-line">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent-strong rounded-lg flex items-center justify-center mr-3 font-bold text-fg shadow-lg shadow-primary/25 animate-fade-in">
             T
           </div>
-          <span className="text-lg font-semibold text-white tracking-wide animate-fade-in">
+          <span className="text-lg font-semibold text-fg tracking-wide animate-fade-in">
             Teammate
           </span>
         </div>
@@ -216,7 +189,7 @@ export default function WorkspaceLayout({
           <div className="relative mb-4">
             <button
               onClick={() => setShowWsSwitcher(!showWsSwitcher)}
-              className="w-full text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 flex items-center justify-between hover:text-slate-300 transition-colors-fast"
+              className="w-full text-xs font-semibold text-fg-faint uppercase tracking-wider px-2 flex items-center justify-between hover:text-fg-muted transition-colors-fast"
             >
               <span className="truncate">
                 {t("workspace")} : {(currentWs?.issuePrefix || currentWs?.slug || "LOADING").toUpperCase()}
@@ -225,33 +198,33 @@ export default function WorkspaceLayout({
             </button>
 
             {showWsSwitcher && (
-              <div className="absolute left-0 right-0 top-full mt-1 mx-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
+              <div className="absolute left-0 right-0 top-full mt-1 mx-1 bg-surface-2 border border-line-strong rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
                 {workspaces.map((ws) => (
                   <button
                     key={ws.id}
                     onClick={() => handleSwitchWorkspace(ws.id)}
                     className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors-fast ${
                       ws.id === currentWs?.id
-                        ? "bg-blue-500/10 text-blue-400"
-                        : "text-slate-300 hover:bg-slate-700/50"
+                        ? "bg-primary/10 text-primary-fg"
+                        : "text-fg-muted hover:bg-surface-3/50"
                     }`}
                   >
                     <Building2 className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate flex-1">{ws.name}</span>
                     {ws.issuePrefix && (
-                      <span className="text-[10px] text-slate-500 font-mono">{ws.issuePrefix}</span>
+                      <span className="text-[10px] text-fg-faint font-mono">{ws.issuePrefix}</span>
                     )}
-                    {ws.id === currentWs?.id && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                    {ws.id === currentWs?.id && <Check className="w-3.5 h-3.5 text-primary-fg shrink-0" />}
                   </button>
                 ))}
-                <div className="border-t border-slate-700">
+                <div className="border-t border-line-strong">
                   {perm.canManageMembers && (
                     <button
                       onClick={() => {
                         setShowCreateWs(true);
                         setShowWsSwitcher(false);
                       }}
-                      className="w-full text-left px-3 py-2 text-xs text-blue-400 hover:bg-slate-700/50 flex items-center gap-2 transition-colors-fast"
+                      className="w-full text-left px-3 py-2 text-xs text-primary-fg hover:bg-surface-3/50 flex items-center gap-2 transition-colors-fast"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       {t("createWorkspace")}
@@ -265,7 +238,7 @@ export default function WorkspaceLayout({
           {/* 工作区详情开关 */}
           <button
             onClick={() => setShowWsOverview(!showWsOverview)}
-            className="w-full text-[10px] text-slate-600 mb-4 px-2 flex items-center hover:text-slate-400 transition-colors-fast"
+            className="w-full text-[10px] text-fg-faint mb-4 px-2 flex items-center hover:text-fg-subtle transition-colors-fast"
           >
             <ChevronRight
               className={`w-2.5 h-2.5 mr-1 transition-transform duration-200 ${showWsOverview ? "rotate-90" : ""}`}
@@ -274,36 +247,36 @@ export default function WorkspaceLayout({
           </button>
 
           {showWsOverview && (
-            <div className="mb-4 mx-2 p-3 bg-slate-800/60 border border-slate-700/50 rounded-xl space-y-2 text-xs animate-scale-in">
+            <div className="mb-4 mx-2 p-3 bg-surface-2/60 border border-line-strong/50 rounded-xl space-y-2 text-xs animate-scale-in">
               <div className="flex justify-between">
-                <span className="text-slate-500">{t("projectCount")}</span>
-                <span className="text-white font-medium">
+                <span className="text-fg-faint">{t("projectCount")}</span>
+                <span className="text-fg font-medium">
                   {currentWs?.stats?.projects ?? projects.length}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{t("agentCount")}</span>
-                <span className="text-white font-medium">{agents.length}</span>
+                <span className="text-fg-faint">{t("agentCount")}</span>
+                <span className="text-fg font-medium">{agents.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{t("activeTaskCount")}</span>
-                <span className="text-white font-medium">
+                <span className="text-fg-faint">{t("activeTaskCount")}</span>
+                <span className="text-fg font-medium">
                   {tasks.filter((t) => t.priorityState === "in_progress").length}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">{t("manualInterventionCount")}</span>
-                <span className="text-red-400 font-medium">
+                <span className="text-fg-faint">{t("manualInterventionCount")}</span>
+                <span className="text-danger-fg font-medium">
                   {tasks.filter((t) => t.priorityState === "manual_intervention").length}
                 </span>
               </div>
-              <div className="pt-2 border-t border-slate-700/50 space-y-1.5">
+              <div className="pt-2 border-t border-line-strong/50 space-y-1.5">
                 {perm.canManageMembers && (
                   <Link
                     href="/members"
                     prefetch={false}
                     onClick={() => setShowWsOverview(false)}
-                    className="w-full text-left text-slate-400 hover:text-white flex items-center py-1 transition-colors-fast"
+                    className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
                   >
                     <Settings className="w-3 h-3 mr-1.5" />
                     {t("memberManage")}
@@ -314,7 +287,7 @@ export default function WorkspaceLayout({
                     href="/settings/workspace"
                     prefetch={false}
                     onClick={() => setShowWsOverview(false)}
-                    className="w-full text-left text-slate-400 hover:text-white flex items-center py-1 transition-colors-fast"
+                    className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
                   >
                     <Settings className="w-3 h-3 mr-1.5" />
                     {t("workspaceSettings")}
@@ -337,14 +310,14 @@ export default function WorkspaceLayout({
                   prefetch={false}
                   className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-all-normal group relative ${
                     isActive
-                      ? "bg-blue-500/15 text-blue-400 font-medium shadow-md shadow-blue-500/10 border border-blue-500/30"
-                      : "hover:bg-slate-800/60 hover:text-white border border-transparent"
+                      ? "bg-primary/15 text-primary-fg font-medium shadow-md shadow-primary/10 border border-primary/30"
+                      : "hover:bg-surface-2/60 hover:text-fg border border-transparent"
                   }`}
                 >
                   {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-400 rounded-r-full shadow-sm shadow-blue-400/50" />
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary-fg rounded-r-full shadow-sm shadow-primary-fg/50" />
                   )}
-                  <item.icon className={`w-5 h-5 mr-3 transition-transform-fast group-hover:scale-110 ${isActive ? "text-blue-400" : ""}`} />
+                  <item.icon className={`w-5 h-5 mr-3 transition-transform-fast group-hover:scale-110 ${isActive ? "text-primary-fg" : ""}`} />
                   {t(item.labelKey)}
                 </Link>
               );
@@ -353,32 +326,24 @@ export default function WorkspaceLayout({
         </div>
 
         {/* 用户信息与退出登录 */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900">
+        <div className="p-4 border-t border-line bg-surface">
           <div className="flex items-center justify-between">
             <div className="flex items-center min-w-0">
               <button
                 onClick={toggleLocale}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center mr-2 shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-slate-300"
+                className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 flex items-center justify-center mr-2 shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-fg-muted"
                 title={locale === "zh-CN" ? "Switch to English" : "切换到中文"}
               >
                 {locale === "zh-CN" ? "EN" : "中"}
               </button>
-              <button
-                onClick={toggleTheme}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center mr-3 shrink-0 transition-colors-fast btn-press"
-                title={theme === "dark" ? t("switchToLight") : t("switchToDark")}
-              >
-                {theme === "dark" ? (
-                  <Sun className="w-4 h-4 text-amber-400" />
-                ) : (
-                  <Moon className="w-4 h-4 text-blue-400" />
-                )}
-              </button>
+              <div className="mr-3">
+                <ThemeSwitcher />
+              </div>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-white truncate">
+                <div className="text-sm font-medium text-fg truncate">
                   {user?.name || "Admin"}
                 </div>
-                <div className="text-[10px] text-slate-500 truncate">
+                <div className="text-[10px] text-fg-faint truncate">
                   {perm.isViewer ? t("readOnly") : (user?.role || "Owner")}
                 </div>
               </div>
@@ -388,7 +353,7 @@ export default function WorkspaceLayout({
                 localStorage.removeItem("token");
                 setUser(null);
               }}
-              className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors-fast shrink-0"
+              className="p-1.5 text-fg-faint hover:text-danger-fg hover:bg-surface-2 rounded transition-colors-fast shrink-0"
               title={t("logout")}
             >
               <LogOut className="w-4 h-4" />
@@ -398,22 +363,22 @@ export default function WorkspaceLayout({
       </div>
 
       {/* 主内容区 */}
-      <div className="flex-1 flex flex-col relative overflow-hidden bg-slate-950 z-10">
+      <div className="flex-1 flex flex-col relative overflow-hidden bg-bg z-10">
         {loading && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-slate-400">{t("loadingData")}</span>
+              <div className="w-8 h-8 border-2 border-primary-fg border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-fg-subtle">{t("loadingData")}</span>
             </div>
           </div>
         )}
 
         {/* 顶栏 */}
-        <div className="h-14 shrink-0 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-sm flex items-center px-5 gap-3 relative z-30">
+        <div className="h-14 shrink-0 border-b border-line/80 bg-surface/60 backdrop-blur-sm flex items-center px-5 gap-3 relative z-30">
           {/* 全局搜索 */}
           <div className="relative flex-1 max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
@@ -424,12 +389,12 @@ export default function WorkspaceLayout({
                 onFocus={() => searchQuery.trim() && setShowSearch(true)}
                 onBlur={() => setTimeout(() => setShowSearch(false), 200)}
                 placeholder={t("searchPlaceholder")}
-                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-9 pr-4 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:bg-slate-800 transition-colors-fast"
+                className="w-full bg-surface-2/60 border border-line-strong/50 rounded-lg pl-9 pr-4 py-1.5 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/50 focus:bg-surface-2 transition-colors-fast"
               />
               {searchQuery && (
                 <button
                   onClick={() => { setSearchQuery(""); setSearchResults([]); }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors-fast"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg transition-colors-fast"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -437,7 +402,7 @@ export default function WorkspaceLayout({
             </div>
             {/* 搜索结果下拉框 */}
             {showSearch && searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 animate-scale-in">
+              <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-line-strong rounded-xl shadow-2xl overflow-hidden z-50 animate-scale-in">
                 {searchResults.map((r) => (
                   <button
                     key={`${r.type}-${r.id}`}
@@ -451,16 +416,16 @@ export default function WorkspaceLayout({
                       setSearchQuery("");
                       setSearchResults([]);
                     }}
-                    className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700/50 transition-colors-fast"
+                    className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-surface-3/50 transition-colors-fast"
                   >
                     <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${
-                      r.type === "task" ? "bg-blue-500/20 text-blue-400" : "bg-emerald-500/20 text-emerald-400"
+                      r.type === "task" ? "bg-primary/20 text-primary-fg" : "bg-success/20 text-success-fg"
                     }`}>
                       {r.type === "task" ? "T" : "A"}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm text-white truncate">{r.title}</div>
-                      {r.subtitle && <div className="text-[10px] text-slate-500">{r.subtitle}</div>}
+                      <div className="text-sm text-fg truncate">{r.title}</div>
+                      {r.subtitle && <div className="text-[10px] text-fg-faint">{r.subtitle}</div>}
                     </div>
                   </button>
                 ))}
@@ -474,28 +439,28 @@ export default function WorkspaceLayout({
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative w-9 h-9 rounded-lg bg-slate-800/60 hover:bg-slate-700 flex items-center justify-center transition-colors-fast btn-press"
+              className="relative w-9 h-9 rounded-lg bg-surface-2/60 hover:bg-surface-3 flex items-center justify-center transition-colors-fast btn-press"
               title={t("notifications")}
             >
-              <Bell className="w-4 h-4 text-slate-400" />
+              <Bell className="w-4 h-4 text-fg-subtle" />
               {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center animate-scale-in">
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger rounded-full text-[10px] font-bold text-fg flex items-center justify-center animate-scale-in">
                   {notifications.length > 9 ? "9+" : notifications.length}
                 </span>
               )}
             </button>
             {/* 通知下拉框 */}
             {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 animate-scale-in">
-                <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white">{t("notifications")}</span>
+              <div className="absolute right-0 top-full mt-2 w-80 bg-surface-2 border border-line-strong rounded-xl shadow-2xl overflow-hidden z-50 animate-scale-in">
+                <div className="px-4 py-3 border-b border-line-strong flex items-center justify-between">
+                  <span className="text-sm font-semibold text-fg">{t("notifications")}</span>
                   {notifications.length > 0 && (
-                    <span className="text-[10px] text-slate-500">{t("unreadCount", { count: notifications.length })}</span>
+                    <span className="text-[10px] text-fg-faint">{t("unreadCount", { count: notifications.length })}</span>
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-slate-500">{t("noNotifications")}</div>
+                    <div className="px-4 py-8 text-center text-sm text-fg-faint">{t("noNotifications")}</div>
                   ) : (
                     notifications.map((n) => (
                       <button
@@ -506,20 +471,20 @@ export default function WorkspaceLayout({
                           }
                           setShowNotifications(false);
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-700/50 transition-colors-fast border-b border-slate-700/50 last:border-b-0"
+                        className="w-full text-left px-4 py-3 hover:bg-surface-3/50 transition-colors-fast border-b border-line-strong/50 last:border-b-0"
                       >
                         <div className="flex items-start gap-2">
                           <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                            n.type === "manual_intervention" ? "bg-red-400" :
-                            n.type === "mention" ? "bg-blue-400" :
-                            n.type === "review" ? "bg-amber-400" : "bg-slate-500"
+                            n.type === "manual_intervention" ? "bg-danger-fg" :
+                            n.type === "mention" ? "bg-primary-fg" :
+                            n.type === "review" ? "bg-warning-fg" : "bg-fg-faint"
                           }`} />
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm text-white truncate">{n.title}</div>
+                            <div className="text-sm text-fg truncate">{n.title}</div>
                             {n.description && (
-                              <div className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.description}</div>
+                              <div className="text-xs text-fg-subtle mt-0.5 line-clamp-2">{n.description}</div>
                             )}
-                            <div className="text-[10px] text-slate-600 mt-1">
+                            <div className="text-[10px] text-fg-faint mt-1">
                               {dateTime(new Date(n.created_at), { dateStyle: "medium", timeStyle: "short" })}
                             </div>
                           </div>
@@ -541,32 +506,33 @@ export default function WorkspaceLayout({
 
       {/* 创建工作区弹窗 */}
       {showCreateWs && (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm modal-overlay"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-bg/80 backdrop-blur-sm modal-overlay"
           onClick={() => setShowCreateWs(false)}
         >
           <div
-            className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-[420px] shadow-2xl modal-content"
+            className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[420px] shadow-2xl modal-content"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{t("createWorkspaceTitle")}</h3>
+            <div className="p-5 border-b border-line flex items-center justify-between">
+              <h3 className="text-lg font-bold text-fg">{t("createWorkspaceTitle")}</h3>
               <button
                 onClick={() => setShowCreateWs(false)}
-                className="text-slate-500 hover:text-white transition-colors-fast"
+                className="text-fg-faint hover:text-fg transition-colors-fast"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               {wsError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 animate-fade-in">
+                <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger-fg animate-fade-in">
                   {wsError}
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t("workspaceName")} <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  {t("workspaceName")} <span className="text-danger-fg">*</span>
                 </label>
                 <input
                   value={newWsName}
@@ -577,54 +543,55 @@ export default function WorkspaceLayout({
                       setNewWsPrefix(auto);
                     }
                   }}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors-fast"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary transition-colors-fast"
                   placeholder={t("workspaceNamePlaceholder")}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  ISSUE_PREFIX <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  ISSUE_PREFIX <span className="text-danger-fg">*</span>
                 </label>
                 <input
                   value={newWsPrefix}
                   onChange={(e) => setNewWsPrefix(e.target.value.toUpperCase())}
                   maxLength={10}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white font-mono uppercase focus:outline-none focus:border-blue-500 transition-colors-fast"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg font-mono uppercase focus:outline-none focus:border-primary transition-colors-fast"
                   placeholder="ACME"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className="text-[10px] text-fg-faint mt-1">
                   {t("issuePrefixHint")}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-2">
                   {t("description")}
                 </label>
                 <input
                   value={newWsDesc}
                   onChange={(e) => setNewWsDesc(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors-fast"
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary transition-colors-fast"
                   placeholder={t("descriptionPlaceholder")}
                 />
               </div>
             </div>
-            <div className="p-5 border-t border-slate-800 flex justify-end gap-3">
+            <div className="p-5 border-t border-line flex justify-end gap-3">
               <button
                 onClick={() => setShowCreateWs(false)}
-                className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors-fast"
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
               >
                 {t("cancel")}
               </button>
               <button
                 onClick={handleCreateWorkspace}
                 disabled={!newWsName.trim() || !newWsPrefix.trim() || creatingWs}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
+                className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
               >
                 {creatingWs ? t("creating") : t("create")}
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

@@ -8,8 +8,7 @@ import { Compass, ExternalLink, CheckCircle2 } from "lucide-react";
 // 完整使用指南地址（首次登录教程文档）
 export const GUIDE_URL = "http://zhenfeng.chat";
 
-const PAGES = ["project", "agents", "dashboard", "history", "reviews", "memory", "skills"] as const;
-type PageKey = (typeof PAGES)[number];
+type PageKey = "project" | "agents" | "dashboard" | "history" | "reviews" | "memory" | "skills";
 
 export default function EmptyStateGuide({
   page,
@@ -27,14 +26,14 @@ export default function EmptyStateGuide({
   ].filter(Boolean);
 
   return (
-    <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/40 border border-slate-700/60 rounded-xl p-6">
+    <div className="bg-gradient-to-br from-surface-2/40 to-surface/40 border border-line-strong/60 rounded-xl p-6">
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-          <Compass className="w-5 h-5 text-blue-400" />
+        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+          <Compass className="w-5 h-5 text-primary-fg" />
         </div>
         <div>
-          <h3 className="text-base font-bold text-white">{t("title")}</h3>
-          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+          <h3 className="text-base font-bold text-fg">{t("title")}</h3>
+          <p className="text-xs text-fg-subtle mt-1 leading-relaxed">
             {t("desc")}
           </p>
         </div>
@@ -42,8 +41,8 @@ export default function EmptyStateGuide({
 
       <ol className="space-y-2 my-4">
         {steps.map((step, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-            <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+          <li key={i} className="flex items-start gap-2 text-sm text-fg-muted">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 text-success-fg shrink-0" />
             <span className="leading-relaxed">{step}</span>
           </li>
         ))}
@@ -53,7 +52,7 @@ export default function EmptyStateGuide({
         href={GUIDE_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors-fast"
+        className="inline-flex items-center text-xs font-medium text-primary-fg hover:text-primary-fg transition-colors-fast"
       >
         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
         {tGlobal("viewGuide")}

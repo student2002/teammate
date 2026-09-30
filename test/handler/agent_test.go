@@ -225,7 +225,7 @@ func TestDeleteAgentWithAssignedNodes(t *testing.T) {
 	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
 	projID := createProject(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, srv.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
 	addAgentToProject(t, q, projID, agentID)
 	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
 

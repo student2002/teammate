@@ -583,18 +583,25 @@ func grantAgentAllTaskPermissions(t *testing.T, client *http.Client, baseURL, ws
 	}
 }
 
-func setProjectDefaultWorkflow(t *testing.T, client *http.Client, baseURL, wsID, projID, tplID, token string) {
+// testEnv carries the HTTP fixtures shared by handler-test helpers.
+// Bundling them keeps helper signatures stable when the fixture set changes.
+type testEnv struct {
+	Client  *http.Client
+	BaseURL string
+	Token   string
+}
+
+func setProjectDefaultWorkflow(t *testing.T, env testEnv, wsID, projID string) {
 	t.Helper()
 
 	body := map[string]interface{}{
-		"name":                "test-project",
-		"description":         "test project",
-		"status":              "active",
-		"default_workflow_id": tplID,
-		"max_review_cycles":   3,
+		"name":              "test-project",
+		"description":       "test project",
+		"status":            "active",
+		"max_review_cycles": 3,
 	}
-	_, _, _ = doRequestWithToken(t, client, http.MethodPut,
-		fmt.Sprintf("%s/api/workspaces/%s/projects/%s", baseURL, wsID, projID), token, body)
+	_, _, _ = doRequestWithToken(t, env.Client, http.MethodPut,
+		fmt.Sprintf("%s/api/workspaces/%s/projects/%s", env.BaseURL, wsID, projID), env.Token, body)
 }
 
 func createTask(t *testing.T, client *http.Client, baseURL, projID, tplID, token string) (int32, []map[string]interface{}) {
@@ -739,82 +746,91 @@ func addAgentToProject(t *testing.T, q *dbgen.Queries, projectID, agentID string
 	}
 }
 
-func registerRuntime(t *testing.T, client *http.Client, baseURL, workspaceID, agentID, token string) string {
+// createDaemonForAgent simulates the daemon-first flow for an existing agent:
+// the web creates a daemon (one-time td_ token), then the machine API registers
+// reporting the agent by name — the upsert binds agents.daemon_id to the daemon.
+// Returns (daemonID, daemonToken).
+func createDaemonForAgent(t *testing.T, client *http.Client, baseURL, workspaceID, memberToken, agentID string) (string, string) {
 	t.Helper()
 
-	body := map[string]interface{}{
-		"agent_id": agentID,
-		"provider": "claude",
-		"version":  "1.0.0",
-		"status":   "online",
+	// fetch the agent's name/provider for the report
+	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
+		baseURL+"/api/workspaces/"+workspaceID+"/agents/"+agentID, memberToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("createDaemonForAgent: get agent failed: %d, body: %s", status, respBody)
 	}
-	url := baseURL + "/api/workspaces/" + workspaceID + "/runtimes"
-	// Try using the member Token first; if rejected (non-admin), the caller should
-	// switch to registerRuntimeWithAgentToken.
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
-	if status != http.StatusCreated {
-		t.Fatalf("registerRuntime: expected 201, got %d, body: %s", status, respBody)
+	var agent map[string]interface{}
+	if err := json.Unmarshal(respBody, &agent); err != nil {
+		t.Fatalf("createDaemonForAgent: decode agent: %v", err)
+	}
+	name, _ := agent["name"].(string)
+	provider, _ := agent["provider"].(string)
+	if name == "" {
+		t.Fatalf("createDaemonForAgent: agent %s has no name", agentID)
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode runtime: %v", err)
+	// web creates the daemon
+	_, status, respBody = doRequestWithToken(t, client, http.MethodPost,
+		baseURL+"/api/workspaces/"+workspaceID+"/daemons", memberToken,
+		map[string]string{"name": "box-" + uuid.NewString()[:8]})
+	if status != http.StatusCreated {
+		t.Fatalf("createDaemonForAgent: create daemon: %d, body: %s", status, respBody)
 	}
-	return result["id"].(string)
+	var created struct {
+		ID          string `json:"id"`
+		DaemonToken string `json:"daemon_token"`
+	}
+	if err := json.Unmarshal(respBody, &created); err != nil {
+		t.Fatalf("createDaemonForAgent: decode daemon: %v", err)
+	}
+
+	// machine registers, reporting the agent by name
+	registerBody := map[string]interface{}{
+		"device_name": "test-box",
+		"version":     "1.0.0",
+		"providers":   []map[string]interface{}{{"provider": provider, "version": "1.0", "installed": true}},
+		"agents":      []map[string]string{{"name": name, "provider": provider}},
+	}
+	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodPost,
+		baseURL+"/api/daemons/register", created.DaemonToken, registerBody)
+	if status != http.StatusOK {
+		t.Fatalf("createDaemonForAgent: register: %d, body: %s", status, respBody)
+	}
+	return created.ID, created.DaemonToken
 }
 
-func registerRuntimeWithAgentToken(t *testing.T, client *http.Client, baseURL, workspaceID, agentID, agentAPIToken string) string {
+// daemonHeartbeat sends a daemon heartbeat with the td_ token.
+func daemonHeartbeat(t *testing.T, client *http.Client, baseURL, daemonToken string) {
 	t.Helper()
-
-	body := map[string]interface{}{
-		"agent_id": agentID,
-		"provider": "claude",
-		"version":  "1.0.0",
-		"status":   "online",
+	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost,
+		baseURL+"/api/daemons/heartbeat", daemonToken, map[string]interface{}{})
+	if status != http.StatusOK {
+		t.Fatalf("daemonHeartbeat: expected 200, got %d, body: %s", status, respBody)
 	}
-	url := baseURL + "/api/workspaces/" + workspaceID + "/runtimes"
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, url, agentAPIToken, body)
-	if status != http.StatusCreated {
-		t.Fatalf("registerRuntimeWithAgentToken: expected 201, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode runtime: %v", err)
-	}
-	return result["id"].(string)
 }
 
-// syncRuntime synchronizes the runtime directly via the service layer (the original HTTP endpoint /runtimes/{id}/sync has been removed).
-func syncRuntime(t *testing.T, client *http.Client, baseURL, workspaceID, runtimeID, token string) map[string]interface{} {
+// pendingNodesForTasks collects the pending nodes of the given tasks
+// (member view), replacing the old runtime sync discovery in tests.
+func pendingNodesForTasks(t *testing.T, client *http.Client, baseURL, memberToken string, taskIDs ...int32) []map[string]interface{} {
 	t.Helper()
-
-	db, err := sql.Open("pgx", getTestDSN())
-	if err != nil {
-		t.Fatalf("syncRuntime: connect db: %v", err)
+	var pending []map[string]interface{}
+	for _, taskID := range taskIDs {
+		_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
+			fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID), memberToken, nil)
+		if status != http.StatusOK {
+			t.Fatalf("pendingNodesForTasks: list nodes of task %d: %d, body: %s", taskID, status, respBody)
+		}
+		var nodes []map[string]interface{}
+		if err := json.Unmarshal(respBody, &nodes); err != nil {
+			t.Fatalf("pendingNodesForTasks: decode nodes: %v", err)
+		}
+		for _, n := range nodes {
+			if n["status"] == "pending" {
+				pending = append(pending, n)
+			}
+		}
 	}
-	defer db.Close()
-
-	svc := service.New(db, nil, nil)
-	rtSvc := service.NewRuntimeService(svc)
-	runtimeUUID, err := uuid.Parse(runtimeID)
-	if err != nil {
-		t.Fatalf("syncRuntime: invalid runtime id %q: %v", runtimeID, err)
-	}
-	result, err := rtSvc.Sync(context.Background(), runtimeUUID)
-	if err != nil {
-		t.Fatalf("syncRuntime: %v", err)
-	}
-
-	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("syncRuntime: marshal result: %v", err)
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(data, &m); err != nil {
-		t.Fatalf("syncRuntime: decode result: %v", err)
-	}
-	return m
+	return pending
 }
 
 func dbQueries(t *testing.T, db *sql.DB) *dbgen.Queries {

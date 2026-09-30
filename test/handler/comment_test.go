@@ -46,7 +46,7 @@ func TestCommentCreateAndList(t *testing.T) {
 
 	projID := createProject(t, client, baseURL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
-	setProjectDefaultWorkflow(t, client, baseURL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
@@ -96,7 +96,7 @@ func TestCommentContentLengthValidation(t *testing.T) {
 
 	projID := createProject(t, client, baseURL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
-	setProjectDefaultWorkflow(t, client, baseURL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
@@ -141,7 +141,7 @@ func TestCommentReplyThread(t *testing.T) {
 
 	projID := createProject(t, client, baseURL, wsID, token)
 	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
-	setProjectDefaultWorkflow(t, client, baseURL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
 	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 

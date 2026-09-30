@@ -230,8 +230,8 @@ func inferSecurity(path string) []map[string][]interface{} {
 		}
 	}
 
-	// Runtime-related endpoints (agentd daemon registration/heartbeat/sync/public-key/SSE)
-	if strings.Contains(path, "/runtimes") {
+	// Daemon-related endpoints (machine API + workspace daemon admin + daemon SSE)
+	if strings.Contains(path, "/daemons") {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}, {"BearerAuth": {}}}
 	}
 
@@ -394,8 +394,8 @@ func pathToTag(path string) (string, string) {
 		return "Skills", "Skill CRUD"
 	case "mcp-servers":
 		return "MCP", "MCP server CRUD"
-	case "runtimes":
-		return "Runtimes", "Agent daemon runtime management"
+	case "daemons":
+		return "Daemons", "agentd instance management (machine API + web admin)"
 	case "notifications":
 		return "Notifications", "Notification list"
 	case "search":

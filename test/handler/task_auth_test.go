@@ -38,7 +38,7 @@ func TestCreateTask(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
 	taskID, nodes := createTask(t, client, ts.URL, projID, tplID, token)
 
@@ -64,7 +64,7 @@ func TestUpdateTask(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
@@ -98,7 +98,7 @@ func TestUpdateTaskTitleTooLong(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
@@ -124,7 +124,7 @@ func TestDeleteTask(t *testing.T) {
 	token, wsID := registerTestUser(t, client, ts.URL)
 	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
-	setProjectDefaultWorkflow(t, client, ts.URL, wsID, projID, tplID, token)
+	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
 	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
 
@@ -170,7 +170,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 	r.Mount("/api/auth", authHandler.Routes())
 
 	r.Route("/api", func(r chi.Router) {
-		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
+		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil, nil))
 		r.Route("/workspaces/{workspaceId}", func(r chi.Router) {
 			r.Use(svcmw.WorkspaceAuthMiddlewareWithChecker(wsChecker))
 
@@ -302,7 +302,7 @@ func TestUnauthenticatedRequest(t *testing.T) {
 	svc := service.New(db, nil, nil)
 
 	r := chi.NewRouter()
-	r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil))
+	r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil, nil))
 	r.Get("/protected", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
