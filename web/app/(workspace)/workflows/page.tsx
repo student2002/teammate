@@ -26,6 +26,7 @@ import {
 import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import { useTranslations } from "next-intl";
+import { usePermission } from "@/lib/use-permission";
 import api from "@/lib/api";
 import type {
   MappedTemplate,
@@ -1249,6 +1250,7 @@ function TemplateListView({
   onDelete,
 }: TemplateListViewProps) {
   const t = useTranslations("workflows.list");
+  const { canEdit } = usePermission();
   const builtIn = templates.filter((t) => t.isBuiltIn);
   const custom = templates.filter((t) => !t.isBuiltIn);
   const [previewTemplate, setPreviewTemplate] =
@@ -1312,13 +1314,15 @@ function TemplateListView({
             <>
               <button
                 onClick={() => onEdit(template)}
-                className="flex items-center text-fg-subtle hover:text-primary-fg font-medium transition-colors-fast"
+                disabled={!canEdit}
+                className="flex items-center text-fg-subtle hover:text-primary-fg font-medium transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-fg-subtle"
               >
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> {t("edit")}
               </button>
               <button
                 onClick={() => onDelete(template.id)}
-                className="flex items-center text-fg-subtle hover:text-danger-fg transition-colors-fast"
+                disabled={!canEdit}
+                className="flex items-center text-fg-subtle hover:text-danger-fg transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-fg-subtle"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" /> {t("delete")}
               </button>
@@ -1351,7 +1355,8 @@ function TemplateListView({
         </div>
         <button
           onClick={onCreate}
-          className="flex items-center px-5 py-2.5 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-normal shadow-lg shadow-primary/20 btn-press"
+          disabled={!canEdit}
+          className="flex items-center px-5 py-2.5 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-normal shadow-lg shadow-primary/20 btn-press disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-5 h-5 mr-2" /> {t("page.createButton")}
         </button>

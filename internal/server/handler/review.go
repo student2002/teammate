@@ -10,7 +10,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -84,20 +83,26 @@ func (h *ReviewHandler) GetReviewQueue(w http.ResponseWriter, r *http.Request) {
 // Returns:
 //   - no return value, writes a JSON response via w containing the self-review detection result or an error message
 func (h *ReviewHandler) CheckSelfReview(w http.ResponseWriter, r *http.Request) {
-	taskIDStr := chi.URLParam(r, "taskId")
-	var taskID int32
-	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil {
-		response.BadRequest(w, "invalid task id")
-		return
-	}
 	nodeID, err := uuid.Parse(chi.URLParam(r, "nodeId"))
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return
 	}
+	// The route is mounted under /tasks/{taskId}/review but chi Mount does
+	// not expose the parent path params, so the task is resolved from the
+	// node itself.
+	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			response.NotFound(w, "node not found")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
 
 	reviewSvc := service.NewReviewService(h.Svc)
-	result, err := reviewSvc.CheckSelfReview(r.Context(), taskID, nodeID)
+	result, err := reviewSvc.CheckSelfReview(r.Context(), node.TaskID, nodeID)
 	if err != nil {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "not found") {

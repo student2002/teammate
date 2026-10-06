@@ -15,9 +15,9 @@ var searchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		keyword := args[0]
 		projectID, _ := cmd.Flags().GetString("project")
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 
 		client := newAPIClient()

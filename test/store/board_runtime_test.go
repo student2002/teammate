@@ -1,4 +1,4 @@
-// board_runtime_test.go tests for board data access and daemon-reported agent discovery.
+// board_runtime_test.go tests for board data access and daemon-bound agent discovery.
 package store_test
 
 import (
@@ -41,8 +41,8 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 	}
 }
 
-// TestDaemonAgentPendingDiscovery verifies the daemon-first discovery path:
-// a daemon registers reporting the agent, and the agent's pending nodes are
+// TestDaemonAgentPendingDiscovery verifies discovery for a daemon-bound agent:
+// the agent is manually bound to a daemon, and its pending nodes are
 // discoverable through the board (the watcher's poll source).
 func TestDaemonAgentPendingDiscovery(t *testing.T) {
 	s, _ := setupTestStore(t)
@@ -50,7 +50,7 @@ func TestDaemonAgentPendingDiscovery(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
@@ -68,20 +68,23 @@ func TestDaemonAgentPendingDiscovery(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// Daemon registers reporting the agent
+	// Bind the agent to the daemon (manual binding path)
 	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "discovery-daemon")
 	if err != nil {
 		t.Fatalf("CreateDaemon: %v", err)
 	}
-	reported, err := s.UpsertDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, agent.Name, agent.Provider)
+	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, uuid.MustParse(agent.ID)); err != nil {
+		t.Fatalf("RegisterDaemonAgent: %v", err)
+	}
+	bound, err := s.GetAgent(ctx, uuid.MustParse(agent.ID))
 	if err != nil {
-		t.Fatalf("UpsertDaemonAgent: %v", err)
+		t.Fatalf("GetAgent: %v", err)
 	}
-	if reported.DaemonID != daemon.ID.String() {
-		t.Fatalf("expected agent bound to daemon %s, got %q", daemon.ID, reported.DaemonID)
+	if bound.DaemonID != daemon.ID.String() {
+		t.Fatalf("expected agent bound to daemon %s, got %q", daemon.ID, bound.DaemonID)
 	}
-	if reported.Status != types.AgentStatusOnline {
-		t.Fatalf("expected reported agent online, got %q", reported.Status)
+	if bound.Status != types.AgentStatusOnline {
+		t.Fatalf("expected bound agent online, got %q", bound.Status)
 	}
 
 	// Board still exposes the pending node for the watcher to discover
@@ -101,14 +104,14 @@ func TestDaemonAgentPendingDiscovery(t *testing.T) {
 }
 
 // TestDaemonAgentMentionComments verifies mention comments remain retrievable
-// for a daemon-reported agent (execution context injection source).
+// for a daemon-bound agent (execution context injection source).
 func TestDaemonAgentMentionComments(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
@@ -138,13 +141,13 @@ func TestDaemonAgentMentionComments(t *testing.T) {
 		t.Fatalf("CreateComment: %v", err)
 	}
 
-	// Daemon registers reporting the agent
+	// Bind the agent to the daemon (manual binding path)
 	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "mention-daemon")
 	if err != nil {
 		t.Fatalf("CreateDaemon: %v", err)
 	}
-	if _, err := s.UpsertDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, agent.Name, agent.Provider); err != nil {
-		t.Fatalf("UpsertDaemonAgent: %v", err)
+	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, uuid.MustParse(agent.ID)); err != nil {
+		t.Fatalf("RegisterDaemonAgent: %v", err)
 	}
 
 	comments, err := s.ListComments(ctx, task.ID)

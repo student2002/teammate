@@ -279,18 +279,16 @@ func TestClaimTimeoutRelease(t *testing.T) {
 		t.Fatalf("create workflow template: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "timeout-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("timeout-agent"),
-		GitEmail:     strPtr("timeout-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "box-timeout")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(ws.ID), agentDaemon.ID, "timeout-" + uuid.NewString()[:8], "claude", "", "persona-timeout", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -379,18 +377,16 @@ func TestHeartbeatTimeout(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, ws.ID) })
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "heartbeat-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("heartbeat-agent"),
-		GitEmail:     strPtr("heartbeat-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "box-heartbeat")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(ws.ID), agentDaemon.ID, "heartbeat-" + uuid.NewString()[:8], "claude", "", "persona-heartbeat", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	// Use FakeClock to simulate heartbeat expiration.
@@ -509,18 +505,16 @@ func TestSchedulerClearExpiredReservations(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "reservation-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("reservation-agent"),
-		GitEmail:     strPtr("reservation-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-reservation")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "reservation-" + uuid.NewString()[:8], "claude", "", "persona-reservation", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
@@ -713,18 +707,16 @@ func TestCheckNodeTimeout(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "node-timeout-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOnline,
-		GitName:      strPtr("node-timeout-agent"),
-		GitEmail:     strPtr("node-timeout-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-node")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "node-" + uuid.NewString()[:8], "claude", "", "persona-node", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOnline); err != nil {
+		t.Fatalf("set agent online: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -840,18 +832,16 @@ func TestOfflineAgentFallback(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "offline-fallback-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("offline-fallback-agent"),
-		GitEmail:     strPtr("offline-fallback-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-offline")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "offline-" + uuid.NewString()[:8], "claude", "", "persona-offline", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -964,18 +954,16 @@ func TestOfflineAgentFallbackNoOpForOnlineAgent(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "recently-offline-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("recently-offline-agent"),
-		GitEmail:     strPtr("recently-offline-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-recently")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "recently-" + uuid.NewString()[:8], "claude", "", "persona-recently", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -1060,18 +1048,16 @@ func TestAgentAutoRecoverOnline(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "stuck-busy-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusBusy,
-		GitName:      strPtr("stuck-busy-agent"),
-		GitEmail:     strPtr("stuck-busy-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-stuck")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "stuck-" + uuid.NewString()[:8], "claude", "", "persona-stuck", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusBusy); err != nil {
+		t.Fatalf("set agent busy: %v", err)
 	}
 
 	gotAgent, err := s.GetAgent(ctx, uuid.MustParse(agent.ID))
@@ -1132,18 +1118,16 @@ func TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "busy-with-node-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusBusy,
-		GitName:      strPtr("busy-with-node-agent"),
-		GitEmail:     strPtr("busy-with-node-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-busy")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "busy-" + uuid.NewString()[:8], "claude", "", "persona-busy", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusBusy); err != nil {
+		t.Fatalf("set agent busy: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -1238,18 +1222,16 @@ func TestRenotifyPendingNodes(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "renotify-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOnline,
-		GitName:      strPtr("renotify-agent"),
-		GitEmail:     strPtr("renotify-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-renotify")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "renotify-" + uuid.NewString()[:8], "claude", "", "persona-renotify", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOnline); err != nil {
+		t.Fatalf("set agent online: %v", err)
 	}
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
@@ -1499,18 +1481,16 @@ func TestSchedulerCleanupOldWorkspacesIdentifiesCandidates(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	agent, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  wksp.ID,
-		Name:         "wscleanup-agent",
-		Provider:     types.AgentProviderClaude,
-		Instructions: "test",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       types.AgentStatusOffline,
-		GitName:      strPtr("wscleanup-agent"),
-		GitEmail:     strPtr("wscleanup-agent@teammate.local"),
-	})
+	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-wscleanup")
+	if err != nil {
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "wscleanup-" + uuid.NewString()[:8], "claude", "", "persona-wscleanup", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
+		t.Fatalf("set agent offline: %v", err)
 	}
 
 	// A task completed 8 days ago — should be identified as a candidate.

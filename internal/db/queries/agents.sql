@@ -1,10 +1,5 @@
 -- Agent queries
 
--- name: CreateAgent :one
-INSERT INTO agents (workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING *;
-
 -- name: GetAgent :one
 SELECT * FROM agents
 WHERE id = $1;
@@ -124,6 +119,12 @@ SELECT ms.*, amr.enabled, amr.created_at AS assigned_at
 FROM agent_mcp_servers amr
 JOIN mcp_servers ms ON ms.id = amr.mcp_server_id
 WHERE amr.agent_id = $1;
+
+-- name: ListAgentsByMcpServer :many
+SELECT a.* FROM agent_mcp_servers amr
+JOIN agents a ON a.id = amr.agent_id
+WHERE amr.mcp_server_id = $1
+ORDER BY a.name;
 
 -- name: SumTokenUsageByAgents :many
 SELECT agent_id,

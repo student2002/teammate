@@ -137,7 +137,7 @@ func (s *CommentService) publishMentionTriggers(ctx context.Context, taskID int3
 			continue
 		}
 		s.svc.publishToAgent(ctx, agentUUID, types.EventMentionTrigger, map[string]interface{}{
-			"task_id":    fmt.Sprintf("%d", taskID),
+			"task_id":    taskID,
 			"comment_id": commentID.String(),
 		})
 	}

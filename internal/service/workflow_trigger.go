@@ -42,6 +42,11 @@ type workflowTriggerConfig struct {
 	Secret          string `json:"secret"`
 }
 
+// ErrTriggerProjectMismatch is returned when the project resolved from a trigger
+// configuration belongs to a different workspace than the workflow template.
+// Callers map it to 4xx: the trigger configuration itself is invalid.
+var ErrTriggerProjectMismatch = errors.New("trigger project workspace mismatch")
+
 func NewWorkflowTriggerService(svc *Service) *WorkflowTriggerService {
 	return &WorkflowTriggerService{svc: svc}
 }
@@ -194,7 +199,7 @@ func (s *WorkflowTriggerService) createTaskFromTrigger(
 		return nil, fmt.Errorf("get trigger project: %w", err)
 	}
 	if project.WorkspaceID != template.WorkspaceID {
-		return nil, fmt.Errorf("trigger project workspace mismatch")
+		return nil, ErrTriggerProjectMismatch
 	}
 
 	run, err := s.svc.Store.CreateWorkflowTriggerRun(ctx, types.CreateWorkflowTriggerRunParams{

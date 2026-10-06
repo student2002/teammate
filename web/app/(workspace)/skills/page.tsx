@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
-import api from "@/lib/api";
+import api, { ApiError } from "@/lib/api";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
 import type { Skill, McpAuthType, McpServer, McpServerType } from "@/lib/types";
 import { mapMcpServerFromApi, mapSkillFromApi } from "@/lib/mappers";
@@ -170,7 +170,7 @@ function SkillEditModal({
             >
               {categories.map((c) => (
                 <option key={c} value={c}>
-                  {tCat(categoryKeyMap[c] || c)}
+                  {c ? tCat(categoryKeyMap[c] || c) : tCat("uncategorized")}
                 </option>
               ))}
             </select>
@@ -520,6 +520,20 @@ export default function SkillsPage() {
       await api.deleteMcpServer(workspaceId, id);
       setMcpServers((prev: LocalMcpServer[]) => prev.filter((m) => m.id !== id));
     } catch (err) {
+      // 服务端权威判定：仍被绑定时以 409 返回占用代理名单
+      if (err instanceof ApiError && err.status === 409) {
+        const names = Array.isArray((err.body as { agents?: unknown } | null)?.agents)
+          ? ((err.body as { agents: string[] }).agents)
+          : [];
+        if (names.length > 0) {
+          setDeleteConfirm({
+            type: "mcp",
+            item: mcp,
+            usingAgents: names.map((name, i) => ({ id: `bound-${i}-${name}`, name })),
+          });
+          return;
+        }
+      }
       alert(t("errDeleteMcp") + (err instanceof Error ? err.message : String(err)));
     }
   };
@@ -695,7 +709,9 @@ export default function SkillsPage() {
                         <span
                           className={`px-2 py-0.5 text-[10px] rounded-full border ${getCategoryColor(skill.category)}`}
                         >
-                          {tCat(categoryKeyMap[skill.category] || skill.category)}
+                          {skill.category
+                            ? tCat(categoryKeyMap[skill.category] || skill.category)
+                            : tCat("uncategorized")}
                         </span>
                         {isUsed && (
                           <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/10 text-primary-fg border border-primary/20">

@@ -33,94 +33,13 @@ func setupAgentTestRouter(t *testing.T) (*httptest.Server, *http.Client) {
 	return ts, ts.Client()
 }
 
-func TestCreateAgent(t *testing.T) {
-	ts, client := setupAgentTestRouter(t)
-	token, wsID := registerTestUser(t, client, ts.URL)
-
-	body := map[string]interface{}{
-		"name":         "Test Agent",
-		"provider":     "claude",
-		"instructions": "You are a test agent",
-		"model":        "claude-sonnet-4",
-		"git_name":     "Test Agent",
-		"git_email":    "agent@test.com",
-	}
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost,
-		ts.URL+"/api/workspaces/"+wsID+"/agents", token, body)
-
-	if status != http.StatusCreated {
-		t.Fatalf("expected 201, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	// Verify agent fields
-	if result["name"] != "Test Agent" {
-		t.Fatalf("expected name 'Test Agent', got %v", result["name"])
-	}
-	if result["provider"] != "claude" {
-		t.Fatalf("expected provider 'claude', got %v", result["provider"])
-	}
-	if result["status"] != "offline" {
-		t.Fatalf("expected status 'offline', got %v", result["status"])
-	}
-
-	// Verify API token was returned
-	apiToken, ok := result["api_token"].(string)
-	if !ok || apiToken == "" {
-		t.Fatal("expected api_token to be returned on creation")
-	}
-	if !strings.HasPrefix(apiToken, "tm_") {
-		t.Fatalf("expected api_token to start with 'tm_', got %s", apiToken[:10])
-	}
-}
-
-func TestCreateAgentDefaultProvider(t *testing.T) {
-	ts, client := setupAgentTestRouter(t)
-	token, wsID := registerTestUser(t, client, ts.URL)
-
-	body := map[string]interface{}{
-		"name":      "No Provider Agent",
-		"git_name":  "Test Agent",
-		"git_email": "agent@test.com",
-	}
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost,
-		ts.URL+"/api/workspaces/"+wsID+"/agents", token, body)
-
-	if status != http.StatusCreated {
-		t.Fatalf("expected 201, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if result["provider"] != "claude" {
-		t.Fatalf("expected default provider 'claude', got %v", result["provider"])
-	}
-}
-
 func TestListAgents(t *testing.T) {
 	ts, client := setupAgentTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	// Create 2 agents
+	// Create 2 agents (daemon-group path)
 	for i := 0; i < 2; i++ {
-		body := map[string]interface{}{
-			"name":      "Agent " + uuid.New().String()[:8],
-			"provider":  "claude",
-			"git_name":  "Test Agent",
-			"git_email": "agent@test.com",
-		}
-		_, status, _ := doRequestWithToken(t, client, http.MethodPost,
-			ts.URL+"/api/workspaces/"+wsID+"/agents", token, body)
-		if status != http.StatusCreated {
-			t.Fatalf("create agent %d: expected 201, got %d", i, status)
-		}
+		createAgent(t, client, ts.URL, wsID, token)
 	}
 
 	// List agents
@@ -273,28 +192,14 @@ func TestAgentAPITokenFormat(t *testing.T) {
 	ts, client := setupAgentTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
 
-	body := map[string]interface{}{
-		"name":      "Token Format Agent",
-		"provider":  "claude",
-		"git_name":  "Test Agent",
-		"git_email": "agent@test.com",
-	}
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost,
-		ts.URL+"/api/workspaces/"+wsID+"/agents", token, body)
+	_, apiToken := createAgent(t, client, ts.URL, wsID, token)
 
-	if status != http.StatusCreated {
-		t.Fatalf("expected 201, got %d", status)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	apiToken := result["api_token"].(string)
+	// createAgent returns the daemon td_ token (the production agent
+	// authentication credential; agent tm_ issuance was removed with the
+	// dead rotate-token chain).
 	parts := strings.SplitN(apiToken, "_", 3)
-	if len(parts) != 3 || parts[0] != "tm" {
-		t.Fatalf("expected token format tm_{id}_{hex}, got %s", apiToken)
+	if len(parts) != 3 || parts[0] != "td" {
+		t.Fatalf("expected token format td_{id}_{hex}, got %s", apiToken)
 	}
 	if len(parts[2]) != 40 {
 		t.Fatalf("expected 40 hex chars in token, got %d chars: %s", len(parts[2]), parts[2])

@@ -16,8 +16,8 @@ import (
 )
 
 const createTemplateNode = `-- name: CreateTemplateNode :one
-INSERT INTO workflow_template_nodes (template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+INSERT INTO workflow_template_nodes (id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
+VALUES (COALESCE($14::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, max_reject_cycles, readonly_dirs, full_control_dirs, artifact, depends_on, created_at
 `
 
@@ -35,8 +35,11 @@ type CreateTemplateNodeParams struct {
 	Artifact        pqtype.NullRawMessage `db:"artifact" json:"artifact"`
 	MaxRejectCycles int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
 	DependsOn       []uuid.UUID           `db:"depends_on" json:"depends_on"`
+	NodeID          uuid.NullUUID         `db:"node_id" json:"node_id"`
 }
 
+// id comes from the caller so template node identity is stable across full
+// node-list replacement (depends_on references survive template updates).
 func (q *Queries) CreateTemplateNode(ctx context.Context, arg CreateTemplateNodeParams) (WorkflowTemplateNode, error) {
 	row := q.db.QueryRowContext(ctx, createTemplateNode,
 		arg.TemplateID,
@@ -52,6 +55,7 @@ func (q *Queries) CreateTemplateNode(ctx context.Context, arg CreateTemplateNode
 		arg.Artifact,
 		arg.MaxRejectCycles,
 		pq.Array(arg.DependsOn),
+		arg.NodeID,
 	)
 	var i WorkflowTemplateNode
 	err := row.Scan(

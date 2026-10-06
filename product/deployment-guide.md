@@ -70,9 +70,20 @@ EOF
 docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
 
 # 4. 验证服务状态
-curl http://localhost:8080/health     # → {"status":"ok"}
-curl http://localhost:8080/ready      # → {"status":"ready"}
+curl http://localhost:28080/health     # → {"status":"ok"}
+curl http://localhost:28080/ready      # → {"status":"ready"}
 ```
+
+### 端口与 dev 环境隔离
+
+生产栈使用项目名 `teammate`（数据卷 `teammate_pgdata`），宿主机端口与开发栈（`docker-compose.yml`，项目名 `teammate-dev`，端口 15432/16379）完全错开，两套栈可同时运行：
+
+| 服务 | 宿主机端口 | 说明 |
+|------|-----------|------|
+| postgres | `127.0.0.1:25432` | 数据卷 `teammate_pgdata`，密码为 `TEAMS_DB_PASS`（仅首次初始化生效） |
+| redis | `127.0.0.1:26379` | 无持久化 |
+| app | `127.0.0.1:28080`（`TEAMS_PORT` 可覆盖） | 容器内仍监听 8080 |
+| web | `3333`（`WEB_PORT` 可覆盖） | 容器内仍监听 3000 |
 
 ### 停止服务
 

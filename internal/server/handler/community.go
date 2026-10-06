@@ -5,7 +5,9 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -172,9 +174,17 @@ func (h *CommunityHandler) ImportCommunityWorkflow(w http.ResponseWriter, r *htt
 	commSvc := service.NewCommunityService(h.Svc)
 	result, err := commSvc.ImportWorkflow(r.Context(), id, req.WorkspaceID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(w, "community workflow not found")
+			return
+		}
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "not found") {
 			response.NotFound(w, errMsg)
+			return
+		}
+		if strings.Contains(errMsg, "parse workflow_definition") {
+			response.BadRequest(w, errMsg)
 			return
 		}
 		response.InternalServerError(w, err)

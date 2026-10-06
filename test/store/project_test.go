@@ -62,7 +62,7 @@ func TestProjectMemberCRUD(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 
 	pm, err := s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
 		ProjectID:  proj.ID,

@@ -27,9 +27,10 @@ var authLoginCmd = &cobra.Command{
 
 		client := newAPIClientNoAuth()
 		var result struct {
-			Token     string      `json:"token"`
-			ExpiresAt string      `json:"expires_at"`
-			Member    interface{} `json:"member"`
+			Token       string      `json:"token"`
+			ExpiresAt   string      `json:"expires_at"`
+			Member      interface{} `json:"member"`
+			WorkspaceID string      `json:"workspace_id"`
 		}
 		if err := client.Post("/api/auth/login", map[string]string{
 			"email":    email,
@@ -40,9 +41,10 @@ var authLoginCmd = &cobra.Command{
 
 		// Persist credentials
 		if err := saveCredentials(&Credentials{
-			Token:     result.Token,
-			ExpiresAt: parseTime(result.ExpiresAt),
-			Email:     email,
+			Token:       result.Token,
+			ExpiresAt:   parseTime(result.ExpiresAt),
+			Email:       email,
+			WorkspaceID: result.WorkspaceID,
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save credentials: %v\n", err)
 		}
@@ -67,9 +69,10 @@ var authRegisterCmd = &cobra.Command{
 
 		client := newAPIClientNoAuth()
 		var result struct {
-			Token     string      `json:"token"`
-			ExpiresAt string      `json:"expires_at"`
-			Member    interface{} `json:"member"`
+			Token       string      `json:"token"`
+			ExpiresAt   string      `json:"expires_at"`
+			Member      interface{} `json:"member"`
+			WorkspaceID string      `json:"workspace_id"`
 		}
 		if err := client.Post("/api/auth/register", map[string]string{
 			"name":     name,
@@ -81,9 +84,10 @@ var authRegisterCmd = &cobra.Command{
 
 		// Persist credentials
 		if err := saveCredentials(&Credentials{
-			Token:     result.Token,
-			ExpiresAt: parseTime(result.ExpiresAt),
-			Email:     email,
+			Token:       result.Token,
+			ExpiresAt:   parseTime(result.ExpiresAt),
+			Email:       email,
+			WorkspaceID: result.WorkspaceID,
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save credentials: %v\n", err)
 		}

@@ -18,9 +18,9 @@ var projectListCmd = &cobra.Command{
 	Short:   "List projects in a workspace",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -36,9 +36,9 @@ var projectGetCmd = &cobra.Command{
 	Short: "Get project details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -53,13 +53,16 @@ var projectCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new project",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 		repoURL, _ := cmd.Flags().GetString("repo-url")
 
-		if wsID == "" || name == "" || repoURL == "" {
-			return fmt.Errorf("--workspace, --name, and --repo-url are required")
+		if name == "" || repoURL == "" {
+			return fmt.Errorf("--name and --repo-url are required")
 		}
 
 		body := map[string]string{"name": name, "repo_url": repoURL}
@@ -81,9 +84,9 @@ var projectUpdateCmd = &cobra.Command{
 	Short: "Update a project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
@@ -110,9 +113,9 @@ var projectDeleteCmd = &cobra.Command{
 	Short: "Delete a project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/projects/%s", wsID, args[0])); err != nil {
@@ -133,9 +136,9 @@ var projectMemberListCmd = &cobra.Command{
 	Short: "List project members",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -151,24 +154,36 @@ var projectMemberAddCmd = &cobra.Command{
 	Short: "Add a member to a project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		memberType, _ := cmd.Flags().GetString("type")
 		agentID, _ := cmd.Flags().GetString("agent")
+		memberID, _ := cmd.Flags().GetString("member")
 		role, _ := cmd.Flags().GetString("role")
 
 		if memberType == "" {
 			return fmt.Errorf("--type is required (human or agent)")
 		}
+		if memberType == "agent" && agentID == "" {
+			return fmt.Errorf("--agent is required when type=agent")
+		}
+		if memberType == "human" && memberID == "" {
+			return fmt.Errorf("--member is required when type=human")
+		}
 
 		body := map[string]string{
 			"member_type": memberType,
-			"role":        role,
+		}
+		if role != "" {
+			body["role"] = role
 		}
 		if agentID != "" {
 			body["agent_id"] = agentID
+		}
+		if memberID != "" {
+			body["member_id"] = memberID
 		}
 
 		client := newAPIClient()
@@ -190,9 +205,9 @@ var projectReviewerListCmd = &cobra.Command{
 	Short: "List project reviewers",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -220,7 +235,8 @@ func init() {
 	projectMemberAddCmd.Flags().String("workspace", "", "workspace ID")
 	projectMemberAddCmd.Flags().String("type", "", "member type (human or agent)")
 	projectMemberAddCmd.Flags().String("agent", "", "agent ID (required when type=agent)")
-	projectMemberAddCmd.Flags().String("role", "developer", "project role (lead, developer, reviewer)")
+	projectMemberAddCmd.Flags().String("member", "", "workspace member ID (required when type=human)")
+	projectMemberAddCmd.Flags().String("role", "", "project role (lead, developer, reviewer; defaults to developer)")
 
 	projectMemberCmd.AddCommand(projectMemberListCmd)
 	projectMemberCmd.AddCommand(projectMemberAddCmd)

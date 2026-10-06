@@ -128,6 +128,14 @@ export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
       ? currentNodeIdx
       : taskNodes.findIndex((n) => n.status === "pending");
 
+  // 续作权随节点下发(reserved_for_agent_id / reservation_expires_at),
+  // 聚合到任务级供徽标/锁标消费:优先当前活跃节点,回退到任一持有预约的节点
+  const activeNode = currentNode >= 0 ? taskNodes[currentNode] : undefined;
+  const reservedNode = activeNode?.reserved_for_agent_id
+    ? activeNode
+    : taskNodes.find((n) => n.reserved_for_agent_id);
+  const reservedForAgentId = reservedNode?.reserved_for_agent_id || null;
+
   return {
     id: apiTask.id,
     taskRef: formatTaskRef(apiTask.id),
@@ -177,8 +185,12 @@ export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
     gitBranch: item.git_branch || "",
     parentTask: "",
     interrupted: taskNodes.some((n) => n.status === "manual_intervention"),
-    reservedForAgent: null,
-    reservationExpiresAt: null,
+    reservedForAgent: (() => {
+      if (!reservedForAgentId) return null;
+      const agent = agentsList.find((a) => a.id === reservedForAgentId);
+      return agent ? agent.name : reservedForAgentId;
+    })(),
+    reservationExpiresAt: reservedNode?.reservation_expires_at || null,
     nodeSummaries: taskNodes.reduce((acc: Record<string, string>, n: { id: string; summary?: string }) => {
       if (n.summary) acc[n.id] = n.summary;
       return acc;
@@ -210,6 +222,7 @@ export function mapAgentFromApi(apiAgent: any): MappedAgent {
     history: [],
     daemonId: apiAgent.daemon_id || "",
     daemonName: apiAgent.daemon_name || "",
+    personaKey: apiAgent.persona_key || "",
     origin: apiAgent.origin || "",
   };
 }

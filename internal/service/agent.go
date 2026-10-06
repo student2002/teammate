@@ -8,7 +8,6 @@
 //   - AddSkill/RemoveSkill/ListSkills: agent skill binding management
 //   - AddMcpServer/RemoveMcpServer: agent MCP server binding management
 //   - RotateToken: revokes the old token and generates a new API token
-//   - BuildCreateAgentParams: builds the database parameters required to create an agent
 //
 // Creating an agent automatically grants default permissions and assigns the developer role to obtain execution permissions such as git:push.
 // State transitions follow state-machine rules; illegal transitions are rejected.
@@ -35,50 +34,7 @@ func NewAgentService(svc *Service) *AgentService {
 	return &AgentService{svc: svc}
 }
 
-// CreateAgentResult holds the result of a create-agent operation.
-type CreateAgentResult struct {
-	Agent    types.Agent // created agent info
-	APIToken string      // generated API token, used for Agentd daemon authentication
-}
 
-// Create creates a new AI agent, generates an API token, and grants default permissions.
-//
-// Steps:
-//  1. Call the Store to create the agent record and generate an API token
-//  2. Grant default permissions to the new agent (task:claim/task:execute/task:comment/memory:read)
-//  3. A default-permission grant failure does not abort the creation flow (non-fatal error)
-//
-// Parameters:
-//   - ctx: request context
-//   - params: parameters for creating the agent, including workspace ID, name, provider, instructions, model, etc.
-//   - grantedBy: the operator ID that grants the permissions
-//
-// Returns:
-//   - *CreateAgentResult: contains the agent info and API token
-//   - error: possible errors (database write failure)
-func (s *AgentService) Create(ctx context.Context, params types.CreateAgentParams, grantedBy uuid.UUID) (*CreateAgentResult, error) {
-	agent, apiToken, err := s.svc.Store.CreateAgent(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("create agent: %w", err)
-	}
-
-	agentUUID, err := uuid.Parse(agent.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parse agent id: %w", err)
-	}
-
-	if err := s.svc.Store.GrantDefaultPermissions(ctx, agentUUID, grantedBy); err != nil {
-		_ = err
-	}
-
-	// Automatically assign the developer role so the agent has permissions required to execute code tasks such as git:push
-	permSvc := NewAgentPermissionService(s.svc)
-	if err := permSvc.GrantRolePermissions(ctx, agentUUID, "developer", grantedBy); err != nil {
-		_ = err
-	}
-
-	return &CreateAgentResult{Agent: agent, APIToken: apiToken}, nil
-}
 
 // Get retrieves the info of a single agent by ID.
 //
@@ -251,20 +207,6 @@ func (s *AgentService) RemoveMcpServer(ctx context.Context, params types.RemoveA
 	return s.svc.Store.RemoveAgentMcpServer(ctx, params)
 }
 
-// RotateToken revokes all existing tokens of the agent and generates a new API token.
-// The old token is invalidated immediately; the new token is used for the Agentd daemon to re-authenticate.
-//
-// Parameters:
-//   - ctx: request context
-//   - agentID: agent ID
-//
-// Returns:
-//   - string: the newly generated API token
-//   - error: possible errors (agent not found, token generation failure)
-func (s *AgentService) RotateToken(ctx context.Context, agentID uuid.UUID) (string, error) {
-	return s.svc.Store.RotateAgentToken(ctx, agentID)
-}
-
 // GetInProgressNodesByAgent queries the nodes claimed but not yet completed by the specified agent in the specified workspace.
 // Used to resume unfinished executions after an agent restart.
 //
@@ -284,30 +226,4 @@ func (s *AgentService) GetInProgressNodesByAgent(ctx context.Context, agentID uu
 	return rows, nil
 }
 
-// BuildCreateAgentParams builds the database parameters required to create an agent from the request parameters.
-// It handles default-value setting for optional fields.
-//
-// Parameters:
-//   - workspaceID: workspace ID
-//   - name: agent name
-//   - provider: agent provider (claude_code/openclaw/opencode, etc.)
-//   - instructions: agent instructions (system prompt)
-//   - model: model name (optional)
-//   - status: initial status
-//   - customEnv: custom environment variables (JSON format, optional)
-//   - extraArgs: extra command-line arguments
-//
-// Returns:
-//   - types.CreateAgentParams: the built creation parameters
-func BuildCreateAgentParams(workspaceID uuid.UUID, name string, provider string, instructions, model string, status string, customEnv []byte, extraArgs []string) types.CreateAgentParams {
-	return types.CreateAgentParams{
-		WorkspaceID:  workspaceID.String(),
-		Name:         name,
-		Provider:     provider,
-		Instructions: instructions,
-		Model:        &model,
-		Status:       status,
-		CustomEnv:    customEnv,
-		ExtraArgs:    extraArgs,
-	}
-}
+

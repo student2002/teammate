@@ -18,9 +18,9 @@ var mcpListCmd = &cobra.Command{
 	Short:   "List MCP servers in a workspace",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -35,15 +35,18 @@ var mcpCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create an MCP server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		name, _ := cmd.Flags().GetString("name")
 		url, _ := cmd.Flags().GetString("url")
 		srvType, _ := cmd.Flags().GetString("type")
 		authType, _ := cmd.Flags().GetString("auth-type")
 		envVarsStr, _ := cmd.Flags().GetString("env-vars")
 
-		if wsID == "" || name == "" || url == "" {
-			return fmt.Errorf("--workspace, --name, and --url are required")
+		if name == "" || url == "" {
+			return fmt.Errorf("--name and --url are required")
 		}
 
 		body := map[string]interface{}{"name": name, "url": url}
@@ -75,9 +78,9 @@ var mcpUpdateCmd = &cobra.Command{
 	Short: "Update an MCP server",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 
 		body := map[string]interface{}{}
@@ -122,9 +125,9 @@ var mcpDeleteCmd = &cobra.Command{
 	Short: "Delete an MCP server",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/mcp-servers/%s", wsID, args[0])); err != nil {
@@ -140,9 +143,9 @@ var mcpHealthCheckCmd = &cobra.Command{
 	Short: "Check MCP server health",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -159,8 +162,8 @@ func init() {
 	mcpCreateCmd.Flags().String("workspace", "", "workspace ID")
 	mcpCreateCmd.Flags().String("name", "", "MCP server name")
 	mcpCreateCmd.Flags().String("url", "", "MCP server URL")
-	mcpCreateCmd.Flags().String("type", "", "MCP server type (sse, streamable_http, stdio)")
-	mcpCreateCmd.Flags().String("auth-type", "", "authentication type (none, bearer, api_key)")
+	mcpCreateCmd.Flags().String("type", "", "MCP server type (sse, http, streamable_http; defaults to sse)")
+	mcpCreateCmd.Flags().String("auth-type", "", "authentication type (none, api_key, oauth)")
 	mcpCreateCmd.Flags().String("env-vars", "", "environment variables as JSON object")
 	mcpUpdateCmd.Flags().String("workspace", "", "workspace ID")
 	mcpUpdateCmd.Flags().String("name", "", "MCP server name")

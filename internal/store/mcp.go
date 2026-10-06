@@ -69,3 +69,12 @@ func (s *Store) DeleteMcpServer(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+// ListAgentsByMcpServer returns the agents bound to the specified MCP server.
+func (s *Store) ListAgentsByMcpServer(ctx context.Context, mcpServerID uuid.UUID) ([]types.Agent, error) {
+	agents, err := s.q.ListAgentsByMcpServer(ctx, mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("list agents by mcp server: %w", err)
+	}
+	return ToDomainAgentSlice(agents)
+}

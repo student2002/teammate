@@ -17,9 +17,9 @@ var agentListCmd = &cobra.Command{
 	Short:   "List agents in a workspace",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -35,9 +35,9 @@ var agentGetCmd = &cobra.Command{
 	Short: "Get agent details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -50,18 +50,22 @@ var agentGetCmd = &cobra.Command{
 
 var agentCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a new agent",
+	Short: "Create an agent instance under a daemon",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
+		daemonID, _ := cmd.Flags().GetString("daemon")
 		name, _ := cmd.Flags().GetString("name")
 		provider, _ := cmd.Flags().GetString("provider")
 		instructions, _ := cmd.Flags().GetString("instructions")
-		model, _ := cmd.Flags().GetString("model")
+		personaKey, _ := cmd.Flags().GetString("persona-key")
 		gitName, _ := cmd.Flags().GetString("git-name")
 		gitEmail, _ := cmd.Flags().GetString("git-email")
 
-		if wsID == "" || name == "" {
-			return fmt.Errorf("--workspace and --name are required")
+		if daemonID == "" || name == "" {
+			return fmt.Errorf("--daemon and --name are required")
 		}
 		if gitName == "" || gitEmail == "" {
 			return fmt.Errorf("--git-name and --git-email are required")
@@ -69,20 +73,22 @@ var agentCreateCmd = &cobra.Command{
 
 		body := map[string]string{
 			"name":      name,
-			"provider":  provider,
 			"git_name":  gitName,
 			"git_email": gitEmail,
+		}
+		if provider != "" {
+			body["provider"] = provider
 		}
 		if instructions != "" {
 			body["instructions"] = instructions
 		}
-		if model != "" {
-			body["model"] = model
+		if personaKey != "" {
+			body["persona_key"] = personaKey
 		}
 
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Post(fmt.Sprintf("/api/workspaces/%s/agents", wsID), body, &result); err != nil {
+		if err := client.Post(fmt.Sprintf("/api/workspaces/%s/daemons/%s/agents", wsID, daemonID), body, &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -94,9 +100,9 @@ var agentUpdateCmd = &cobra.Command{
 	Short: "Update an agent",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		instructions, _ := cmd.Flags().GetString("instructions")
 		model, _ := cmd.Flags().GetString("model")
@@ -131,9 +137,9 @@ var agentDeleteCmd = &cobra.Command{
 	Short: "Delete an agent",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/agents/%s", wsID, args[0])); err != nil {
@@ -149,9 +155,9 @@ var agentStatusCmd = &cobra.Command{
 	Short: "Update agent status (online, offline, busy, paused)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -167,12 +173,15 @@ var agentGrantRoleCmd = &cobra.Command{
 	Use:   "grant-role",
 	Short: "Grant a predefined role's permissions to an agent",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		agentID, _ := cmd.Flags().GetString("agent")
 		roleName, _ := cmd.Flags().GetString("role")
 
-		if wsID == "" || agentID == "" || roleName == "" {
-			return fmt.Errorf("--workspace, --agent, and --role are required")
+		if agentID == "" || roleName == "" {
+			return fmt.Errorf("--agent and --role are required")
 		}
 
 		client := newAPIClient()
@@ -209,9 +218,9 @@ var agentSkillAddCmd = &cobra.Command{
 	Short: "Add a skill to an agent",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -228,9 +237,9 @@ var agentSkillRemoveCmd = &cobra.Command{
 	Short: "Remove a skill from an agent",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/agents/%s/skills/%s", wsID, args[0], args[1])); err != nil {
@@ -247,9 +256,9 @@ var agentSkillListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -270,9 +279,9 @@ var agentMcpAddCmd = &cobra.Command{
 	Short: "Add an MCP server to an agent",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -289,9 +298,9 @@ var agentMcpRemoveCmd = &cobra.Command{
 	Short: "Remove an MCP server from an agent",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/agents/%s/mcp-servers/%s", wsID, args[0], args[1])); err != nil {
@@ -308,9 +317,9 @@ var agentMcpListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -326,9 +335,13 @@ var agentStatsCmd = &cobra.Command{
 	Short: "Get agent statistics",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Get(fmt.Sprintf("/api/agents/%s/stats", args[0]), &result); err != nil {
+		if err := client.Get(fmt.Sprintf("/api/workspaces/%s/agents/%s/stats", wsID, args[0]), &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -339,10 +352,11 @@ func init() {
 	agentListCmd.Flags().String("workspace", "", "workspace ID")
 	agentGetCmd.Flags().String("workspace", "", "workspace ID")
 	agentCreateCmd.Flags().String("workspace", "", "workspace ID")
+	agentCreateCmd.Flags().String("daemon", "", "daemon ID (from the web agents page; the instance runs on this daemon)")
 	agentCreateCmd.Flags().String("name", "", "agent name")
-	agentCreateCmd.Flags().String("provider", "claude", "agent provider (claude, openclaw, opencode, etc.)")
+	agentCreateCmd.Flags().String("provider", "", "tool provider; must be present in the daemon's detected-tools snapshot")
 	agentCreateCmd.Flags().String("instructions", "", "agent instructions")
-	agentCreateCmd.Flags().String("model", "", "model to use")
+	agentCreateCmd.Flags().String("persona-key", "", "persona key (generated when omitted; immutable after creation)")
 	agentCreateCmd.Flags().String("git-name", "", "git commit author name (required)")
 	agentCreateCmd.Flags().String("git-email", "", "git commit author email (required)")
 	agentUpdateCmd.Flags().String("workspace", "", "workspace ID")
@@ -361,6 +375,7 @@ func init() {
 	agentMcpAddCmd.Flags().String("workspace", "", "workspace ID")
 	agentMcpRemoveCmd.Flags().String("workspace", "", "workspace ID")
 	agentMcpListCmd.Flags().String("workspace", "", "workspace ID")
+	agentStatsCmd.Flags().String("workspace", "", "workspace ID")
 
 	agentSkillCmd.AddCommand(agentSkillAddCmd)
 	agentSkillCmd.AddCommand(agentSkillRemoveCmd)

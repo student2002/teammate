@@ -21,7 +21,7 @@ INSERT INTO tasks (
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+) RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type CreateSubtaskParams struct {
@@ -64,6 +64,7 @@ func (q *Queries) CreateSubtask(ctx context.Context, arg CreateSubtaskParams) (T
 		&i.ID,
 		&i.ProjectID,
 		&i.WorkflowName,
+		&i.WorkflowTemplateID,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -84,7 +85,7 @@ func (q *Queries) CreateSubtask(ctx context.Context, arg CreateSubtaskParams) (T
 }
 
 const listSubtasks = `-- name: ListSubtasks :many
-SELECT id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE parent_task_id = $1
 ORDER BY created_at ASC
 `
@@ -102,6 +103,7 @@ func (q *Queries) ListSubtasks(ctx context.Context, parentTaskID sql.NullInt32) 
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,

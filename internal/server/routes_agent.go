@@ -2,12 +2,16 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/teammate/server/internal/server/handler"
+	"github.com/teammate/server/internal/server/response"
+	"github.com/teammate/server/internal/types"
 )
 
-// registerMiscRoutes registers miscellaneous routes: memories, community workflows.
+// registerMiscRoutes registers miscellaneous routes: memories, community workflows, agent roles.
 func (reg *routeRegistrar) registerMiscRoutes(r chi.Router) {
 	svc := reg.svc
 
@@ -22,4 +26,9 @@ func (reg *routeRegistrar) registerMiscRoutes(r chi.Router) {
 
 	// Community workflows
 	r.Mount("/community/workflows", handler.NewCommunityHandler(svc).Routes())
+
+	// Predefined agent roles
+	r.Get("/agent-roles", func(w http.ResponseWriter, req *http.Request) {
+		response.JSON(w, req, types.ListAgentRoles())
+	})
 }

@@ -56,7 +56,7 @@ func TestClaimSelfReview(t *testing.T) {
 	claimBody := map[string]interface{}{
 		"agent_id": agent1ID,
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+reviewNodeID+"/claim", agent1Token, claimBody)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+reviewNodeID+"/claim", agent1Token, agent1ID, claimBody)
 	if status != http.StatusForbidden {
 		t.Fatalf("self-review claim: expected 403 Forbidden, got %d, body: %s", status, respBody)
 	}

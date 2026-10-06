@@ -24,16 +24,11 @@ func TestCreateTask_PublishesNodePendingOnlyToProjectMembers(t *testing.T) {
 	agent2Daemon := onlineDaemonKey(t, svc, env.agent2ID)
 
 	// Create a non-project-member agent3 (same workspace, but not belonging to this project)
-	agent3, _, err := svc.Store.CreateAgent(context.Background(), types.CreateAgentParams{
-		WorkspaceID:  env.workspaceID,
-		Name:         "agent3-" + uuid.NewString()[:8],
-		Provider:     "claude",
-		Instructions: "non-member agent",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       "offline",
-		GitName:      strPtr("agent3"),
-		GitEmail:     strPtr("agent3@teammate.local"),
-	})
+	agent3DaemonRow, _, err := svc.Store.CreateDaemon(context.Background(), uuid.MustParse(env.workspaceID), "box-agent3")
+	if err != nil {
+		t.Fatalf("create agent3 daemon: %v", err)
+	}
+	agent3, err := svc.Store.CreateDaemonAgent(context.Background(), uuid.MustParse(env.workspaceID), agent3DaemonRow.ID, "agent3-"+uuid.NewString()[:8], "claude", "", "persona-agent3", "Tester", "tester@teammate.local")
 	if err != nil {
 		t.Fatalf("create agent3: %v", err)
 	}

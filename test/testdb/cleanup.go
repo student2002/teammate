@@ -3,31 +3,26 @@ package testdb
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
-)
 
-const testDBName = "teammate_test"
+	"github.com/teammate/server/test/testconfig"
+)
 
 // GetTestDSN returns the connection string for the test database.
 // It uses a dedicated "teammate_test" database to avoid polluting development data.
-// Set TEAMS_TEST_DATABASE_URL to override the default connection configuration.
 func GetTestDSN() string {
-	if dsn := os.Getenv("TEAMS_TEST_DATABASE_URL"); dsn != "" {
-		return dsn
-	}
-	return fmt.Sprintf("postgres://postgres:teammate@localhost:15432/%s?sslmode=disable", testDBName)
+	return testconfig.TestDSN()
 }
 
 // getAdminDSN returns the admin database connection string (used to create/drop the test database).
 func getAdminDSN() string {
-	if dsn := os.Getenv("TEAMS_DATABASE_URL"); dsn != "" {
-		return dsn
-	}
-	return "postgres://postgres:teammate@localhost:15432/teammate?sslmode=disable"
+	return testconfig.AdminDSN()
 }
 
 // SetupTestDB ensures the teammate_test database exists and runs migrations.
@@ -42,13 +37,19 @@ func SetupTestDB() (*sql.DB, error) {
 
 	// Create the test database if it does not exist (ignore error if it already exists)
 	var exists bool
-	err = adminDB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", testDBName).Scan(&exists)
+	err = adminDB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", testconfig.DefaultTestDatabase).Scan(&exists)
 	if err != nil {
 		return nil, fmt.Errorf("check test db existence: %w", err)
 	}
 	if !exists {
-		if _, err := adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", testDBName)); err != nil {
-			return nil, fmt.Errorf("create test db: %w", err)
+		if _, err := adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", testconfig.DefaultTestDatabase)); err != nil {
+			// Parallel test packages can pass the existence check simultaneously;
+			// the losers of CREATE DATABASE get 42P04, or 23505 from the
+			// pg_database unique index instead of the pre-check.
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || (pgErr.Code != "42P04" && pgErr.Code != "23505") {
+				return nil, fmt.Errorf("create test db: %w", err)
+			}
 		}
 	}
 
@@ -99,6 +100,8 @@ func SetupTestDB() (*sql.DB, error) {
 
 func ensureSchemaCompatibility(db *sql.DB) error {
 	statements := []string{
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS persona_key VARCHAR(64) NOT NULL DEFAULT ''`,
+		`UPDATE agents SET persona_key = 'persona-' || substr(id::text, 1, 8) WHERE persona_key = ''`,
 		`DO $$ BEGIN
 			CREATE TYPE workflow_trigger_type AS ENUM ('manual', 'schedule', 'github_issue');
 		EXCEPTION WHEN duplicate_object THEN NULL;
@@ -215,7 +218,7 @@ func TruncateAll(db *sql.DB) error {
 		"project_reviewers",
 		"project_members",
 		"git_credentials",
-		"runtimes",
+		"daemons",
 		"agents",
 		"workflow_template_nodes",
 		"workflow_templates",
@@ -226,7 +229,6 @@ func TruncateAll(db *sql.DB) error {
 		"invitations",
 		"audit_logs",
 		"auth_tokens",
-		"sse_event_buffer",
 		"memories",
 		"community_workflows",
 		"workspaces",

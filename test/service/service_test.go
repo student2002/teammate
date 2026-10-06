@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	dbgen "github.com/teammate/server/internal/db/generated"
 	"github.com/teammate/server/internal/service"
 	"github.com/teammate/server/internal/types"
 	"github.com/teammate/server/test/testdb"
@@ -128,32 +127,22 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 	}
 
 	// Create agents
-	agent1, _, err := svc.Store.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "agent1-" + uuid.New().String()[:8],
-		Provider:     "claude",
-		Instructions: "test agent 1",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       "offline",
-		GitName:      strPtr("agent1"),
-		GitEmail:     strPtr("agent1@teammate.local"),
-	})
+	agent1Daemon, _, err := svc.Store.CreateDaemon(ctx, uuid.MustParse(ws.ID), "box-agent1")
 	if err != nil {
-		t.Fatalf("create agent1: %v", err)
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent1, err := svc.Store.CreateDaemonAgent(ctx, uuid.MustParse(ws.ID), agent1Daemon.ID, "agent1-" + uuid.NewString()[:8], "claude", "", "persona-agent1", "Tester", "tester@teammate.local")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
 	}
 
-	agent2, _, err := svc.Store.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "agent2-" + uuid.New().String()[:8],
-		Provider:     "claude",
-		Instructions: "test agent 2",
-		Model:        strPtr("claude-3.5-sonnet"),
-		Status:       "offline",
-		GitName:      strPtr("agent2"),
-		GitEmail:     strPtr("agent2@teammate.local"),
-	})
+	agent2Daemon, _, err := svc.Store.CreateDaemon(ctx, uuid.MustParse(ws.ID), "box-agent2")
 	if err != nil {
-		t.Fatalf("create agent2: %v", err)
+		t.Fatalf("create agent daemon: %v", err)
+	}
+	agent2, err := svc.Store.CreateDaemonAgent(ctx, uuid.MustParse(ws.ID), agent2Daemon.ID, "agent2-" + uuid.NewString()[:8], "claude", "", "persona-agent2", "Tester", "tester@teammate.local")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
 	}
 
 	// Add agents to project and grant permissions
@@ -180,18 +169,21 @@ func setupServiceTest(t *testing.T) (*service.Service, *sql.DB, *testEnv) {
 		}
 	}
 
-	// Create task using Store.CreateTask (also creates task nodes)
+	// Create task using Store.CreateTask (also creates task nodes). The task
+	// carries workflow_template_id at creation; statistics aggregate by it.
+	tplIDStr := tpl.ID
 	task, taskNodes, err := svc.Store.CreateTask(ctx, types.CreateTaskParams{
-		ProjectID:    proj.ID,
-		WorkflowName: tpl.Name,
-		Title:        "Service test task",
-		Description:  strPtr("test"),
-		Type:         "task",
-		Priority:     "medium",
-		Status:       "active",
-		AuthorType:   "agent",
-		AuthorID:     agent1.ID,
-		Sequence:     0, // Will be set to task.ID by Store.CreateTask
+		ProjectID:         proj.ID,
+		WorkflowName:      tpl.Name,
+		WorkflowTemplateID: &tplIDStr,
+		Title:             "Service test task",
+		Description:       strPtr("test"),
+		Type:              "task",
+		Priority:          "medium",
+		Status:            "active",
+		AuthorType:        "agent",
+		AuthorID:          agent1.ID,
+		Sequence:          0, // Will be set to task.ID by Store.CreateTask
 	}, templateNodes)
 	if err != nil {
 		t.Fatalf("create task: %v", err)
@@ -739,36 +731,6 @@ func TestManualInterventionAndResolve(t *testing.T) {
 	t.Log("manual_intervention -> resolve flow works correctly")
 }
 
-// TestInterruptTask verifies that interrupting a task sets all in_progress nodes to manual_intervention.
-func TestInterruptTask(t *testing.T) {
-	svc, _, env := setupServiceTest(t)
-	ctx := context.Background()
-	nodeSvc := service.NewNodeService(svc)
-
-	node1ID := env.taskNodes[0].ID
-
-	// Claim node1 (set it to in_progress)
-	_, err := nodeSvc.Claim(ctx, uuid.MustParse(node1ID), uuid.MustParse(env.agent1ID), "agent")
-	if err != nil {
-		t.Fatalf("claim node1: %v", err)
-	}
-
-	// Interrupt task
-	result, err := nodeSvc.InterruptTask(ctx, env.taskID, uuid.New(), "member", "emergency stop")
-	if err != nil {
-		t.Fatalf("interrupt task: %v", err)
-	}
-	if result.InterruptedNodes != 1 {
-		t.Fatalf("expected 1 interrupted node, got %d", result.InterruptedNodes)
-	}
-
-	// Verify node1 is now in manual_intervention
-	node1, _ := env.svc.Store.GetTaskNode(ctx, uuid.MustParse(node1ID))
-	if node1.Status != "manual_intervention" {
-		t.Fatalf("expected manual_intervention after interrupt, got %s", node1.Status)
-	}
-	t.Log("interrupt task correctly set in_progress nodes to manual_intervention")
-}
 
 // TestClaimNonExistentNode verifies that claiming a non-existent node returns an error.
 func TestClaimNonExistentNode(t *testing.T) {
@@ -950,64 +912,70 @@ func TestTemplateStatsUsageCountAndCompletion(t *testing.T) {
 		stats.UsageCount, stats.AvgCompletionSeconds, stats.RejectRate)
 }
 
-// TestTemplateStatsRejectRateOnCancelled verifies the design doc §6: reject_rate is
-// calculated as the proportion of status='cancelled' tasks (0–1).
-func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
+// TestTemplateStatsRejectRateOnRejected verifies the design doc §6: reject_rate is
+// the share of tasks (of one template) that had at least one node rejection.
+func TestTemplateStatsRejectRateOnRejected(t *testing.T) {
 	svc, _, env := setupServiceTest(t)
 	ctx := context.Background()
 
-	// setupServiceTest already created 1 active task; additionally create 1 more
-	// with the same template name and status=cancelled, so reject_rate = 1/2 = 0.5.
-	tpl, _, err := svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
+	// A fresh template with two tasks: one clean, one with a rejected node →
+	// reject_rate = 1/2 = 0.5.
+	tpl, tplNodes, err := svc.Store.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
 		WorkspaceID: env.workspaceID,
-		Name:        "stats-cancel-" + uuid.New().String()[:8],
-		Description: strPtr("stats cancel flow"),
+		Name:        "stats-reject-" + uuid.New().String()[:8],
+		Description: strPtr("stats reject flow"),
 	}, []types.CreateTemplateNodeParams{
 		{Name: "code", Description: strPtr("code node"), SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60},
 	})
 	if err != nil {
 		t.Fatalf("create template: %v", err)
 	}
+	tplIDStr := tpl.ID
 
-	// active task
+	// clean task
 	_, _, err = svc.Store.CreateTask(ctx, types.CreateTaskParams{
-		ProjectID:    env.projectID,
-		WorkflowName: tpl.Name,
-		Title:        "stats active",
-		Description:  strPtr("test"),
-		Type:         "task",
-		Priority:     "medium",
-		Status:       "active",
-		AuthorType:   "agent",
-		AuthorID:     env.agent1ID,
-		Sequence:     0,
+		ProjectID:         env.projectID,
+		WorkflowName:      tpl.Name,
+		WorkflowTemplateID: &tplIDStr,
+		Title:             "stats clean",
+		Description:       strPtr("test"),
+		Type:              "task",
+		Priority:          "medium",
+		Status:            "active",
+		AuthorType:        "agent",
+		AuthorID:          env.agent1ID,
+		Sequence:          0,
 	}, nil)
 	if err != nil {
-		t.Fatalf("create active task: %v", err)
+		t.Fatalf("create clean task: %v", err)
 	}
 
-	// cancelled task (created directly via DB to bypass CreateTask's default active status constraint)
+	// task whose first node has a rejection recorded (reject_count bumped via DB)
 	pgDB := svcConnectTestDB(t)
 	defer pgDB.Close()
-	dbq := dbgen.New(pgDB)
-	activeTask, err := dbq.CreateTask(ctx, dbgen.CreateTaskParams{
-		ProjectID:    uuid.MustParse(env.projectID),
-		WorkflowName: tpl.Name,
-		Title:        "stats cancelled",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         "task",
-		Priority:     "medium",
-		Status:       "cancelled",
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(env.agent1ID),
-		Sequence:     0,
-	})
+	rejectedTask, _, err := svc.Store.CreateTask(ctx, types.CreateTaskParams{
+		ProjectID:         env.projectID,
+		WorkflowName:      tpl.Name,
+		WorkflowTemplateID: &tplIDStr,
+		Title:             "stats rejected",
+		Description:       strPtr("test"),
+		Type:              "task",
+		Priority:          "medium",
+		Status:            "active",
+		AuthorType:        "agent",
+		AuthorID:          env.agent1ID,
+		Sequence:          0,
+	}, tplNodes)
 	if err != nil {
-		t.Fatalf("create cancelled task: %v", err)
+		t.Fatalf("create rejected task: %v", err)
 	}
 	if _, err := pgDB.ExecContext(ctx,
-		`UPDATE tasks SET sequence = $1 WHERE id = $1`, activeTask.ID); err != nil {
+		`UPDATE tasks SET sequence = $1 WHERE id = $1`, rejectedTask.ID); err != nil {
 		t.Fatalf("set sequence: %v", err)
+	}
+	if _, err := pgDB.ExecContext(ctx,
+		`UPDATE task_nodes SET reject_count = 1 WHERE task_id = $1`, rejectedTask.ID); err != nil {
+		t.Fatalf("bump reject_count: %v", err)
 	}
 
 	stats, err := service.NewTemplateStatsService(svc).GetStats(ctx, uuid.MustParse(tpl.ID))
@@ -1017,10 +985,10 @@ func TestTemplateStatsRejectRateOnCancelled(t *testing.T) {
 	if stats.UsageCount != 2 {
 		t.Fatalf("expected usage_count 2, got %d", stats.UsageCount)
 	}
-	// 1 cancelled out of 2 tasks → reject_rate = 0.5
+	// 1 task with a rejection out of 2 → reject_rate = 0.5
 	if stats.RejectRate < 0.49 || stats.RejectRate > 0.51 {
 		t.Fatalf("expected reject_rate ~0.5, got %v", stats.RejectRate)
 	}
-	t.Logf("template stats (2 tasks, 1 cancelled): usage_count=%d, reject_rate=%.2f",
+	t.Logf("template stats (2 tasks, 1 with rejection): usage_count=%d, reject_rate=%.2f",
 		stats.UsageCount, stats.RejectRate)
 }

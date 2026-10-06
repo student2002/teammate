@@ -1,5 +1,7 @@
 -- daemons.sql — agentd 实例(机器)的持久化查询。
--- 一个 daemon 对应一台工作机上的 agentd 进程;agent 实例由其注册时上报(agents.daemon_id)。
+-- 一个 daemon 对应一台工作机上的 agentd 进程;agent 实例由 web 在 daemon 分组创建,
+-- desired_agents 以全集声明式下发(agents.daemon_id),agentd 据此对账增/改/删,
+-- 心跳上报其运行状态。
 
 -- name: CreateDaemon :one
 INSERT INTO daemons (workspace_id, name)
@@ -43,34 +45,16 @@ RETURNING id;
 UPDATE agents SET status = $2, updated_at = now()
 WHERE daemon_id = $1 AND status != $2;
 
--- name: UpsertDaemonAgent :one
--- 注册上报的实例按 (daemon, name) upsert;冲突时保留 Git 身份/指令等人工配置
--- (Git 身份占位由调用方计算:同名 + @teammate.local,管理员可后续修正)
-INSERT INTO agents (workspace_id, name, provider, status, daemon_id, origin, git_name, git_email)
-VALUES ($1, $2, $3, 'online', $4, 'daemon', $5, $6)
-ON CONFLICT (daemon_id, name) WHERE daemon_id IS NOT NULL
-DO UPDATE SET provider = EXCLUDED.provider, status = 'online', updated_at = now()
-RETURNING *;
-
--- name: AdoptUnmanagedAgentByDaemon :one
--- 同名且未纳管(daemon_id IS NULL)的既有 agent 由该 daemon 收编:
--- 保留人工配置,仅接管归属并置在线
-UPDATE agents
-SET daemon_id = $1, provider = $2, status = 'online', origin = 'daemon', updated_at = now()
-WHERE workspace_id = $3 AND name = $4 AND daemon_id IS NULL
-RETURNING *;
-
 -- name: CreateDaemonAgent :one
--- Web 端在守护进程分组下创建的实例:待下发,agentd 收编(再次上报同名)后上线
-INSERT INTO agents (workspace_id, name, provider, status, daemon_id, origin, git_name, git_email)
-VALUES ($1, $2, $3, 'pending', $4, 'server', $5, $6)
+-- Web 端在守护进程分组下创建的实例:待下发,经 desired_agents 全集下发后由心跳上报上线;
+-- persona_key 为跨空间记忆标识(显式填写或服务端生成,创建后不可变,service 层保证非空);
+-- git 身份与身份指令由操作员创建时显式提供
+INSERT INTO agents (workspace_id, name, provider, instructions, status, daemon_id, origin, persona_key, git_name, git_email)
+VALUES ($1, $2, $3, $4, 'pending', $5, 'server', $6, $7, $8)
 RETURNING *;
-
--- name: ListPendingDaemonAgents :many
--- desired_agents:Web 创建、等待 agentd 收编的实例
-SELECT * FROM agents WHERE daemon_id = $1 AND origin = 'server' AND status = 'pending';
 
 -- name: ListAgentsByDaemon :many
+-- desired_agents 全集:该 daemon 名下全部实例(与状态无关,声明式对账的期望集)
 SELECT * FROM agents WHERE daemon_id = $1 ORDER BY created_at;
 
 -- name: CountDaemonAgents :one
@@ -85,9 +69,9 @@ SELECT d.id FROM daemons d JOIN agents a ON a.daemon_id = d.id
 WHERE a.id = $1;
 
 -- name: OfflineUnreportedDaemonAgents :execrows
--- 上报中缺席的机器侧实例置离线;Web 下发(pending)实例不受影响
+-- 心跳 busy 名单中缺席的机器侧实例置离线;pending(待下发)实例不受影响
 UPDATE agents SET status = 'offline', updated_at = now()
-WHERE daemon_id = $1 AND origin = 'daemon' AND status = 'online'
+WHERE daemon_id = $1 AND status = 'online'
   AND NOT (name = ANY($2::text[]));
 
 -- name: SetDaemonAgentStatusByName :exec

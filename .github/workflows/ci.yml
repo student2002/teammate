@@ -11,6 +11,8 @@ jobs:
   go-test:
     name: Go test + vet
     runs-on: ubuntu-latest
+    env:
+      GOPROXY: https://goproxy.cn,direct
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -32,6 +34,14 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout agentd (sibling repo)
+        uses: actions/checkout@v4
+        with:
+          repository: zhenfeng/teammate-agentd
+          ref: master
+          path: agentd
+      - name: Install postgresql client
+        run: apt-get update && apt-get install -y --no-install-recommends postgresql-client
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
@@ -54,6 +64,8 @@ jobs:
   web-checks:
     name: Web lint + build + unit tests
     runs-on: ubuntu-latest
+    env:
+      npm_config_registry: https://registry.npmmirror.com
     defaults:
       run:
         working-directory: web
@@ -75,6 +87,8 @@ jobs:
   sqlc-check:
     name: sqlc generate drift check
     runs-on: ubuntu-latest
+    env:
+      GOPROXY: https://goproxy.cn,direct
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

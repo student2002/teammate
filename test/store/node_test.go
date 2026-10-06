@@ -17,7 +17,7 @@ func TestApproveNodeInTx_BasicApproval(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 3)
 
@@ -88,7 +88,7 @@ func TestApproveNodeInTx_AllNodesComplete(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 
 	agentID := uuid.NullUUID{UUID: uuid.MustParse(agent.ID), Valid: true}
@@ -141,7 +141,7 @@ func TestRejectNodeInTx_BasicReject(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 3)
 
@@ -219,7 +219,7 @@ func TestRejectNodeInTx_MaxReviewCycles(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 3)
 
@@ -304,8 +304,8 @@ func TestClaimTaskNode_OptimisticLock(t *testing.T) {
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
-	agent1, _ := createTestAgent(t, s, ws.ID)
-	agent2, _ := createTestAgent(t, s, ws.ID)
+	agent1 := createTestAgent(t, s, ws.ID)
+	agent2 := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent1.ID)
 	addAgentToProject(t, s, proj.ID, agent2.ID)
 

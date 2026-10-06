@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -84,15 +85,22 @@ func (s *DaemonService) RotateToken(ctx context.Context, workspaceID, daemonID u
 }
 
 // ResolveEffectiveAgent verifies that the daemon may act on behalf of the agent
-// (the agent must have been reported by this daemon) and returns the agent's
-// identity used to rewrite auth claims for the request.
+// (the agent must have been reported by this daemon within the same workspace)
+// and returns the agent's identity used to rewrite auth claims for the request.
 func (s *DaemonService) ResolveEffectiveAgent(ctx context.Context, daemonID, agentID uuid.UUID) (types.Agent, error) {
+	daemon, err := s.svc.Store.GetDaemon(ctx, daemonID)
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("daemon not found: %w", err)
+	}
 	agent, err := s.svc.Store.GetAgent(ctx, agentID)
 	if err != nil {
 		return types.Agent{}, fmt.Errorf("agent not found: %w", err)
 	}
 	if agent.DaemonID != daemonID.String() {
 		return types.Agent{}, errors.New("agent is not reported by this daemon")
+	}
+	if agent.WorkspaceID != daemon.WorkspaceID.String() {
+		return types.Agent{}, errors.New("agent does not belong to the daemon's workspace")
 	}
 	return agent, nil
 }
@@ -107,39 +115,41 @@ func (s *DaemonService) ListAgents(ctx context.Context, daemonID uuid.UUID) ([]t
 	return s.svc.Store.ListAgentsByDaemon(ctx, daemonID)
 }
 
-// ReportedAgent is one entry of a daemon's agent report.
+// ReportedAgent is one entry of the desired-agents delivery: the declarative
+// full set of the daemon's instances (agentd reconciles its local catalog
+// against this set — add changed, remove missing).
 type ReportedAgent struct {
-	Name     string `json:"name"`
-	Provider string `json:"provider"`
+	AgentID    string `json:"agent_id"`
+	Name       string `json:"name"`
+	Provider   string `json:"provider"`
+	PersonaKey string `json:"persona_key"`
 }
 
-// RegisterReport is the machine-side registration payload.
+// RegisterReport is the machine-side registration payload (machine info and
+// the detected-tools snapshot only; instances are web-created and delivered
+// via desired_agents).
 type RegisterReport struct {
 	DeviceName string          `json:"device_name"`
 	Version    string          `json:"version"`
 	PublicKey  string          `json:"public_key"`
 	Providers  json.RawMessage `json:"providers"`
-	Agents     []ReportedAgent `json:"agents"`
 }
 
-// RegisteredAgent pairs a reported name with its resolved server identity.
-type RegisteredAgent struct {
-	Name    string `json:"name"`
-	AgentID string `json:"agent_id"`
-	Status  string `json:"status"`
-}
-
-// DaemonRegisterResult is the register/heartbeat response payload.
+// DaemonRegisterResult is the register/heartbeat response payload. DaemonID
+// and WorkspaceID are filled by Register only; the daemon uses them to build
+// its event-stream (SSE) URL and to scope all workspace-level calls — the
+// daemon token binds the daemon to exactly one workspace, so the server's
+// value is authoritative over any locally configured one.
 type DaemonRegisterResult struct {
-	Agents             []RegisteredAgent `json:"agents"`
-	DesiredAgents      []ReportedAgent   `json:"desired_agents"`
-	HeartbeatIntervalS int               `json:"heartbeat_interval"`
+	DaemonID           string          `json:"daemon_id,omitempty"`
+	WorkspaceID        string          `json:"workspace_id,omitempty"`
+	DesiredAgents      []ReportedAgent `json:"desired_agents"`
+	HeartbeatIntervalS int             `json:"heartbeat_interval"`
 }
 
 // Register applies a machine-side registration: refreshes daemon info and the
-// tool-detection snapshot, upserts reported agents (adopting pending web-pushed
-// instances with matching names), offlines machine agents absent from the report,
-// and returns the desired set (web-pushed instances still waiting for adoption).
+// tool-detection snapshot, and returns the desired set (web-created instances
+// still waiting for delivery). Reports never create or modify agent rows.
 func (s *DaemonService) Register(ctx context.Context, daemonID uuid.UUID, report RegisterReport) (DaemonRegisterResult, error) {
 	daemon, err := s.svc.Store.GetDaemon(ctx, daemonID)
 	if err != nil {
@@ -158,46 +168,29 @@ func (s *DaemonService) Register(ctx context.Context, daemonID uuid.UUID, report
 		return DaemonRegisterResult{}, err
 	}
 
-	registered := make([]RegisteredAgent, 0, len(report.Agents))
-	names := make([]string, 0, len(report.Agents))
-	for _, a := range report.Agents {
-		a.Name = strings.TrimSpace(a.Name)
-		if a.Name == "" {
-			continue
-		}
-		agent, err := s.svc.Store.UpsertDaemonAgent(ctx, daemon.WorkspaceID, daemon.ID, a.Name, a.Provider)
-		if err != nil {
-			return DaemonRegisterResult{}, err
-		}
-		registered = append(registered, RegisteredAgent{Name: a.Name, AgentID: agent.ID, Status: agent.Status})
-		names = append(names, a.Name)
-	}
-
-	if err := s.svc.Store.OfflineUnreportedDaemonAgents(ctx, daemon.ID, names); err != nil {
-		return DaemonRegisterResult{}, err
-	}
-
 	desired, err := s.DesiredAgents(ctx, daemon.ID)
 	if err != nil {
 		return DaemonRegisterResult{}, err
 	}
 	return DaemonRegisterResult{
-		Agents:             registered,
+		DaemonID:           daemon.ID.String(),
+		WorkspaceID:        daemon.WorkspaceID.String(),
 		DesiredAgents:      desired,
 		HeartbeatIntervalS: 30,
 	}, nil
 }
 
-// DesiredAgents returns the web-pushed instances waiting to be adopted
-// (agentd materializes them into its local config and reports them back).
+// DesiredAgents returns the daemon's full instance set — the declarative
+// expectation agentd reconciles against (add new, overwrite changed
+// agent_id/persona_key, remove deleted).
 func (s *DaemonService) DesiredAgents(ctx context.Context, daemonID uuid.UUID) ([]ReportedAgent, error) {
-	pending, err := s.svc.Store.ListPendingDaemonAgents(ctx, daemonID)
+	all, err := s.svc.Store.ListAgentsByDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ReportedAgent, 0, len(pending))
-	for _, a := range pending {
-		out = append(out, ReportedAgent{Name: a.Name, Provider: a.Provider})
+	out := make([]ReportedAgent, 0, len(all))
+	for _, a := range all {
+		out = append(out, ReportedAgent{AgentID: a.ID, Name: a.Name, Provider: a.Provider, PersonaKey: a.PersonaKey})
 	}
 	return out, nil
 }
@@ -208,8 +201,8 @@ type HeartbeatAgentStatus struct {
 	Busy bool   `json:"busy"`
 }
 
-// Heartbeat refreshes the daemon liveness, applies optional per-agent busy
-// status, and returns the desired set.
+// Heartbeat refreshes the daemon liveness, applies the per-agent busy status,
+// offlines online instances absent from the report, and returns the desired set.
 func (s *DaemonService) Heartbeat(ctx context.Context, daemonID uuid.UUID, agents []HeartbeatAgentStatus) (DaemonRegisterResult, error) {
 	ok, err := s.svc.Store.TouchDaemonHeartbeat(ctx, daemonID)
 	if err != nil {
@@ -218,6 +211,7 @@ func (s *DaemonService) Heartbeat(ctx context.Context, daemonID uuid.UUID, agent
 	if !ok {
 		return DaemonRegisterResult{}, errors.New("daemon not found")
 	}
+	names := make([]string, 0, len(agents))
 	for _, a := range agents {
 		a.Name = strings.TrimSpace(a.Name)
 		if a.Name == "" {
@@ -230,6 +224,10 @@ func (s *DaemonService) Heartbeat(ctx context.Context, daemonID uuid.UUID, agent
 		if err := s.svc.Store.SetDaemonAgentStatusByName(ctx, daemonID, a.Name, status); err != nil {
 			return DaemonRegisterResult{}, err
 		}
+		names = append(names, a.Name)
+	}
+	if err := s.svc.Store.OfflineUnreportedDaemonAgents(ctx, daemonID, names); err != nil {
+		return DaemonRegisterResult{}, err
 	}
 	desired, err := s.DesiredAgents(ctx, daemonID)
 	if err != nil {
@@ -251,10 +249,38 @@ type DaemonCreateAgentResult struct {
 	Agent types.Agent
 }
 
-// CreateAgent inserts a web-pushed instance on the daemon's tool node.
-// The provider must be present in the daemon's detected-tools snapshot;
-// the instance stays pending until the daemon adopts it via registration.
-func (s *DaemonService) CreateAgent(ctx context.Context, workspaceID, daemonID uuid.UUID, name, provider string) (types.Agent, error) {
+var personaKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`)
+
+// NormalizePersonaKey validates and normalizes an operator-provided memory
+// identity: trimmed and lowercased, it must match the persona charset, or be
+// empty (the caller generates a unique value then).
+func NormalizePersonaKey(personaKey string) (string, error) {
+	key := strings.ToLower(strings.TrimSpace(personaKey))
+	if key == "" {
+		return "", nil
+	}
+	if !personaKeyPattern.MatchString(key) {
+		return "", fmt.Errorf("invalid persona_key %q: 2-64 chars from [a-z0-9._-], starting with a letter or digit", personaKey)
+	}
+	return key, nil
+}
+
+// GeneratePersonaKey returns a unique, unguessable memory identity for
+// instances created without an explicit one (default strict isolation).
+func GeneratePersonaKey() string {
+	return "persona-" + uuid.NewString()[:8]
+}
+
+// CreateAgent inserts a web-created instance under the daemon and grants it
+// the default permission set plus the developer role (creation is
+// authorization; grant failures do not abort the creation, matching
+// AgentService.Create). The provider must be present in the daemon's
+// detected-tools snapshot; the instance stays pending until delivered via
+// desired_agents and reported online by a heartbeat. personaKey is the
+// cross-workspace memory identity: normalized when provided, generated when
+// blank, immutable after creation. gitName/gitEmail are the operator-provided
+// commit identity (required); instructions is the optional identity prompt.
+func (s *DaemonService) CreateAgent(ctx context.Context, workspaceID, daemonID uuid.UUID, name, provider, instructions, personaKey, gitName, gitEmail string, grantedBy uuid.UUID) (types.Agent, error) {
 	daemon, err := s.svc.Store.GetDaemon(ctx, daemonID)
 	if err != nil {
 		return types.Agent{}, fmt.Errorf("daemon not found: %w", err)
@@ -265,6 +291,19 @@ func (s *DaemonService) CreateAgent(ctx context.Context, workspaceID, daemonID u
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return types.Agent{}, errors.New("agent name is required")
+	}
+	gitName = strings.TrimSpace(gitName)
+	gitEmail = strings.TrimSpace(gitEmail)
+	if gitName == "" || gitEmail == "" {
+		return types.Agent{}, errors.New("git_name and git_email are required")
+	}
+	normalizedPersonaKey, err := NormalizePersonaKey(personaKey)
+	if err != nil {
+		return types.Agent{}, err
+	}
+	personaKey = normalizedPersonaKey
+	if personaKey == "" {
+		personaKey = GeneratePersonaKey()
 	}
 
 	var providers []struct {
@@ -285,10 +324,23 @@ func (s *DaemonService) CreateAgent(ctx context.Context, workspaceID, daemonID u
 		return types.Agent{}, fmt.Errorf("provider %q is not detected on daemon %s", provider, daemon.Name)
 	}
 
-	agent, err := s.svc.Store.CreateDaemonAgent(ctx, workspaceID, daemonID, name, provider)
+	agent, err := s.svc.Store.CreateDaemonAgent(ctx, workspaceID, daemonID, name, provider, instructions, personaKey, gitName, gitEmail)
 	if err != nil {
 		return types.Agent{}, err
 	}
+
+	agentUUID, err := uuid.Parse(agent.ID)
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("parse agent id: %w", err)
+	}
+	if err := s.svc.Store.GrantDefaultPermissions(ctx, agentUUID, grantedBy); err != nil {
+		_ = err
+	}
+	permSvc := NewAgentPermissionService(s.svc)
+	if err := permSvc.GrantRolePermissions(ctx, agentUUID, "developer", grantedBy); err != nil {
+		_ = err
+	}
+
 	agent.DaemonName = daemon.Name
 	return agent, nil
 }

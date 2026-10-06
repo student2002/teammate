@@ -32,15 +32,186 @@ func NewAuthHandler(svc *service.Service, jwtSecret string) *AuthHandler {
 	return &AuthHandler{Svc: svc, JWTSecret: jwtSecret}
 }
 
-// Routes returns authentication routes that do not require authentication (login, registration, token exchange).
+// Routes returns authentication routes that do not require authentication (login, registration, token exchange, password reset).
 func (h *AuthHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
 	r.Post("/login", h.Login)
 	r.Post("/register", h.Register)
 	r.Post("/token-exchange", h.TokenExchange)
+	r.Post("/request-password-reset", h.RequestPasswordReset)
+	r.Post("/reset-password", h.ResetPassword)
+	r.Post("/accept-invitation", h.AcceptInvitation)
 
 	return r
+}
+
+// acceptInvitationRequest accept invitation request body.
+type acceptInvitationRequest struct {
+	InvitationToken string `json:"invitation_token"` // invitation token from the inviter
+	Name            string `json:"name"`             // display name for a newly created member
+}
+
+// AcceptInvitation handles the POST /auth/accept-invitation endpoint (public,
+// authenticated by the invitation token itself). Accepting joins the member
+// to the invited workspace and returns a session.
+//
+// Request body:
+//   - invitation_token: string, invitation token (required)
+//   - name: string, display name (used only when the member is created)
+//
+// Response:
+//   - 200: authResponse (token, member, workspace_id, role)
+//   - 400: missing token
+//   - 401: invalid or expired invitation
+func (h *AuthHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
+	var req acceptInvitationRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.InvitationToken == "" {
+		response.BadRequest(w, "invitation_token is required")
+		return
+	}
+
+	invSvc := service.NewInvitationService(h.Svc)
+	result, err := invSvc.Accept(r.Context(), req.InvitationToken, req.Name, h.JWTSecret)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid or expired invitation") {
+			response.Unauthorized(w, "invalid or expired invitation")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+
+	response.JSON(w, r, authResponse{
+		Token:       result.Token,
+		ExpiresAt:   result.ExpiresAt,
+		Member:      result.Member,
+		WorkspaceID: result.WorkspaceID.String(),
+		Role:        result.Role,
+	})
+}
+
+// changePasswordRequest change password request body.
+type changePasswordRequest struct {
+	OldPassword string `json:"old_password"` // current password
+	NewPassword string `json:"new_password"` // new password
+}
+
+// ChangePassword handles the POST /auth/change-password endpoint (authenticated).
+// Verifies the old password, applies the new one, and revokes the caller's
+// current session tokens.
+//
+// Request body:
+//   - old_password: string, current password (required)
+//   - new_password: string, new password (required, 8-128 chars with upper, lower, digit)
+//
+// Response:
+//   - 200: {"message": "password changed"}
+//   - 400: validation error
+//   - 401: not authenticated or incorrect old password
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok || claims.UserType != "member" {
+		response.Unauthorized(w, "member authentication required")
+		return
+	}
+
+	var req changePasswordRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.OldPassword == "" || req.NewPassword == "" {
+		response.BadRequest(w, "old_password and new_password are required")
+		return
+	}
+
+	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
+	if err := authSvc.ChangePassword(r.Context(), claims.UserID, req.OldPassword, req.NewPassword); err != nil {
+		if strings.Contains(err.Error(), "incorrect old password") {
+			response.Unauthorized(w, "incorrect old password")
+			return
+		}
+		response.BadRequest(w, err.Error())
+		return
+	}
+	response.JSON(w, r, map[string]string{"message": "password changed"})
+}
+
+// requestPasswordResetRequest password reset request body.
+type requestPasswordResetRequest struct {
+	Email string `json:"email"` // user email
+}
+
+// RequestPasswordReset handles the POST /auth/request-password-reset endpoint (public).
+// Generates a 1-hour reset token; the response carries the token directly —
+// the platform has no email delivery channel. For a nonexistent or OAuth-only
+// email the token is returned empty so callers cannot distinguish existence.
+//
+// Request body:
+//   - email: string, user email (required)
+//
+// Response:
+//   - 200: {"reset_token": "<token or empty>"}
+//   - 400: missing email
+func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var req requestPasswordResetRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.Email == "" {
+		response.BadRequest(w, "email is required")
+		return
+	}
+
+	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
+	token, err := authSvc.RequestPasswordReset(r.Context(), req.Email)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, map[string]string{"reset_token": token})
+}
+
+// resetPasswordRequest reset password request body.
+type resetPasswordRequest struct {
+	Token       string `json:"token"`        // reset token from request-password-reset
+	NewPassword string `json:"new_password"` // new password
+}
+
+// ResetPassword handles the POST /auth/reset-password endpoint (public).
+// Applies the new password when the token is valid and unexpired; the token
+// is consumed on success.
+//
+// Request body:
+//   - token: string, reset token (required)
+//   - new_password: string, new password (required)
+//
+// Response:
+//   - 200: {"message": "password reset"}
+//   - 400: invalid/expired token or validation error
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.Token == "" || req.NewPassword == "" {
+		response.BadRequest(w, "token and new_password are required")
+		return
+	}
+
+	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
+	if err := authSvc.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	response.JSON(w, r, map[string]string{"message": "password reset"})
 }
 
 // loginRequest login request body.
@@ -81,6 +252,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	result, err := authSvc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
+		if strings.Contains(err.Error(), "temporarily locked") {
+			response.TooManyRequests(w, err.Error())
+			return
+		}
 		response.Unauthorized(w, "invalid email or password")
 		return
 	}

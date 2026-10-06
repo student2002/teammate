@@ -203,8 +203,10 @@ func buildUpdateTaskParams(
 
 // buildListTasksParams builds types.ListTasksParams from request fields.
 func buildListTasksParams(projectID uuid.UUID, status TaskStatus) types.ListTasksParams {
+	statusStr := string(status)
 	return types.ListTasksParams{
 		WorkspaceID: projectID.String(),
+		Status:      &statusStr,
 	}
 }
 

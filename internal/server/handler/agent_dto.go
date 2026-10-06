@@ -9,18 +9,6 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// createAgentRequest create agent request body.
-type createAgentRequest struct {
-	Name         string          `json:"name"`         // agent name
-	Provider     string          `json:"provider"`     // agent provider (claude/openai, etc.)
-	Instructions string          `json:"instructions"` // agent execution instructions
-	Model        string          `json:"model"`        // model to use
-	Status       string          `json:"status"`       // initial status
-	CustomEnv    json.RawMessage `json:"custom_env"`   // custom environment variables (JSON)
-	ExtraArgs    []string        `json:"extra_args"`   // extra command-line arguments
-	GitName      string          `json:"git_name"`     // Git commit username
-	GitEmail     string          `json:"git_email"`    // Git commit email
-}
 
 // agentResponse agent response DTO, converts sql.NullXxx fields to plain types for JSON serialization.
 type agentResponse struct {
@@ -42,6 +30,7 @@ type agentResponse struct {
 	DaemonID        string                `json:"daemon_id,omitempty"`
 	DaemonName      string                `json:"daemon_name,omitempty"`
 	Origin          string                `json:"origin,omitempty"`
+	PersonaKey      string                `json:"persona_key,omitempty"` // cross-workspace memory identity
 	CreatedAt       interface{}           `json:"created_at"`
 	UpdatedAt       interface{}           `json:"updated_at"`
 }
@@ -74,6 +63,7 @@ func agentToResponse(a types.Agent) agentResponse {
 		DaemonID:       a.DaemonID,
 		DaemonName:     a.DaemonName,
 		Origin:         a.Origin,
+		PersonaKey:     a.PersonaKey,
 		CreatedAt:      a.CreatedAt,
 		UpdatedAt:      a.UpdatedAt,
 	}
@@ -99,11 +89,6 @@ func agentToResponseWithEnv(a types.Agent) agentResponse {
 	return resp
 }
 
-// createAgentResponse create agent response body, including the newly generated API Token.
-type createAgentResponse struct {
-	agentResponse
-	APIToken string `json:"api_token,omitempty"` // API Token of the new agent (only returned on creation)
-}
 
 // updateAgentRequest update agent request body.
 type updateAgentRequest struct {
@@ -116,16 +101,18 @@ type updateAgentRequest struct {
 	GitEmail     string          `json:"git_email"`    // Git commit email
 }
 
-// addSkillRequest add skill request body.
+// addSkillRequest add skill request body. Enabled is owned by the server: an
+// omitted field binds enabled (a bind action implies enable); false disables.
 type addSkillRequest struct {
 	SkillID uuid.UUID `json:"skill_id"` // skill ID
-	Enabled bool      `json:"enabled"`  // whether to enable
+	Enabled *bool     `json:"enabled"`  // whether to enable (nil = enabled)
 }
 
-// addMcpServerRequest add MCP server request body.
+// addMcpServerRequest add MCP server request body. Enabled is owned by the
+// server: an omitted field binds enabled; false disables.
 type addMcpServerRequest struct {
 	McpServerID uuid.UUID `json:"mcp_server_id"` // MCP server ID
-	Enabled     bool      `json:"enabled"`       // whether to enable
+	Enabled     *bool     `json:"enabled"`       // whether to enable (nil = enabled)
 }
 
 // maskAgentMcpEnvVarsForDisplay masks the MCP server's env_vars for display.
@@ -179,24 +166,6 @@ const (
 	AgentStatusOffline  = types.AgentStatusOffline
 )
 
-// buildCreateAgentParams constructs types.CreateAgentParams from handler-layer input.
-func buildCreateAgentParams(workspaceID uuid.UUID, name string, provider string, instructions string, model string, status string, customEnv []byte, extraArgs []string, gitName string, gitEmail string) types.CreateAgentParams {
-	modelPtr := nullStringPtr(model)
-	gitNamePtr := nullStringPtr(gitName)
-	gitEmailPtr := nullStringPtr(gitEmail)
-	return types.CreateAgentParams{
-		WorkspaceID:  workspaceID.String(),
-		Name:         name,
-		Provider:     provider,
-		Instructions: instructions,
-		Model:        modelPtr,
-		Status:       status,
-		CustomEnv:    customEnv,
-		ExtraArgs:    extraArgs,
-		GitName:      gitNamePtr,
-		GitEmail:     gitEmailPtr,
-	}
-}
 
 // nullStringPtr helper function, converts a string to *string, empty string returns nil.
 func nullStringPtr(s string) *string {

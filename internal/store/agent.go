@@ -18,44 +18,6 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateAgent creates a new Agent and generates an API Token.
-//
-// Steps:
-//  1. Insert the Agent record into the agents table
-//  2. Generate an API Token with the format tm_{agent_id_short}_{40_hex_chars}
-//  3. Hash the Token with bcrypt and store it in the auth_tokens table
-//  4. Compute a SHA-256 lookup hash for efficient database queries
-//  5. The Token is valid for 365 days
-//
-// Parameters:
-//   - ctx: request context, supports timeout and cancellation
-//   - params: Agent creation parameters, including name, provider, instructions, etc.
-//
-// Returns:
-//   - db.Agent: the created Agent record
-//   - string: the generated API Token plaintext (returned only once at creation time)
-//   - error: error returned when creation fails
-func (s *Store) CreateAgent(ctx context.Context, params types.CreateAgentParams) (types.Agent, string, error) {
-	dbParams, err := FromDomainCreateAgentParams(params)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("convert create agent params: %w", err)
-	}
-	agent, err := s.q.CreateAgent(ctx, dbParams)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("create agent: %w", err)
-	}
-
-	apiToken, err := s.issueOwnerToken(ctx, "agent", "tm", agent.ID)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("issue agent token: %w", err)
-	}
-
-	domainAgent, err := ToDomainAgent(agent)
-	if err != nil {
-		return types.Agent{}, "", fmt.Errorf("convert agent: %w", err)
-	}
-	return domainAgent, apiToken, nil
-}
 
 // GetAgent queries a single Agent record by ID.
 //
@@ -336,63 +298,6 @@ func (s *Store) UpdateSkill(ctx context.Context, params types.UpdateSkillParams)
 		return types.Skill{}, fmt.Errorf("update skill: %w", err)
 	}
 	return ToDomainSkill(skill)
-}
-
-// GenerateAgentToken generates an API Token with the format tm_{agent_id_short}_{40_random_hex}.
-//
-// Token structure:
-//   - tm_: fixed prefix identifying a Teammate Token
-//   - agent_id_short: the first 8 characters of the Agent ID after removing hyphens
-//   - 40_random_hex: the hexadecimal representation of 20 random bytes
-//
-// Parameters:
-//   - agentID: the Agent's UUID
-//
-// Returns:
-//   - string: the generated API Token plaintext
-//   - error: error returned when random number generation fails
-func GenerateAgentToken(agentID uuid.UUID) (string, error) {
-	return generateTokenPlaintext("tm", agentID)
-}
-
-// RevokeAgentTokens revokes all API Tokens of the specified Agent (deletes the related records in the auth_tokens table).
-//
-// Parameters:
-//   - ctx: request context
-//   - agentID: the Agent's UUID
-//
-// Returns:
-//   - error: error returned when revocation fails
-func (s *Store) RevokeAgentTokens(ctx context.Context, agentID uuid.UUID) error {
-	return s.revokeOwnerTokens(ctx, "agent", agentID)
-}
-
-// RotateAgentToken revokes all old Tokens and generates a new Token.
-//
-// Steps:
-//  1. Call RevokeAgentTokens to delete all existing Tokens
-//  2. Generate a new API Token
-//  3. Hash the new Token with bcrypt
-//  4. Compute a SHA-256 lookup hash
-//  5. Store the new Token hash in the auth_tokens table, valid for 365 days
-//
-// Parameters:
-//   - ctx: request context
-//   - agentID: the Agent's UUID
-//
-// Returns:
-//   - string: the newly generated API Token plaintext
-//   - error: error returned when rotation fails
-func (s *Store) RotateAgentToken(ctx context.Context, agentID uuid.UUID) (string, error) {
-	// Revoke all existing tokens before issuing the replacement
-	if err := s.revokeOwnerTokens(ctx, "agent", agentID); err != nil {
-		return "", err
-	}
-	apiToken, err := s.issueOwnerToken(ctx, "agent", "tm", agentID)
-	if err != nil {
-		return "", fmt.Errorf("issue agent token: %w", err)
-	}
-	return apiToken, nil
 }
 
 // ValidStatusTransitions defines the mapping of allowed Agent status transitions.

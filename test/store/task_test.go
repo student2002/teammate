@@ -144,7 +144,7 @@ func TestCreateTask_AutoStartSpecificAgent(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 
 	nodes := []types.WorkflowTemplateNode{

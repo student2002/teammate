@@ -34,8 +34,10 @@ DELETE FROM workflow_templates
 WHERE id = $1;
 
 -- name: CreateTemplateNode :one
-INSERT INTO workflow_template_nodes (template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+-- id comes from the caller so template node identity is stable across full
+-- node-list replacement (depends_on references survive template updates).
+INSERT INTO workflow_template_nodes (id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
+VALUES (COALESCE(sqlc.narg('node_id')::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
 -- name: GetTemplateNode :one

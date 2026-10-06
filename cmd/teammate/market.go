@@ -101,9 +101,9 @@ var marketImportCmd = &cobra.Command{
 	Short: "Import a community workflow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 
 		client := newAPIClient()

@@ -62,6 +62,38 @@ func connectTestDB(t *testing.T) *sql.DB {
 // 12. Reject review node back to first node
 // 13. Verify rollback: first node back to pending, review node becomes rejected
 // 14. Resolve manual_intervention node
+// createE2EAgent provisions an agent the way the server-authoritative flow
+// does: daemon row + detected-tools registration + web-created group instance
+// + online status, so the e2e scenario starts from live agents.
+func createE2EAgent(ctx context.Context, svc *service.Service, s *store.Store, workspaceID string, name string) (types.Agent, error) {
+	wsUUID, err := uuid.Parse(workspaceID)
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("parse workspace id: %w", err)
+	}
+	daemon, _, err := s.CreateDaemon(ctx, wsUUID, "e2e-box-"+name)
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("create daemon: %w", err)
+	}
+	providers := []byte(`[{"provider":"claude","version":"1.0","installed":true}]`)
+	daemonRow, err := s.UpdateDaemonRegistration(ctx, daemon.ID, types.DaemonRegistrationUpdate{
+		DeviceName: "e2e-box",
+		Version:    "1.0",
+		Providers:  providers,
+	})
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("register daemon: %w", err)
+	}
+	_ = daemonRow
+	agent, err := service.NewDaemonService(svc).CreateAgent(ctx, wsUUID, daemon.ID, name, "claude", "e2e agent", "", name, name+"@teammate.local", uuid.Nil)
+	if err != nil {
+		return types.Agent{}, fmt.Errorf("create daemon agent: %w", err)
+	}
+	if err := s.SetDaemonAgentStatusByName(ctx, daemon.ID, name, types.AgentStatusOnline); err != nil {
+		return types.Agent{}, fmt.Errorf("set agent online: %w", err)
+	}
+	return agent, nil
+}
+
 func TestWorkflowSmoke(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
@@ -187,37 +219,13 @@ func TestWorkflowSmoke(t *testing.T) {
 	}
 	t.Logf("step 5: both nodes in pending state")
 
-	// Step 6: Create two Agents and register them as project members
-	model1 := "claude-3.5-sonnet"
-	gitName1 := "e2e-implementer"
-	gitEmail1 := "e2e-implementer@teammate.local"
-	agent1, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "e2e-implementer",
-		Provider:     "claude",
-		Instructions: "implement agent",
-		Model:        &model1,
-		Status:       "online",
-		GitName:      &gitName1,
-		GitEmail:     &gitEmail1,
-	})
+	// Step 6: Create two Agents (daemon-group creation + online via the
+	// heartbeat status path) and register them as project members
+	agent1, err := createE2EAgent(ctx, svc, s, ws.ID, "e2e-implementer")
 	if err != nil {
 		t.Fatalf("step 6 - create agent1: %v", err)
 	}
-
-	model2 := "claude-3.5-sonnet"
-	gitName2 := "e2e-reviewer"
-	gitEmail2 := "e2e-reviewer@teammate.local"
-	agent2, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "e2e-reviewer",
-		Provider:     "claude",
-		Instructions: "review agent",
-		Model:        &model2,
-		Status:       "online",
-		GitName:      &gitName2,
-		GitEmail:     &gitEmail2,
-	})
+	agent2, err := createE2EAgent(ctx, svc, s, ws.ID, "e2e-reviewer")
 	if err != nil {
 		t.Fatalf("step 6 - create agent2: %v", err)
 	}
@@ -556,22 +564,7 @@ func TestWorkflowSelfReviewPrevention(t *testing.T) {
 	}
 
 	// Create a single Agent
-	model1 := "claude-3.5-sonnet"
-	gitName1 := "self-review-agent"
-	gitEmail1 := "self-review-agent@teammate.local"
-	agent1, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "self-review-agent",
-		Provider:     "claude",
-		Instructions: "test",
-		Model:        &model1,
-		Status:       "online",
-		GitName:      &gitName1,
-		GitEmail:     &gitEmail1,
-	})
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
+	agent1, err := createE2EAgent(ctx, svc, s, ws.ID, "self-review-agent")
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
 		ProjectID:  proj.ID,
@@ -715,22 +708,7 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("create workspace member: %v", err)
 	}
 
-	model1 := "claude-3.5-sonnet"
-	gitName1 := "interrupt-agent"
-	gitEmail1 := "interrupt-agent@teammate.local"
-	agent1, _, err := s.CreateAgent(ctx, types.CreateAgentParams{
-		WorkspaceID:  ws.ID,
-		Name:         "interrupt-agent",
-		Provider:     "claude",
-		Instructions: "test",
-		Model:        &model1,
-		Status:       "online",
-		GitName:      &gitName1,
-		GitEmail:     &gitEmail1,
-	})
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
+	agent1, err := createE2EAgent(ctx, svc, s, ws.ID, "interrupt-agent")
 
 	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
 		ProjectID:  proj.ID,
@@ -787,15 +765,11 @@ func TestWorkflowInterruptAndManualIntervention(t *testing.T) {
 		t.Fatalf("expected in_progress, got %s", inProgressNode.Status)
 	}
 
-	// Interrupt task
-	interruptResult, err := nodeSvc.InterruptTask(ctx, taskResult.Task.ID, memberID, "member", "human interrupted")
-	if err != nil {
-		t.Fatalf("interrupt task: %v", err)
+	// Cancel the task: in_progress nodes move to manual_intervention
+	if err := service.NewTaskService(svc).CancelTaskNodes(ctx, taskResult.Task.ID); err != nil {
+		t.Fatalf("cancel task nodes: %v", err)
 	}
-	if interruptResult.InterruptedNodes != 1 {
-		t.Fatalf("expected 1 interrupted node, got %d", interruptResult.InterruptedNodes)
-	}
-	t.Logf("task interrupted: %d nodes set to manual_intervention", interruptResult.InterruptedNodes)
+	t.Logf("task cancelled: in_progress nodes moved to manual_intervention")
 
 	// Verify node1 is now in manual_intervention
 	manualNode, err := s.GetTaskNode(ctx, node1ID)

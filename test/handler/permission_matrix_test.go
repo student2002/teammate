@@ -67,7 +67,7 @@ func TestPermissionMatrix_AgentCannotAccessOtherAgentMcpExecution(t *testing.T) 
 
 	// Agent1 can access its own execution MCP endpoint → 200
 	selfURL := fmt.Sprintf("%s/api/workspaces/%s/agents/%s/execution/mcp-servers", srv.URL, wsID, agent1ID)
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodGet, selfURL, agent1Token, nil)
+	_, status, _ = doRequestWithAgentKey(t, client, http.MethodGet, selfURL, agent1Token, agent1ID, nil)
 	if status != http.StatusOK {
 		t.Errorf("agent1 accessing own execution mcp: expected 200, got %d", status)
 	}

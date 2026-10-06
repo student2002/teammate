@@ -112,7 +112,7 @@ func (s *NodeService) Claim(ctx context.Context, nodeID, operatorID uuid.UUID, o
 			return nil, fmt.Errorf("check claim permission: %w", err)
 		}
 		if !hasPerm {
-			return nil, fmt.Errorf("agent does not have task:claim permission for this project")
+			return nil, fmt.Errorf("agent does not have task:claim permission for this project: %w", types.ErrPermissionDenied)
 		}
 	}
 
@@ -462,7 +462,7 @@ func (s *NodeService) Reject(ctx context.Context, nodeID uuid.UUID, operatorID u
 		targetAttempt := int(targetNode.RejectCount) + 1
 		assigneeUUID, _ := uuid.Parse(*targetNode.AssigneeID)
 		s.svc.PublishControlEvent(ctx, assigneeUUID, types.EventNodeRejectRollback, map[string]interface{}{
-			"task_id":        fmt.Sprintf("%d", currentNode.TaskID),
+			"task_id":        currentNode.TaskID,
 			"target_node_id": targetID.String(),
 			"target_order":   targetNode.SortOrder,
 			"rejected_node":  nodeID.String(),
@@ -524,13 +524,15 @@ func (s *NodeService) ManualIntervention(ctx context.Context, nodeID uuid.UUID, 
 		}
 	}
 
-	// Interrupt→ManualIntervention: change AssigneeType to human, clear ReservedForAgentID and
-	// ReservationExpiresAt (aligns with the semantics of store/node_interrupt.go, letting a human
-	// take over)
+	// Interrupt→ManualIntervention keeps the node's assignee semantics: the
+	// status itself expresses that a human decision is required, and
+	// overwriting assignee_type would lose the original routing (a human-
+	// assigned review node could never be distinguished from a standard node
+	// after resolve). The continuation reservation is cleared.
 	node, err := s.svc.Store.UpdateTaskNodeStatus(ctx, types.UpdateTaskNodeStatusParams{
 		ID:          nodeID.String(),
 		Status:      types.TaskNodeStatusManualIntervention,
-		AssigneeType: types.AssigneeTypeHuman,
+		AssigneeType: currentNode.AssigneeType,
 		AssigneeID:  currentNode.AssigneeID,
 		ReservedForAgentID: nil,
 		RejectCount: int32(currentNode.RejectCount),
@@ -651,17 +653,20 @@ func (s *NodeService) Resolve(ctx context.Context, nodeID uuid.UUID, operatorID 
 
 	// Default re_execute mode: reset to pending; the agent re-executes
 	assigneeID := currentNode.AssigneeID
+	assigneeType := currentNode.AssigneeType
 	if newAgentID != nil {
 		newID := newAgentID.String()
 		assigneeID = &newID
+		assigneeType = types.AssigneeTypeSpecificAgent
 	}
 
-	// resolve→pending: reset AssigneeType to any_agent (so any agent can claim) and clear the
-	// continuation right
+	// resolve→pending: the node keeps its assignee semantics (any_agent /
+	// specific_agent / human / auto); only an explicit newAgentID redirects it
+	// to a specific agent. The continuation right is cleared either way.
 	node, err := s.svc.Store.UpdateTaskNodeStatus(ctx, types.UpdateTaskNodeStatusParams{
 		ID:          nodeID.String(),
 		Status:      types.TaskNodeStatusPending,
-		AssigneeType: types.AssigneeTypeAnyAgent,
+		AssigneeType: assigneeType,
 		AssigneeID:  assigneeID,
 		ReservedForAgentID: nil,
 		RejectCount: 0, // re_execute resets the reject count
@@ -735,7 +740,7 @@ func (s *NodeService) SkipClaim(ctx context.Context, nodeID, agentID uuid.UUID) 
 		return fmt.Errorf("check claim permission: %w", err)
 	}
 	if !hasPerm {
-		return fmt.Errorf("agent does not have task:claim permission for this project")
+		return fmt.Errorf("agent does not have task:claim permission for this project: %w", types.ErrPermissionDenied)
 	}
 
 	// SkipClaim semantics: release the continuation right; clear ReservedForAgentID so other
@@ -838,75 +843,6 @@ func (s *NodeService) ListNodes(ctx context.Context, taskID int32) ([]types.Task
 	return s.svc.Store.ListTaskNodes(ctx, taskID)
 }
 
-// InterruptTaskResult saves the result of an interrupt-task operation.
-type InterruptTaskResult struct {
-	TaskID           int32 // ID of the interrupted task
-	InterruptedNodes int   // number of interrupted nodes
-}
-
-// InterruptTask sets all in_progress nodes of a task to manual_intervention.
-// Atomicity is guaranteed via a transaction, and a task:interrupt control event is sent via SSE
-// to notify the agents currently executing.
-//
-// Steps:
-//  1. For agent operations, perform a resource-level permission check (task:execute)
-//  2. Query all nodes of the task
-//  3. Collect the currently-executing agents (used later to send interrupt events)
-//  4. Within a transaction, set all in_progress nodes to manual_intervention
-//  5. Commit the transaction
-//  6. Publish a node:pending event via SSE
-//  7. Send a task:interrupt control event to the currently-executing agents (Redis buffered)
-//
-// Parameters:
-//   - ctx: request context
-//   - taskID: task ID
-//   - operatorID: operator ID
-//   - operatorType: operator type (member/agent)
-//   - comment: interrupt comment (optional)
-//
-// Returns:
-//   - *InterruptTaskResult: contains the task ID and the number of interrupted nodes
-//   - error: possible error (database operation failure)
-func (s *NodeService) InterruptTask(ctx context.Context, taskID int32, operatorID uuid.UUID, operatorType, comment string) (*InterruptTaskResult, error) {
-	if operatorType == "" {
-		operatorType = "member"
-	}
-
-	if operatorType == "agent" {
-		task, err := s.svc.Store.GetTask(ctx, taskID)
-		if err != nil {
-			return nil, fmt.Errorf("get task: %w", err)
-		}
-		permSvc := NewAgentPermissionService(s.svc)
-		hasPerm, err := permSvc.HasResourcePermission(ctx, operatorID, types.PermTaskExecute, "project", projPtrFromString(task.ProjectID))
-		if err != nil {
-			return nil, fmt.Errorf("check execute permission: %w", err)
-		}
-		if !hasPerm {
-			return nil, fmt.Errorf("agent does not have task:execute permission for this project")
-		}
-	}
-
-	targets, interruptedCount, err := s.svc.Store.InterruptInProgressNodes(ctx, taskID, operatorID, operatorType, comment)
-	if err != nil {
-		return nil, err
-	}
-
-	s.publishNodePendingEvent(ctx, taskID)
-
-	for _, target := range targets {
-		s.svc.PublishControlEvent(ctx, target.AssigneeID, types.EventTaskInterrupt, map[string]interface{}{
-			"task_id": fmt.Sprintf("%d", taskID),
-			"node_id": target.NodeID.String(),
-		})
-	}
-
-	return &InterruptTaskResult{
-		TaskID:           taskID,
-		InterruptedNodes: interruptedCount,
-	}, nil
-}
-
 // publishNodeEventAfterApprove checks newly unblocked nodes after a node is approved, and
 // publishes node:pending or node:continuation_invite events via SSE.
 // It also checks DAG dependencies to discover nodes that may have just become available.
@@ -934,7 +870,7 @@ func (s *NodeService) publishNodeEventAfterApprove(ctx context.Context, taskID i
 
 	for _, node := range readyNodes {
 		s.svc.publishToProject(ctx, projectID, types.EventNodePending, map[string]interface{}{
-			"task_id":    fmt.Sprintf("%d", taskID),
+			"task_id":    taskID,
 			"node_id":    node.ID,
 			"project_id": task.ProjectID,
 		})
@@ -948,7 +884,7 @@ func (s *NodeService) publishNodeEventAfterApprove(ctx context.Context, taskID i
 		if node.Status == types.TaskNodeStatusInProgress && node.ReservedForAgentID != nil {
 			reservedID, _ := uuid.Parse(*node.ReservedForAgentID)
 			s.svc.PublishControlEvent(ctx, reservedID, types.EventNodeContinuationInvite, map[string]interface{}{
-				"task_id":    fmt.Sprintf("%d", taskID),
+				"task_id":    taskID,
 				"node_id":    node.ID,
 				"project_id": task.ProjectID,
 			})
@@ -968,7 +904,7 @@ func (s *NodeService) publishNodePendingEvent(ctx context.Context, taskID int32)
 		return
 	}
 	s.svc.publishToProject(ctx, uuidFromStr(task.ProjectID), types.EventNodePending, map[string]interface{}{
-		"task_id":    fmt.Sprintf("%d", taskID),
+		"task_id":    taskID,
 		"project_id": task.ProjectID,
 	})
 }

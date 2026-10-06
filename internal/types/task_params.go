@@ -62,6 +62,7 @@ type CreateTaskParams struct {
 	Labels       []string   `json:"labels"`
 	Sequence     int32      `json:"sequence"`
 	WorkflowName string     `json:"workflow_name"`
+	WorkflowTemplateID *string `json:"workflow_template_id"`
 }
 
 // CreateTokenUsageParams is the domain parameter struct for creating a token usage record.
@@ -104,7 +105,8 @@ type ListNodeCommentsParams struct {
 
 // ListTasksParams is the domain parameter struct for listing tasks.
 type ListTasksParams struct {
-	WorkspaceID string `json:"workspace_id"`
+	WorkspaceID string  `json:"workspace_id"`
+	Status      *string `json:"status"` // explicit status filter; nil matches all statuses
 }
 
 // ListTasksPaginatedParams is the domain parameter struct for paginating tasks.

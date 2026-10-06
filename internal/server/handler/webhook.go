@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,6 +99,10 @@ func (h *WebhookHandler) GitHub(w http.ResponseWriter, r *http.Request) {
 		RawPayload: body,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrTriggerProjectMismatch) {
+			response.Forbidden(w, err.Error())
+			return
+		}
 		response.InternalServerError(w, fmt.Errorf("handle github issue webhook: %w", err))
 		return
 	}

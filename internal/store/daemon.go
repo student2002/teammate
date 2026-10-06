@@ -1,12 +1,12 @@
 // daemon.go — persistence and token management for agentd instances (daemons).
 // A daemon is created from the web with a one-time td_ token; the machine-side
-// agentd authenticates with it and reports its agents and detected tools.
+// agentd authenticates with it and reports machine info and its detected-tools
+// snapshot. Agent instances are web-created and delivered via desired_agents.
 package store
 
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -55,9 +55,9 @@ func (s *Store) ListDaemonsByWorkspace(ctx context.Context, workspaceID uuid.UUI
 	return out, nil
 }
 
-// DeleteDaemon removes a daemon, revokes its tokens, and marks its reported
-// agents offline. Agent configuration is kept so a re-registered daemon
-// (re-reporting the same names) brings them back online.
+// DeleteDaemon removes a daemon, revokes its tokens, and marks its instances
+// offline. Instance rows keep their daemon attribution; the daemon row is gone,
+// so they are managed (deleted/recreated) from the web.
 func (s *Store) DeleteDaemon(ctx context.Context, id uuid.UUID) error {
 	daemon, err := s.q.GetDaemon(ctx, id)
 	if err != nil {
@@ -94,8 +94,8 @@ func (s *Store) RotateDaemonToken(ctx context.Context, daemonID uuid.UUID) (stri
 	return token, nil
 }
 
-// RegisterDaemonAgent binds an existing agent to a daemon and marks it online
-// (report/adoption path: the agent row already exists with human-managed config).
+// RegisterDaemonAgent manually binds an existing agent to a daemon and marks it
+// online (tests/ops path; machine flows never create or bind agent rows).
 func (s *Store) RegisterDaemonAgent(ctx context.Context, workspaceID, daemonID, agentID uuid.UUID) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agents SET daemon_id = $1, status = 'online', updated_at = now()
@@ -152,45 +152,20 @@ func (s *Store) TouchDaemonHeartbeat(ctx context.Context, daemonID uuid.UUID) (b
 	return n > 0, nil
 }
 
-// UpsertDaemonAgent applies a machine report for one agent instance keyed by
-// (daemon, name). Resolution order:
-//  1. adopt an existing unmanaged agent with the same name (preserves human config)
-//  2. upsert the (daemon, name) row (pending web-pushed instances go online here)
-func (s *Store) UpsertDaemonAgent(ctx context.Context, workspaceID, daemonID uuid.UUID, name, provider string) (types.Agent, error) {
-	if row, err := s.q.AdoptUnmanagedAgentByDaemon(ctx, db.AdoptUnmanagedAgentByDaemonParams{
-		DaemonID:    uuid.NullUUID{UUID: daemonID, Valid: true},
-		Provider:    db.AgentProvider(provider),
-		WorkspaceID: workspaceID,
-		Name:        name,
-	}); err == nil {
-		return ToDomainAgent(row)
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return types.Agent{}, fmt.Errorf("adopt unmanaged agent: %w", err)
-	}
-
-	row, err := s.q.UpsertDaemonAgent(ctx, db.UpsertDaemonAgentParams{
-		WorkspaceID: workspaceID,
-		Name:        name,
-		Provider:    db.AgentProvider(provider),
-		DaemonID:    uuid.NullUUID{UUID: daemonID, Valid: true},
-		GitName:     sql.NullString{String: name, Valid: true},
-		GitEmail:    sql.NullString{String: name + "@teammate.local", Valid: true},
-	})
-	if err != nil {
-		return types.Agent{}, fmt.Errorf("upsert daemon agent: %w", err)
-	}
-	return ToDomainAgent(row)
-}
-
-// CreateDaemonAgent inserts a web-pushed agent instance (pending until adopted).
-func (s *Store) CreateDaemonAgent(ctx context.Context, workspaceID, daemonID uuid.UUID, name, provider string) (types.Agent, error) {
+// CreateDaemonAgent inserts a web-created instance (pending until adopted).
+// personaKey is the cross-workspace memory identity (immutable after
+// creation; the service layer guarantees it is non-empty); the git identity
+// and instructions come from the operator-provided creation form.
+func (s *Store) CreateDaemonAgent(ctx context.Context, workspaceID, daemonID uuid.UUID, name, provider, instructions, personaKey, gitName, gitEmail string) (types.Agent, error) {
 	row, err := s.q.CreateDaemonAgent(ctx, db.CreateDaemonAgentParams{
-		WorkspaceID: workspaceID,
-		Name:        name,
-		Provider:    db.AgentProvider(provider),
-		DaemonID:    uuid.NullUUID{UUID: daemonID, Valid: true},
-		GitName:     sql.NullString{String: name, Valid: true},
-		GitEmail:    sql.NullString{String: name + "@teammate.local", Valid: true},
+		WorkspaceID:  workspaceID,
+		Name:         name,
+		Provider:     db.AgentProvider(provider),
+		Instructions: instructions,
+		DaemonID:     uuid.NullUUID{UUID: daemonID, Valid: true},
+		PersonaKey:   personaKey,
+		GitName:      sql.NullString{String: gitName, Valid: true},
+		GitEmail:     sql.NullString{String: gitEmail, Valid: true},
 	})
 	if err != nil {
 		return types.Agent{}, fmt.Errorf("create daemon agent: %w", err)
@@ -198,7 +173,8 @@ func (s *Store) CreateDaemonAgent(ctx context.Context, workspaceID, daemonID uui
 	return ToDomainAgent(row)
 }
 
-// ListAgentsByDaemon returns all agent instances reported by the daemon.
+// ListAgentsByDaemon returns the daemon's full instance set — the desired
+// set of the declarative reconciliation.
 func (s *Store) ListAgentsByDaemon(ctx context.Context, daemonID uuid.UUID) ([]types.Agent, error) {
 	rows, err := s.q.ListAgentsByDaemon(ctx, daemonNullUUID(daemonID))
 	if err != nil {
@@ -207,17 +183,9 @@ func (s *Store) ListAgentsByDaemon(ctx context.Context, daemonID uuid.UUID) ([]t
 	return ToDomainAgentSlice(rows)
 }
 
-// ListPendingDaemonAgents returns the web-pushed instances waiting for adoption.
-func (s *Store) ListPendingDaemonAgents(ctx context.Context, daemonID uuid.UUID) ([]types.Agent, error) {
-	rows, err := s.q.ListPendingDaemonAgents(ctx, uuid.NullUUID{UUID: daemonID, Valid: true})
-	if err != nil {
-		return nil, fmt.Errorf("list pending daemon agents: %w", err)
-	}
-	return ToDomainAgentSlice(rows)
-}
-
-// OfflineUnreportedDaemonAgents marks machine-reported online agents that are
-// absent from the current report offline; pending web-pushed instances keep waiting.
+// OfflineUnreportedDaemonAgents marks the daemon's online instances that are
+// absent from the heartbeat busy list offline; pending instances keep waiting
+// for delivery.
 func (s *Store) OfflineUnreportedDaemonAgents(ctx context.Context, daemonID uuid.UUID, names []string) error {
 	if names == nil {
 		names = []string{}

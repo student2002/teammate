@@ -29,10 +29,12 @@ export default function ThemeSwitcher({
   const { theme, setTheme } = useTheme();
   const locale = useLocale() as Locale;
 
-  // next-themes 在挂载前不返回主题，固定渲染默认主题图标避免水合不一致
+  // next-themes 在挂载前不返回主题，固定渲染默认主题图标与名称避免水合不一致
   useEffect(() => setMounted(true), []);
 
   const active = THEMES.find((t) => t.id === theme) ?? THEMES[0];
+  // 挂载前 theme 为 undefined，title 回退 THEMES[0] 与 SSR 输出保持一致
+  const display = mounted ? active : THEMES[0];
   const ActiveIcon = ICONS[active.icon];
 
   return (
@@ -41,7 +43,7 @@ export default function ThemeSwitcher({
         onClick={() => setOpen(!open)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 flex items-center justify-center transition-colors-fast btn-press"
-        title={active.name[locale] ?? active.name["en-US"] ?? active.id}
+        title={display.name[locale] ?? display.name["en-US"] ?? display.id}
       >
         {mounted ? (
           <ActiveIcon className="w-4 h-4 text-primary-fg" />

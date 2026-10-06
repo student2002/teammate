@@ -21,8 +21,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/redis/go-redis/v9"
 
@@ -71,9 +74,10 @@ type SSEEvent = types.SSEEvent
 // Hub is the SSE event center, managing event publishing, subscription, and cross-instance synchronization.
 // Each server instance maintains a local subscriber list and uses Redis Pub/Sub for cross-instance event distribution.
 type Hub struct {
-	redis   *redis.Client
-	mu      sync.RWMutex
-	clients map[string][]chan SSEEvent // runtime_id -> list of subscribe channels
+	redis      *redis.Client
+	instanceID string // identifies this instance's Redis Pub/Sub messages; own echoes are skipped
+	mu         sync.RWMutex
+	clients    map[string][]chan SSEEvent // runtime_id -> list of subscribe channels
 }
 
 // NewHub creates a new Hub instance using the given Redis client.
@@ -82,11 +86,12 @@ type Hub struct {
 //   - rdb: Redis client, used for Pub/Sub and event buffering
 //
 // Returns:
-//   - *Hub: the initialized Hub instance
+//   - *Hub: the initialized hub instance
 func NewHub(rdb *redis.Client) *Hub {
 	return &Hub{
-		redis:   rdb,
-		clients: make(map[string][]chan SSEEvent),
+		redis:      rdb,
+		instanceID: uuid.NewString(),
+		clients:    make(map[string][]chan SSEEvent),
 	}
 }
 
@@ -112,8 +117,31 @@ func BufferKey(runtimeID string) string {
 	return BufferKeyPrefix + runtimeID
 }
 
+// parseSSEEventID extracts the ordering key of an SSE event ID. IDs are either
+// a plain Unix-nanosecond timestamp or "{nanos}-{counter}" (see
+// service.nextSSEEventID); both order by nanos first, with the counter
+// breaking same-nanos ties. ok is false for IDs in neither format.
+func parseSSEEventID(id string) (nanos, counter int64, ok bool) {
+	if id == "" {
+		return 0, 0, false
+	}
+	n, c, hasCounter := strings.Cut(id, "-")
+	if !hasCounter {
+		nanos, err := strconv.ParseInt(n, 10, 64)
+		return nanos, 0, err == nil
+	}
+	ni, err1 := strconv.ParseInt(n, 10, 64)
+	ci, err2 := strconv.ParseInt(c, 10, 64)
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return ni, ci, true
+}
+
 // BufferEvent stores an event into the Redis sorted-set buffer for later replay.
-// The event ID (a Unix nanosecond timestamp string) is used as the score, supporting efficient range queries for Last-Event-ID reconnection.
+// The score is the nanosecond component of the event ID so the sorted-set order
+// matches ID ordering (float64 cannot represent full nanosecond precision; the
+// same-nanos remainder is re-ordered exactly by GetBufferedEvents).
 //
 // Parameters:
 //   - ctx: request context
@@ -128,11 +156,11 @@ func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent)
 	}
 	key := BufferKey(runtimeID)
 
-	// Parse the event ID as the score; the event ID is a Unix nanosecond timestamp
-	score, err := strconv.ParseFloat(event.ID, 64)
-	if err != nil {
-		// Fallback: if the ID is not in timestamp format, use the current time
-		score = float64(time.Now().UnixNano())
+	scoreNanos, _, ok := parseSSEEventID(event.ID)
+	if !ok {
+		// Unknown ID formats sort oldest; every producer ID is parseable, so
+		// this only guards against accidental foreign writes.
+		scoreNanos = 0
 	}
 
 	data, err := json.Marshal(event)
@@ -141,7 +169,7 @@ func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent)
 	}
 
 	pipe := h.redis.Pipeline()
-	pipe.ZAdd(ctx, key, redis.Z{Score: score, Member: data})
+	pipe.ZAdd(ctx, key, redis.Z{Score: float64(scoreNanos), Member: data})
 	pipe.Expire(ctx, key, BufferTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("redis pipeline buffer event: %w", err)
@@ -149,7 +177,8 @@ func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent)
 	return nil
 }
 
-// GetBufferedEvents retrieves all events in the buffer with an ID greater than afterEventID, returned in ascending ID order.
+// GetBufferedEvents retrieves all events in the buffer with an ID strictly greater
+// than afterEventID, returned in ascending ID order.
 // Used to recover lost events when an agent reconnects (Last-Event-ID mechanism).
 //
 // Reconnection flow:
@@ -161,7 +190,7 @@ func (h *Hub) BufferEvent(ctx context.Context, runtimeID string, event SSEEvent)
 // Parameters:
 //   - ctx: request context
 //   - runtimeID: the unique identifier of the runtime
-//   - afterEventID: the ID of the last received event (a Unix nanosecond timestamp string); if empty, returns nil
+//   - afterEventID: the ID of the last received event (plain nanoseconds or "{nanos}-{counter}"); if empty or unparseable, returns nil
 //
 // Returns:
 //   - []SSEEvent: the list of buffered events (in ascending ID order)
@@ -173,16 +202,17 @@ func (h *Hub) GetBufferedEvents(ctx context.Context, runtimeID string, afterEven
 
 	key := BufferKey(runtimeID)
 
-	// Parse afterEventID as the minimum score (open interval)
-	minScore, err := strconv.ParseFloat(afterEventID, 64)
-	if err != nil {
+	afterNanos, afterCounter, ok := parseSSEEventID(afterEventID)
+	if !ok {
 		// Cannot parse the ID format — return empty to trigger a full sync
 		return nil, nil
 	}
 
-	// ZRANGEBYSCORE open-interval query (minScore, +inf)
+	// Closed interval on the nanosecond component plus an exact in-memory
+	// tuple filter: an open interval would drop same-nanos events with a
+	// larger counter, and the sorted-set score alone cannot order them.
 	results, err := h.redis.ZRangeByScore(ctx, key, &redis.ZRangeBy{
-		Min: fmt.Sprintf("(%f", minScore),
+		Min: strconv.FormatInt(afterNanos, 10),
 		Max: "+inf",
 	}).Result()
 	if err != nil {
@@ -194,6 +224,13 @@ func (h *Hub) GetBufferedEvents(ctx context.Context, runtimeID string, afterEven
 		var event SSEEvent
 		if err := json.Unmarshal([]byte(raw), &event); err != nil {
 			slog.Error("unmarshal buffered SSE event", "err", err)
+			continue
+		}
+		nanos, counter, ok := parseSSEEventID(event.ID)
+		if !ok || nanos < afterNanos {
+			continue
+		}
+		if nanos == afterNanos && counter <= afterCounter {
 			continue
 		}
 		events = append(events, event)
@@ -266,6 +303,10 @@ func (h *Hub) Publish(ctx context.Context, runtimeID string, event SSEEvent) err
 		slog.Error("buffer SSE event", "runtime_id", runtimeID, "event_id", event.ID, "err", err)
 	}
 
+	// Tag the origin: this instance delivers to its local subscribers below,
+	// and the Redis loop in Start skips the messages it published itself.
+	event.Origin = h.instanceID
+
 	// Deliver to local clients
 	h.mu.RLock()
 	subs := h.clients[runtimeID]
@@ -335,6 +376,12 @@ func (h *Hub) Start(ctx context.Context) {
 				continue
 			}
 
+			// The publishing instance already delivered to its local
+			// subscribers; only forward events from other instances.
+			if event.Origin == h.instanceID {
+				continue
+			}
+
 			// Extract the runtimeID from the channel name "sse:{runtimeID}"
 			runtimeID := msg.Channel[len("sse:"):]
 
@@ -345,10 +392,20 @@ func (h *Hub) Start(ctx context.Context) {
 			h.mu.RUnlock()
 
 			for _, c := range localSubs {
-				select {
-				case c <- event:
-				default:
-					slog.Warn("SSE client channel full, dropping event", "runtime_id", runtimeID, "event_id", event.ID)
+				if IsControlEvent(event.Event) {
+					// Control events keep guaranteed-delivery semantics
+					// across instances too.
+					select {
+					case c <- event:
+					case <-time.After(2 * time.Second):
+						slog.Warn("SSE client channel full, dropping control event", "runtime_id", runtimeID, "event_id", event.ID)
+					}
+				} else {
+					select {
+					case c <- event:
+					default:
+						slog.Warn("SSE client channel full, dropping event", "runtime_id", runtimeID, "event_id", event.ID)
+					}
 				}
 			}
 		}

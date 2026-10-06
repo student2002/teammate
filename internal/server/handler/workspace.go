@@ -201,11 +201,12 @@ func (h *WorkspaceHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Reques
 	}
 
 	wsSvc := service.NewWorkspaceService(h.Svc)
-	workspace, err := wsSvc.Update(r.Context(), buildUpdateWorkspaceParams(
-		id,
-		req.Name,
-		req.Description,
-	))
+	current, err := wsSvc.Get(r.Context(), id)
+	if err != nil {
+		response.NotFound(w, "workspace not found")
+		return
+	}
+	workspace, err := wsSvc.Update(r.Context(), buildUpdateWorkspaceParams(id, current, req))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			response.NotFound(w, "workspace not found")
@@ -249,8 +250,13 @@ func (h *WorkspaceHandler) DeleteWorkspace(w http.ResponseWriter, r *http.Reques
 	}
 
 	wsSvc := service.NewWorkspaceService(h.Svc)
-	if _, err := wsSvc.Get(r.Context(), id); err != nil {
+	workspace, err := wsSvc.Get(r.Context(), id)
+	if err != nil {
 		response.NotFound(w, "workspace not found")
+		return
+	}
+	if workspace.IsDefault {
+		response.Forbidden(w, "cannot delete the default workspace")
 		return
 	}
 	workspaces, err := wsSvc.ListForMember(r.Context(), claims.UserID)

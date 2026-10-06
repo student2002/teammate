@@ -14,7 +14,11 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -72,7 +76,7 @@ func (s *InvitationService) Create(ctx context.Context, workspaceID uuid.UUID, e
 func (s *InvitationService) Accept(ctx context.Context, token string, name string, jwtSecret string) (*store.LoginResult, error) {
 	inv, err := s.svc.Store.GetInvitationByToken(ctx, token)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("invalid or expired invitation")
 		}
 		return nil, fmt.Errorf("lookup invitation: %w", err)
@@ -84,9 +88,15 @@ func (s *InvitationService) Accept(ctx context.Context, token string, name strin
 		return nil, fmt.Errorf("accept invitation: %w", err)
 	}
 
-	_, err = s.svc.Store.GetMemberByEmail(ctx, inv.Email)
+	// The invitation token itself proves control of the email, so no password
+	// check is performed for either path; both join the invited workspace and
+	// get a freshly issued session.
+	existing, err := s.svc.Store.GetMemberByEmail(ctx, inv.Email)
 	if err == nil {
-		return s.svc.Store.Login(ctx, inv.Email, "", jwtSecret)
+		if err := s.joinWorkspace(ctx, existing, inv); err != nil {
+			return nil, err
+		}
+		return s.issueSession(ctx, existing, inv, jwtSecret)
 	}
 
 	memberName := name
@@ -101,15 +111,32 @@ func (s *InvitationService) Accept(ctx context.Context, token string, name strin
 		return nil, fmt.Errorf("create member: %w", err)
 	}
 
-	_, err = s.svc.Store.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
-		WorkspaceID: inv.ID,
+	if err := s.joinWorkspace(ctx, member, inv); err != nil {
+		return nil, err
+	}
+	return s.issueSession(ctx, member, inv, jwtSecret)
+}
+
+// joinWorkspace adds the member to the invited workspace with the invited
+// role. An already-existing membership is left untouched.
+func (s *InvitationService) joinWorkspace(ctx context.Context, member types.Member, inv types.Invitation) error {
+	_, err := s.svc.Store.CreateWorkspaceMember(ctx, types.CreateWorkspaceMemberParams{
+		WorkspaceID: inv.WorkspaceID,
 		MemberID:    member.ID,
 		Role:        inv.Role,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create workspace member: %w", err)
+		if strings.Contains(err.Error(), "duplicate key") {
+			return nil
+		}
+		return fmt.Errorf("create workspace member: %w", err)
 	}
+	return nil
+}
 
+// issueSession generates the member session for the invited workspace and
+// registers the jti in Redis so the token passes the revocation whitelist.
+func (s *InvitationService) issueSession(ctx context.Context, member types.Member, inv types.Invitation, jwtSecret string) (*store.LoginResult, error) {
 	memberUUID, err := uuid.Parse(member.ID)
 	if err != nil {
 		return nil, fmt.Errorf("parse member id: %w", err)
@@ -119,11 +146,22 @@ func (s *InvitationService) Accept(ctx context.Context, token string, name strin
 		return nil, fmt.Errorf("generate token: %w", err)
 	}
 
+	if s.svc.Redis != nil && jti != "" {
+		ttl := time.Until(expiresAt)
+		if ttl > 0 {
+			if err := s.svc.Redis.Set(ctx, "jwt:"+jti, member.ID, ttl).Err(); err != nil {
+				slog.Warn("failed to store JWT jti in redis, token revocation may not work", "jti", jti, "err", err)
+			}
+		}
+	}
+
 	return &store.LoginResult{
-		Token:     token,
-		ExpiresAt: expiresAt,
-		JTI:       jti,
-		Member:    member,
+		Token:       token,
+		ExpiresAt:   expiresAt,
+		JTI:         jti,
+		Member:      member,
+		WorkspaceID: uuid.MustParse(inv.WorkspaceID),
+		Role:        inv.Role,
 	}, nil
 }
 

@@ -3,6 +3,7 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -64,9 +65,11 @@ func TestUpdateWorkflowTemplateWithNodes_ReplaceAll(t *testing.T) {
 	}
 
 	_, updatedNodes, err := s.UpdateWorkflowTemplateWithNodes(ctx, types.UpdateWorkflowTemplateParams{
-		ID:          tpl.ID,
-		Name:        tpl.Name,
-		Description: &tpl.Description,
+		ID:           tpl.ID,
+		Name:         tpl.Name,
+		Description:  &tpl.Description,
+		TriggerType:  "manual",
+		TriggerConfig: json.RawMessage(`{}`),
 	}, newNodes)
 	if err != nil {
 		t.Fatalf("UpdateWorkflowTemplateWithNodes: %v", err)

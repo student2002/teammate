@@ -102,61 +102,6 @@ func (q *Queries) CountCompletedNodesByAgents(ctx context.Context, dollar_1 []uu
 	return items, nil
 }
 
-const createAgent = `-- name: CreateAgent :one
-
-INSERT INTO agents (workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
-`
-
-type CreateAgentParams struct {
-	WorkspaceID  uuid.UUID             `db:"workspace_id" json:"workspace_id"`
-	Name         string                `db:"name" json:"name"`
-	Provider     AgentProvider         `db:"provider" json:"provider"`
-	Instructions string                `db:"instructions" json:"instructions"`
-	Model        sql.NullString        `db:"model" json:"model"`
-	Status       AgentStatus           `db:"status" json:"status"`
-	CustomEnv    pqtype.NullRawMessage `db:"custom_env" json:"custom_env"`
-	ExtraArgs    []string              `db:"extra_args" json:"extra_args"`
-	GitName      sql.NullString        `db:"git_name" json:"git_name"`
-	GitEmail     sql.NullString        `db:"git_email" json:"git_email"`
-}
-
-// Agent queries
-func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
-	row := q.db.QueryRowContext(ctx, createAgent,
-		arg.WorkspaceID,
-		arg.Name,
-		arg.Provider,
-		arg.Instructions,
-		arg.Model,
-		arg.Status,
-		arg.CustomEnv,
-		pq.Array(arg.ExtraArgs),
-		arg.GitName,
-		arg.GitEmail,
-	)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Name,
-		&i.Provider,
-		&i.Instructions,
-		&i.Model,
-		&i.Status,
-		&i.CustomEnv,
-		pq.Array(&i.ExtraArgs),
-		&i.GitName,
-		&i.GitEmail,
-		&i.DaemonID,
-		&i.Origin,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const createMcpServer = `-- name: CreateMcpServer :one
 INSERT INTO mcp_servers (workspace_id, name, url, type, auth_type, env_vars, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -264,10 +209,12 @@ func (q *Queries) DeleteSkill(ctx context.Context, id uuid.UUID) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
+
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
 WHERE id = $1
 `
 
+// Agent queries
 func (q *Queries) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 	row := q.db.QueryRowContext(ctx, getAgent, id)
 	var i Agent
@@ -281,6 +228,7 @@ func (q *Queries) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 		&i.Status,
 		&i.CustomEnv,
 		pq.Array(&i.ExtraArgs),
+		&i.PersonaKey,
 		&i.GitName,
 		&i.GitEmail,
 		&i.DaemonID,
@@ -486,7 +434,7 @@ func (q *Queries) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]Lis
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents
 WHERE workspace_id = $1
 ORDER BY created_at DESC
 `
@@ -510,6 +458,54 @@ func (q *Queries) ListAgents(ctx context.Context, workspaceID uuid.UUID) ([]Agen
 			&i.Status,
 			&i.CustomEnv,
 			pq.Array(&i.ExtraArgs),
+			&i.PersonaKey,
+			&i.GitName,
+			&i.GitEmail,
+			&i.DaemonID,
+			&i.Origin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentsByMcpServer = `-- name: ListAgentsByMcpServer :many
+SELECT a.id, a.workspace_id, a.name, a.provider, a.instructions, a.model, a.status, a.custom_env, a.extra_args, a.persona_key, a.git_name, a.git_email, a.daemon_id, a.origin, a.created_at, a.updated_at FROM agent_mcp_servers amr
+JOIN agents a ON a.id = amr.agent_id
+WHERE amr.mcp_server_id = $1
+ORDER BY a.name
+`
+
+func (q *Queries) ListAgentsByMcpServer(ctx context.Context, mcpServerID uuid.UUID) ([]Agent, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentsByMcpServer, mcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Agent{}
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Provider,
+			&i.Instructions,
+			&i.Model,
+			&i.Status,
+			&i.CustomEnv,
+			pq.Array(&i.ExtraArgs),
+			&i.PersonaKey,
 			&i.GitName,
 			&i.GitEmail,
 			&i.DaemonID,
@@ -685,7 +681,7 @@ SET instructions = COALESCE($2, instructions),
     git_email = COALESCE($8, git_email),
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type UpdateAgentParams struct {
@@ -721,6 +717,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.Status,
 		&i.CustomEnv,
 		pq.Array(&i.ExtraArgs),
+		&i.PersonaKey,
 		&i.GitName,
 		&i.GitEmail,
 		&i.DaemonID,
@@ -735,7 +732,7 @@ const updateAgentStatus = `-- name: UpdateAgentStatus :one
 UPDATE agents
 SET status = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type UpdateAgentStatusParams struct {
@@ -756,6 +753,7 @@ func (q *Queries) UpdateAgentStatus(ctx context.Context, arg UpdateAgentStatusPa
 		&i.Status,
 		&i.CustomEnv,
 		pq.Array(&i.ExtraArgs),
+		&i.PersonaKey,
 		&i.GitName,
 		&i.GitEmail,
 		&i.DaemonID,

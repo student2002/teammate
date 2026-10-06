@@ -21,7 +21,7 @@ export default function EmptyStateGuide({
   const steps = [
     t("step1"),
     t("step2"),
-    t("step3"),
+    t("step3", { defaultValue: "" }),
     t("step4", { defaultValue: "" }),
   ].filter(Boolean);
 

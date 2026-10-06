@@ -2,7 +2,7 @@
 //
 // A Task is a unit of work in a project, instantiated from a workflow template
 // into an ordered set of workflow nodes.
-// This file contains task CRUD, node queries, subtask management, due date parsing, etc.
+// This file contains task CRUD, node queries, subtask management, etc.
 //
 // Task creation flow:
 //  1. Create the task record within a transaction
@@ -16,7 +16,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -302,7 +301,11 @@ func (s *Store) DeleteTask(ctx context.Context, taskID int32) error {
 	return tx.Commit()
 }
 
-// CancelTaskNodes resets all in_progress nodes of the specified task to pending.
+// CancelTaskNodes moves all in_progress nodes of the specified task to
+// manual_intervention and clears the assignee: a cancelled task's half-done
+// work needs a human decision (resolve re_execute / complete) before it can
+// run again, and pending nodes would be silently re-claimed the moment the
+// task is re-activated.
 //
 // Parameters:
 //   - ctx: request context
@@ -312,7 +315,7 @@ func (s *Store) DeleteTask(ctx context.Context, taskID int32) error {
 //   - error: error if the update fails
 func (s *Store) CancelTaskNodes(ctx context.Context, taskID int32) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE task_nodes SET status = 'pending', assignee_id = NULL, updated_at = NOW()
+		`UPDATE task_nodes SET status = 'manual_intervention', assignee_id = NULL, updated_at = NOW()
 		 WHERE task_id = $1 AND status = 'in_progress'`, taskID)
 	if err != nil {
 		return fmt.Errorf("cancel task nodes: %w", err)
@@ -445,27 +448,6 @@ func (s *Store) ListSubtasks(ctx context.Context, parentTaskID sql.NullInt32) ([
 		return nil, fmt.Errorf("list subtasks: %w", err)
 	}
 	return ToDomainTaskSlice(tasks)
-}
-
-// ParseDueDate parses a date string into sql.NullTime, supporting RFC3339 and YYYY-MM-DD formats.
-//
-// Parameters:
-//   - dateStr: pointer to the date string (may be nil)
-//
-// Returns:
-//   - sql.NullTime: parsed time; returns Valid=false if parsing fails
-func ParseDueDate(dateStr *string) sql.NullTime {
-	if dateStr == nil || *dateStr == "" {
-		return sql.NullTime{}
-	}
-	parsed, err := time.Parse(time.RFC3339, *dateStr)
-	if err != nil {
-		parsed, err = time.Parse("2006-01-02", *dateStr)
-	}
-	if err != nil {
-		return sql.NullTime{}
-	}
-	return sql.NullTime{Time: parsed, Valid: true}
 }
 
 // UpdateTaskGitBranch updates the Git branch name associated with a task.

@@ -95,20 +95,18 @@ func TestAgentTokenRejectedOnDaemonAPI(t *testing.T) {
 	srv := httptest.NewServer(router)
 	defer srv.Close()
 	client := srv.Client()
-	token, wsID := registerTestUser(t, client, srv.URL)
+	token, _ := registerTestUser(t, client, srv.URL)
 
-	_, agentToken := createAgent(t, client, srv.URL, wsID, token)
-
-	// An agent API key is not a daemon credential: register must be rejected
+	// Only daemon td_ credentials may call register: a member JWT in the
+	// API-key slot is not a daemon credential and must be rejected.
 	body := map[string]interface{}{
 		"device_name": "fake-box",
 		"version":     "1.0.0",
-		"agents":      []map[string]string{},
 	}
 	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost,
-		srv.URL+"/api/daemons/register", agentToken, body)
-	if status != http.StatusForbidden {
-		t.Errorf("agent token on daemon register: expected 403, got %d", status)
+		srv.URL+"/api/daemons/register", token, body)
+	if status == http.StatusOK || status == http.StatusCreated {
+		t.Errorf("member credential on daemon register: expected rejection, got %d", status)
 	}
 }
 
@@ -125,8 +123,8 @@ func TestDaemonCannotAccessOtherDaemonSSE(t *testing.T) {
 
 	// Two daemons; daemon1 owns the event stream under test
 	agent1ID, _ := createAgent(t, client, srv.URL, wsID, token)
-	daemon1ID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID)
-	_, daemon2Token := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID)
+	daemon1ID, _ := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID, db)
+	_, daemon2Token := createDaemonForAgent(t, client, srv.URL, wsID, token, agent1ID, db)
 
 	// Daemon2 attempts to subscribe to Daemon1's event stream
 	url := fmt.Sprintf("%s/api/workspaces/%s/daemons/%s/events", srv.URL, wsID, daemon1ID)
@@ -172,7 +170,7 @@ func TestMemoryAgentVerifiedEnforcement(t *testing.T) {
 		"content":      "Test content",
 		"verified":     true,
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, srv.URL+"/api/memories", agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, srv.URL+"/api/memories", agentToken, agentID, body)
 	if status != http.StatusCreated {
 		t.Fatalf("agent create memory: expected 201, got %d, body: %s", status, respBody)
 	}
@@ -208,7 +206,7 @@ func TestMemoryAgentCannotSetVerified(t *testing.T) {
 		"content":      "Should have verified=false",
 		"verified":     true,
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, srv.URL+"/api/memories", agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, srv.URL+"/api/memories", agentToken, agentID, body)
 	if status != http.StatusCreated {
 		t.Fatalf("expected 201, got %d, body: %s", status, respBody)
 	}

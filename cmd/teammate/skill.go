@@ -17,9 +17,9 @@ var skillListCmd = &cobra.Command{
 	Short:   "List skills in a workspace",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -34,14 +34,17 @@ var skillCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a skill",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 		category, _ := cmd.Flags().GetString("category")
 		promptTemplate, _ := cmd.Flags().GetString("prompt-template")
 
-		if wsID == "" || name == "" {
-			return fmt.Errorf("--workspace and --name are required")
+		if name == "" {
+			return fmt.Errorf("--name is required")
 		}
 
 		body := map[string]interface{}{"name": name}
@@ -69,9 +72,9 @@ var skillUpdateCmd = &cobra.Command{
 	Short: "Update a skill",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 
 		body := map[string]interface{}{}
@@ -106,9 +109,9 @@ var skillDeleteCmd = &cobra.Command{
 	Short: "Delete a skill",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/skills/%s", wsID, args[0])); err != nil {

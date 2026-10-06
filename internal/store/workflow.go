@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -94,7 +93,9 @@ func (s *Store) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UUID
 	return ToDomainWorkflowTemplateSlice(templates)
 }
 
-// UpdateWorkflowTemplate updates the metadata of a workflow template.
+// UpdateWorkflowTemplate updates a template row with the given full-column
+// params. Callers supply complete values (partial merges happen at the handler
+// layer over the current record); empty trigger fields are not defaulted here.
 //
 // Parameters:
 //   - ctx: request context
@@ -108,10 +109,6 @@ func (s *Store) UpdateWorkflowTemplate(ctx context.Context, params types.UpdateW
 	if err != nil {
 		return types.WorkflowTemplate{}, fmt.Errorf("convert update workflow template params: %w", err)
 	}
-	dbParams, err = normalizeUpdateWorkflowTemplateParams(ctx, s, dbParams)
-	if err != nil {
-		return types.WorkflowTemplate{}, err
-	}
 	tpl, err := s.q.UpdateWorkflowTemplate(ctx, dbParams)
 	if err != nil {
 		return types.WorkflowTemplate{}, fmt.Errorf("update workflow template: %w", err)
@@ -120,6 +117,8 @@ func (s *Store) UpdateWorkflowTemplate(ctx context.Context, params types.UpdateW
 }
 
 // UpdateWorkflowTemplateWithNodes updates a workflow template and replaces all nodes within a transaction.
+// Nodes carrying an explicit ID keep that identity, so depends_on references
+// between them stay valid; nodes without an ID get a generated one.
 //
 // Note: the nodes parameter uses types.CreateTemplateNodeParams; within the transaction it is converted to db and then assigned TemplateID.
 func (s *Store) UpdateWorkflowTemplateWithNodes(ctx context.Context, params types.UpdateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, error) {
@@ -134,10 +133,6 @@ func (s *Store) UpdateWorkflowTemplateWithNodes(ctx context.Context, params type
 	dbParams, err := FromDomainUpdateWorkflowTemplateParams(params)
 	if err != nil {
 		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert update workflow template params: %w", err)
-	}
-	dbParams, err = normalizeUpdateWorkflowTemplateParams(ctx, s, dbParams)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, err
 	}
 	// Update template metadata
 	template, err := qtx.UpdateWorkflowTemplate(ctx, dbParams)
@@ -191,28 +186,6 @@ func normalizeCreateWorkflowTemplateParams(params db.CreateWorkflowTemplateParam
 		params.TriggerEnabled = true
 	}
 	return params
-}
-
-func normalizeUpdateWorkflowTemplateParams(ctx context.Context, s *Store, params db.UpdateWorkflowTemplateParams) (db.UpdateWorkflowTemplateParams, error) {
-	if params.TriggerType != "" {
-		if len(params.TriggerConfig) == 0 {
-			params.TriggerConfig = json.RawMessage(`{}`)
-		}
-		return params, nil
-	}
-
-	existing, err := s.GetWorkflowTemplate(ctx, params.ID)
-	if err != nil {
-		return params, fmt.Errorf("get workflow template for trigger defaults: %w", err)
-	}
-	params.TriggerType = db.WorkflowTriggerType(existing.TriggerType)
-	params.TriggerConfig = existing.TriggerConfig
-	params.TriggerEnabled = existing.TriggerEnabled
-	params.NextRunAt = ptrToNullTime(existing.NextRunAt)
-	if params.NextRunAt.Valid && params.NextRunAt.Time.IsZero() {
-		params.NextRunAt = sql.NullTime{}
-	}
-	return params, nil
 }
 
 // DeleteWorkflowTemplate deletes a workflow template and all its nodes within a transaction.

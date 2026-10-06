@@ -19,9 +19,9 @@ var workflowListCmd = &cobra.Command{
 	Short:   "List workflow templates in a workspace",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -37,9 +37,9 @@ var workflowGetCmd = &cobra.Command{
 	Short: "Get workflow template details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -70,13 +70,16 @@ Example:
     {"name":"Code Review","sort_order":2,"node_type":"review","timeout_minutes":30}
   ]'`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 		nodesJSON, _ := cmd.Flags().GetString("nodes")
 
-		if wsID == "" || name == "" {
-			return fmt.Errorf("--workspace and --name are required")
+		if name == "" {
+			return fmt.Errorf("--name is required")
 		}
 
 		body := map[string]interface{}{"name": name}
@@ -105,9 +108,9 @@ var workflowUpdateCmd = &cobra.Command{
 	Short: "Update a workflow template",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
@@ -134,9 +137,9 @@ var workflowDeleteCmd = &cobra.Command{
 	Short: "Delete a workflow template",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		if err := client.Delete(fmt.Sprintf("/api/workspaces/%s/workflows/%s", wsID, args[0])); err != nil {
@@ -152,9 +155,13 @@ var workflowStatsCmd = &cobra.Command{
 	Short: "Get workflow template statistics",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Get(fmt.Sprintf("/api/templates/%s/stats", args[0]), &result); err != nil {
+		if err := client.Get(fmt.Sprintf("/api/workspaces/%s/workflows/%s/stats", wsID, args[0]), &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -172,6 +179,7 @@ func init() {
 	workflowUpdateCmd.Flags().String("name", "", "workflow name")
 	workflowUpdateCmd.Flags().String("description", "", "workflow description")
 	workflowDeleteCmd.Flags().String("workspace", "", "workspace ID")
+	workflowStatsCmd.Flags().String("workspace", "", "workspace ID")
 
 	workflowCmd.AddCommand(workflowListCmd)
 	workflowCmd.AddCommand(workflowGetCmd)

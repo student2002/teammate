@@ -235,4 +235,87 @@ func TestCommunityWorkflow(t *testing.T) {
 	if _, ok := importResult["template"]; !ok {
 		t.Error("expected template in import result")
 	}
+
+	// The imported template must carry the nodes parsed from workflow_definition.
+	template := importResult["template"].(map[string]interface{})
+	listURL := fmt.Sprintf("%s/api/workspaces/%s/workflows", server.URL, wsID)
+	_, status, respBody = doRequestWithToken(t, client, http.MethodGet, listURL, token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list workflow templates: expected 200, got %d, body: %s", status, respBody)
+	}
+	var tplList []map[string]interface{}
+	if err := json.Unmarshal(respBody, &tplList); err != nil {
+		t.Fatalf("decode workflow templates: %v", err)
+	}
+	imported := false
+	for _, tpl := range tplList {
+		if tpl["id"] == template["id"] {
+			imported = true
+			nodes, _ := tpl["nodes"].([]interface{})
+			if len(nodes) != 2 {
+				t.Errorf("imported template node count = %d, want 2 (parsed from workflow_definition)", len(nodes))
+			}
+			break
+		}
+	}
+	if !imported {
+		t.Error("imported template not found in workspace template list")
+	}
+}
+
+// TestCommunityWorkflowImportRejectsNodelessDefinition verifies that importing
+// a community workflow without parsable nodes fails instead of producing an
+// empty template shell.
+func TestCommunityWorkflowImportRejectsNodelessDefinition(t *testing.T) {
+	router, db, _ := setupExtTestRouter(t)
+	defer db.Close()
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	client := server.Client()
+	token, wsID := registerTestUser(t, client, server.URL)
+
+	communityURL := fmt.Sprintf("%s/api/community/workflows", server.URL)
+	body := map[string]interface{}{
+		"name":                "nodeless-flow-" + uuid.New().String()[:8],
+		"author":              "test-author",
+		"version":             "1.0.0",
+		"workflow_definition": map[string]interface{}{},
+	}
+	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, communityURL, token, body)
+	if status != http.StatusCreated {
+		t.Fatalf("create community workflow: expected 201, got %d, body: %s", status, respBody)
+	}
+	var cwResult map[string]interface{}
+	if err := json.Unmarshal(respBody, &cwResult); err != nil {
+		t.Fatalf("decode community workflow: %v", err)
+	}
+
+	importURL := fmt.Sprintf("%s/api/community/workflows/%s/import", server.URL, cwResult["id"])
+	importBody := map[string]interface{}{"workspace_id": wsID}
+	_, status, _ = doRequestWithToken(t, client, http.MethodPost, importURL, token, importBody)
+	if status != http.StatusBadRequest {
+		t.Errorf("import nodeless workflow: expected 400, got %d", status)
+	}
+}
+
+// TestCommunityWorkflowImportNotFound verifies that importing a non-existent
+// community workflow id maps to 404 instead of an internal error.
+func TestCommunityWorkflowImportNotFound(t *testing.T) {
+	router, db, _ := setupExtTestRouter(t)
+	defer db.Close()
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	client := server.Client()
+	token, wsID := registerTestUser(t, client, server.URL)
+
+	importURL := fmt.Sprintf("%s/api/community/workflows/%s/import", server.URL, uuid.New())
+	importBody := map[string]interface{}{"workspace_id": wsID}
+	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, importURL, token, importBody)
+	if status != http.StatusNotFound {
+		t.Errorf("import missing community workflow: expected 404, got %d, body: %s", status, respBody)
+	}
 }

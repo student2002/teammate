@@ -158,12 +158,14 @@ func AuthMiddleware(jwtSecret string, authenticateAPIKey APIKeyAuthenticator, rd
 			// For member-type JWTs, check whether the jti exists in Redis (revocation check).
 			// Security note: login-failure lockout, password change, user disable, and similar operations
 			// write the jti to a Redis expiring key, thereby invalidating the current token.
-			// When Redis fails the request is allowed through to preserve availability.
+			// When Redis is unreachable the request is rejected: an uncheckable
+			// revocation state must not fall back to "valid".
 			if claims.UserType == "member" && jti != "" && rdb != nil {
 				exists, err := rdb.Exists(r.Context(), "jwt:"+jti).Result()
 				if err != nil {
-					// Allow the request through when Redis fails, so a Redis issue does not block all authentication
-					slog.Warn("redis JWT revocation check failed, allowing request", "jti", jti, "err", err)
+					slog.Error("redis JWT revocation check failed, rejecting request", "jti", jti, "err", err)
+					response.ServiceUnavailable(w, "token revocation check unavailable")
+					return
 				} else if exists == 0 {
 					response.Unauthorized(w, "token revoked or invalidated")
 					return

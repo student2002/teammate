@@ -43,7 +43,7 @@ func TestNode3CannotBeClaimedBeforeNode2Completed(t *testing.T) {
 	// Attempt to claim node3 — should fail because node2 is not completed
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{"agent_id": agentID}
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+node3ID+"/claim", agentToken, body)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+node3ID+"/claim", agentToken, agentID, body)
 	if status != http.StatusConflict && status != http.StatusForbidden {
 		t.Errorf("claiming node3 before node2 completed: expected 409/403, got %d", status)
 	}
@@ -136,7 +136,7 @@ func TestAgentCanCompleteStandardNode(t *testing.T) {
 	body := map[string]interface{}{
 		"summary": "Code completed by agent",
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+codeNodeID+"/complete", agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+codeNodeID+"/complete", agentToken, agentID, body)
 	if status != http.StatusOK {
 		t.Fatalf("complete standard node: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -176,7 +176,7 @@ func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 
 	claimNode(t, client, srv.URL, taskID, nodeID, agentID, agentToken)
 
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/manual", agentToken, map[string]interface{}{
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/manual", agentToken, agentID, map[string]interface{}{
 		"comment": "needs OpenClaw explanation",
 	})
 	if status != http.StatusOK {
@@ -202,7 +202,7 @@ func TestResolvedManualInterventionNodeCanBeCompleted(t *testing.T) {
 		t.Fatalf("expected in_progress after reclaim, got %v", claimed["status"])
 	}
 
-	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/complete", agentToken, map[string]interface{}{
+	_, status, respBody = doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/complete", agentToken, agentID, map[string]interface{}{
 		"summary": "Completed writing the OpenClaw introductory article",
 	})
 	if status != http.StatusOK {
@@ -253,7 +253,7 @@ func TestAgentCannotCompleteReviewNode(t *testing.T) {
 	// Agent2 attempts to call /complete on review node — should fail
 	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
 	body := map[string]interface{}{"summary": "should fail"}
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+reviewNodeID+"/complete", agent2Token, body)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+reviewNodeID+"/complete", agent2Token, agent2ID, body)
 	if status != http.StatusBadRequest {
 		t.Errorf("complete on review node: expected 400, got %d", status)
 	}
@@ -288,7 +288,7 @@ func TestInterruptAckEndpoint(t *testing.T) {
 	body := map[string]interface{}{
 		"comment": "interrupt acknowledged",
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+codeNodeID+"/interrupt-ack", agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+codeNodeID+"/interrupt-ack", agentToken, agentID, body)
 	if status != http.StatusOK {
 		t.Fatalf("interrupt-ack: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -326,7 +326,7 @@ func TestLogUploadCannotForgeNode(t *testing.T) {
 		"content": "forged log",
 	}
 	url := fmt.Sprintf("%s/api/tasks/%d/messages", srv.URL, taskID2) // but URL points to task2
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, url, agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, url, agentToken, agentID, body)
 	if status != http.StatusForbidden {
 		t.Errorf("log upload with wrong task: expected 403, got %d, body: %s", status, string(respBody))
 	}
@@ -359,7 +359,7 @@ func TestTaskLogsFallbackToDatabaseWhenRedisBufferEmpty(t *testing.T) {
 		"content": "persistent log line",
 	}
 	messagesURL := fmt.Sprintf("%s/api/tasks/%d/messages", srv.URL, taskID)
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, messagesURL, agentToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, messagesURL, agentToken, agentID, body)
 	if status != http.StatusAccepted {
 		t.Fatalf("post log: expected 202, got %d, body: %s", status, respBody)
 	}

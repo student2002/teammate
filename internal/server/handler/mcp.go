@@ -6,6 +6,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -39,6 +40,7 @@ func (h *McpHandler) Routes() chi.Router {
 	r.Get("/", h.ListMcpServers)
 	r.Put("/{id}", h.UpdateMcpServer)
 	r.Delete("/{id}", h.DeleteMcpServer)
+	r.Post("/{id}/health-check", h.HealthCheckMcpServer)
 
 	return r
 }
@@ -114,6 +116,21 @@ func (h *McpHandler) CreateMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// set default auth type: an omitted auth_type falls back to the column
+	// default 'none' (CLI/API callers may leave the field out entirely)
+	authType := req.AuthType
+	if authType == "" {
+		authType = "none"
+	}
+
+	// set default type: the server owns this default so every caller (web form,
+	// CLI without --type, raw API) converges on the same value instead of
+	// storing an empty type that forces agentd to guess from the URL
+	serverType := req.Type
+	if serverType == "" {
+		serverType = "sse"
+	}
+
 	// set default status
 	status := req.Status
 	if status == "" {
@@ -134,7 +151,7 @@ func (h *McpHandler) CreateMcpServer(w http.ResponseWriter, r *http.Request) {
 	// call service to create the MCP server
 	mcpSvc := service.NewMcpService(h.Svc)
 	server, err := mcpSvc.Create(r.Context(), buildCreateMcpServerParams(
-		workspaceID, req.Name, req.Url, req.Type, req.AuthType, envVars, status,
+		workspaceID, req.Name, req.Url, serverType, authType, envVars, status,
 	))
 	if err != nil {
 		response.InternalServerError(w, err)
@@ -225,11 +242,66 @@ func (h *McpHandler) DeleteMcpServer(w http.ResponseWriter, r *http.Request) {
 	// call service to delete the MCP server
 	mcpSvc := service.NewMcpService(h.Svc)
 	if err := mcpSvc.Delete(r.Context(), id); err != nil {
+		var inUse *service.McpServerInUseError
+		if errors.As(err, &inUse) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":   "conflict",
+				"message": inUse.Error(),
+				"agents":  inUse.AgentNames,
+			})
+			return
+		}
 		response.InternalServerError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HealthCheckMcpServer handles the POST /workspaces/{workspaceId}/mcp-servers/{id}/health-check
+// endpoint, dialing the server URL and returning the record with its updated
+// connected/disconnected status.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the MCP server UUID
+//
+// Response:
+//   - 200: the MCP server record with the checked status
+//   - 400/401/404: invalid id / not authenticated / not found
+func (h *McpHandler) HealthCheckMcpServer(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if err := requireWriteAccess(claims); err != nil {
+		response.Forbidden(w, err.Error())
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid server id")
+		return
+	}
+	if checkMcpServerWorkspace(h.Svc, w, r, id) == nil {
+		return
+	}
+
+	mcpSvc := service.NewMcpService(h.Svc)
+	server, err := mcpSvc.HealthCheck(r.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			response.NotFound(w, err.Error())
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, server)
 }
 
 // UpdateMcpServer handles the PUT /workspaces/{workspaceId}/mcp-servers/{id} endpoint, updating the MCP server's configuration info.
@@ -339,7 +411,10 @@ func validateUpdateMcpServer(req updateMcpServerRequest) error {
 	}
 	authType := ""
 	if req.AuthType != nil {
-		authType = string(*req.AuthType)
+		authType = *req.AuthType
+		if authType == "" {
+			return fmt.Errorf("auth_type must not be empty; omit the field to keep the current value")
+		}
 	}
 	return validateMcpFields(name, url, mcpType, authType)
 }
@@ -359,8 +434,11 @@ func validateMcpFields(name, url, mcpType, authType string) error {
 	if mcpType != "" && mcpType != "sse" && mcpType != "http" && mcpType != "streamable_http" {
 		return fmt.Errorf("type must be one of: sse, http, streamable_http")
 	}
-	if authType != "" && authType != "none" && authType != "basic" && authType != "bearer" && authType != "api_key" {
-		return fmt.Errorf("auth_type must be one of: none, basic, bearer, api_key")
+	// The allowed auth types mirror the mcp_auth_type enum in 001_init.up.sql
+	// ('none', 'api_key', 'oauth'); accepting anything else would surface as a
+	// DB enum error (500) after passing validation.
+	if authType != "" && authType != "none" && authType != "api_key" && authType != "oauth" {
+		return fmt.Errorf("auth_type must be one of: none, api_key, oauth")
 	}
 	return nil
 }

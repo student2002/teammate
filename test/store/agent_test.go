@@ -3,7 +3,6 @@ package store_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,19 +10,6 @@ import (
 	"github.com/teammate/server/internal/store"
 )
 
-func TestCreateAgent_WithToken(t *testing.T) {
-	s, _ := setupTestStore(t)
-
-	ws := createTestWorkspace(t, s)
-	agent, apiToken := createTestAgent(t, s, ws.ID)
-
-	if agent.ID == "" {
-		t.Fatal("expected non-nil agent ID")
-	}
-	if !strings.HasPrefix(apiToken, "tm_") {
-		t.Fatalf("expected token prefix 'tm_', got %s", apiToken)
-	}
-}
 
 func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 	s, _ := setupTestStore(t)
@@ -31,7 +17,7 @@ func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
 
 	// Bind the agent to a reporting daemon (daemon-first model)
@@ -55,36 +41,6 @@ func TestDeleteAgent_CascadeCleanup(t *testing.T) {
 	}
 }
 
-func TestRotateAgentToken(t *testing.T) {
-	s, _ := setupTestStore(t)
-	ctx := context.Background()
-
-	ws := createTestWorkspace(t, s)
-	agent, oldToken := createTestAgent(t, s, ws.ID)
-
-	newToken, err := s.RotateAgentToken(ctx, uuid.MustParse(agent.ID))
-	if err != nil {
-		t.Fatalf("RotateAgentToken: %v", err)
-	}
-	if newToken == "" {
-		t.Fatal("expected non-empty new token")
-	}
-	if newToken == oldToken {
-		t.Fatal("expected different token after rotation")
-	}
-
-	// Old token should be invalid
-	_, err = s.ExchangeAPITokenForSession(ctx, oldToken)
-	if err == nil {
-		t.Fatal("expected old token to be invalid after rotation")
-	}
-
-	// New token should be valid
-	_, err = s.ExchangeAPITokenForSession(ctx, newToken)
-	if err != nil {
-		t.Fatalf("new token should be valid: %v", err)
-	}
-}
 
 func TestValidateAgentStatusTransition(t *testing.T) {
 	tests := []struct {
@@ -120,7 +76,7 @@ func TestGrantDefaultPermissions(t *testing.T) {
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	member := createTestMember(t, s, ws.ID)
 
 	err := s.GrantDefaultPermissions(ctx, uuid.MustParse(agent.ID), uuid.MustParse(member.ID))

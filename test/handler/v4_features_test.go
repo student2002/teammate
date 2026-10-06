@@ -34,7 +34,7 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 
 	// Agent lists projects - should initially see no projects (not a member of any)
 	url := fmt.Sprintf("%s/api/workspaces/%s/projects", srv.URL, wsID)
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodGet, url, apiToken, agentID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("agent list projects: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -51,7 +51,7 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 	addAgentToProject(t, q, proj1ID, agentID)
 
 	// Agent lists projects again - should only see proj1
-	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
+	_, status, respBody = doRequestWithAgentKey(t, client, http.MethodGet, url, apiToken, agentID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("agent list projects after membership: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -152,9 +152,10 @@ func TestPermissionChangedEvent_GrantAndList(t *testing.T) {
 	// Grant permission - should succeed
 	grantAgentPermission(t, client, srv.URL, wsID, agentID, "task:execute", token)
 
-	// Verify Agent can list projects using the token
+	// Verify the agent can list projects (td_ token + X-Agent-ID, the
+	// production agent-authentication path)
 	url := fmt.Sprintf("%s/api/workspaces/%s/projects", srv.URL, wsID)
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodGet, url, apiToken, nil)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodGet, url, apiToken, agentID, nil)
 	if status != http.StatusOK {
 		t.Errorf("agent with task:execute should be able to list projects, got %d", status)
 	}

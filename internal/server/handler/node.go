@@ -153,6 +153,8 @@ func (h *NodeHandler) ClaimNode(w http.ResponseWriter, r *http.Request) {
 		// handle specific error messages
 		errMsg := err.Error()
 		switch {
+		case types.IsPermissionDenied(err):
+			response.Forbidden(w, errMsg)
 		case strings.Contains(errMsg, "not a member"):
 			response.Forbidden(w, errMsg)
 		case strings.Contains(errMsg, "self-review"):
@@ -504,6 +506,8 @@ func (h *NodeHandler) SkipClaim(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		errMsg := err.Error()
 		switch {
+		case types.IsPermissionDenied(err):
+			response.Forbidden(w, errMsg)
 		case strings.Contains(errMsg, "does not hold"):
 			response.BadRequest(w, errMsg)
 		case strings.Contains(errMsg, "version conflict"):
@@ -701,8 +705,13 @@ func (h *NodeHandler) InterruptAck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// verify assignee identity
-	if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
+	// verify assignee identity. While the node is executing, only the
+	// assigned agent may ack. A node that already left in_progress (e.g.
+	// cancelled and reset to pending) has no assignee left to match — the
+	// ack is still accepted there, purely as an audit transition, because
+	// the interrupt always precedes the node reset.
+	if node.Status == types.TaskNodeStatusInProgress &&
+		(node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String()) {
 		response.Forbidden(w, "only the assigned agent can acknowledge this interrupt")
 		return
 	}

@@ -4,7 +4,7 @@
 // Scheduled tasks:
 //   - Heartbeat-timeout detection (15s): marks offline runtimes and updates agent status
 //   - Continuation-reservation cleanup (30s): clears expired node continuation reservations
-//   - Claim-timeout release (60min): releases in_progress nodes with no progress for a long time
+//   - Claim-timeout release (60s): releases in_progress nodes with no progress for 30 minutes
 //   - Node-timeout handling (5min): handles nodes that exceed the template timeout
 //   - Offline fallback (5min): moves nodes held by offline agents to manual intervention
 //   - Agent auto-recover (60s): recovers busy agents with no tasks back to online
@@ -216,7 +216,7 @@ func (s *Scheduler) ReleaseClaimTimeoutNodes(ctx context.Context) error {
 			if node.AssigneeID != nil {
 				assigneeUUID, _ := uuid.Parse(*node.AssigneeID)
 				nodeUUID, _ := uuid.Parse(node.ID)
-				s.publishNodeTimeout(ctx, nodeUUID, assigneeUUID)
+				s.publishNodeTimeout(ctx, node.TaskID, nodeUUID, assigneeUUID)
 			}
 
 			// Create a state-transition record
@@ -252,7 +252,7 @@ func (s *Scheduler) CheckNodeTimeout(ctx context.Context) error {
 		if node.AssigneeID != nil {
 			assigneeUUID, _ := uuid.Parse(*node.AssigneeID)
 			nodeUUID, _ := uuid.Parse(node.ID)
-			s.publishNodeTimeout(ctx, nodeUUID, assigneeUUID)
+			s.publishNodeTimeout(ctx, node.TaskID, nodeUUID, assigneeUUID)
 		}
 	}
 
@@ -464,10 +464,12 @@ func (s *Scheduler) publishToAgentDaemon(ctx context.Context, agentID uuid.UUID,
 //
 // Parameters:
 //   - ctx: context
+//   - taskID: the ID of the task that owns the timed-out node
 //   - nodeID: the ID of the timed-out node
 //   - agentID: the ID of the node's agent
-func (s *Scheduler) publishNodeTimeout(ctx context.Context, nodeID, agentID uuid.UUID) {
-	if err := s.publishToAgentDaemon(ctx, agentID, types.EventNodeTimeout, map[string]string{
+func (s *Scheduler) publishNodeTimeout(ctx context.Context, taskID int32, nodeID, agentID uuid.UUID) {
+	if err := s.publishToAgentDaemon(ctx, agentID, types.EventNodeTimeout, map[string]interface{}{
+		"task_id": taskID,
 		"node_id": nodeID.String(),
 		"action":  "timeout",
 		"status":  "manual_intervention",

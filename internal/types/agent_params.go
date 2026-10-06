@@ -26,20 +26,6 @@ type AddAgentSkillParams struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// CreateAgentParams is the domain parameter struct for creating an Agent.
-type CreateAgentParams struct {
-	WorkspaceID  string          `json:"workspace_id"`
-	Name         string          `json:"name"`
-	Provider     string          `json:"provider"`
-	Instructions string          `json:"instructions"`
-	Model        *string         `json:"model"`
-	Status       string          `json:"status"`
-	CustomEnv    json.RawMessage `json:"custom_env"`
-	ExtraArgs    []string        `json:"extra_args"`
-	GitName      *string         `json:"git_name"`
-	GitEmail     *string         `json:"git_email"`
-}
-
 // CreateMcpServerParams is the domain parameter struct for creating an MCP server.
 type CreateMcpServerParams struct {
 	WorkspaceID string          `json:"workspace_id"`

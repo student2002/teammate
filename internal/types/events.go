@@ -12,9 +12,10 @@ import "encoding/json"
 // SSEEvent defines the structure of a Server-Sent Event.
 // It is used for real-time event push from server → agent.
 type SSEEvent struct {
-	ID    string          `json:"id"`    // Unique event ID, supporting Last-Event-ID reconnection
-	Event string          `json:"event"` // Event type (e.g. node:pending, task:interrupt)
-	Data  json.RawMessage `json:"data"`  // Event data payload (JSON)
+	ID     string          `json:"id"`              // Unique event ID, supporting Last-Event-ID reconnection
+	Event  string          `json:"event"`           // Event type (e.g. node:pending, task:interrupt)
+	Data   json.RawMessage `json:"data"`            // Event data payload (JSON)
+	Origin string          `json:"origin,omitempty"` // Publishing instance ID; subscribers skip their own echoes
 }
 
 // Standard SSE event-type constants.

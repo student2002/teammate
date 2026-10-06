@@ -14,50 +14,6 @@ import (
 	"github.com/lib/pq"
 )
 
-const adoptUnmanagedAgentByDaemon = `-- name: AdoptUnmanagedAgentByDaemon :one
-UPDATE agents
-SET daemon_id = $1, provider = $2, status = 'online', origin = 'daemon', updated_at = now()
-WHERE workspace_id = $3 AND name = $4 AND daemon_id IS NULL
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
-`
-
-type AdoptUnmanagedAgentByDaemonParams struct {
-	DaemonID    uuid.NullUUID `db:"daemon_id" json:"daemon_id"`
-	Provider    AgentProvider `db:"provider" json:"provider"`
-	WorkspaceID uuid.UUID     `db:"workspace_id" json:"workspace_id"`
-	Name        string        `db:"name" json:"name"`
-}
-
-// 同名且未纳管(daemon_id IS NULL)的既有 agent 由该 daemon 收编:
-// 保留人工配置,仅接管归属并置在线
-func (q *Queries) AdoptUnmanagedAgentByDaemon(ctx context.Context, arg AdoptUnmanagedAgentByDaemonParams) (Agent, error) {
-	row := q.db.QueryRowContext(ctx, adoptUnmanagedAgentByDaemon,
-		arg.DaemonID,
-		arg.Provider,
-		arg.WorkspaceID,
-		arg.Name,
-	)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Name,
-		&i.Provider,
-		&i.Instructions,
-		&i.Model,
-		&i.Status,
-		&i.CustomEnv,
-		pq.Array(&i.ExtraArgs),
-		&i.GitName,
-		&i.GitEmail,
-		&i.DaemonID,
-		&i.Origin,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const countDaemonAgents = `-- name: CountDaemonAgents :one
 SELECT COUNT(*)::int FROM agents WHERE daemon_id = $1
 `
@@ -82,7 +38,9 @@ type CreateDaemonParams struct {
 }
 
 // daemons.sql — agentd 实例(机器)的持久化查询。
-// 一个 daemon 对应一台工作机上的 agentd 进程;agent 实例由其注册时上报(agents.daemon_id)。
+// 一个 daemon 对应一台工作机上的 agentd 进程;agent 实例由 web 在 daemon 分组创建,
+// desired_agents 以全集声明式下发(agents.daemon_id),agentd 据此对账增/改/删,
+// 心跳上报其运行状态。
 func (q *Queries) CreateDaemon(ctx context.Context, arg CreateDaemonParams) (Daemon, error) {
 	row := q.db.QueryRowContext(ctx, createDaemon, arg.WorkspaceID, arg.Name)
 	var i Daemon
@@ -103,27 +61,33 @@ func (q *Queries) CreateDaemon(ctx context.Context, arg CreateDaemonParams) (Dae
 }
 
 const createDaemonAgent = `-- name: CreateDaemonAgent :one
-INSERT INTO agents (workspace_id, name, provider, status, daemon_id, origin, git_name, git_email)
-VALUES ($1, $2, $3, 'pending', $4, 'server', $5, $6)
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
+INSERT INTO agents (workspace_id, name, provider, instructions, status, daemon_id, origin, persona_key, git_name, git_email)
+VALUES ($1, $2, $3, $4, 'pending', $5, 'server', $6, $7, $8)
+RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at
 `
 
 type CreateDaemonAgentParams struct {
-	WorkspaceID uuid.UUID      `db:"workspace_id" json:"workspace_id"`
-	Name        string         `db:"name" json:"name"`
-	Provider    AgentProvider  `db:"provider" json:"provider"`
-	DaemonID    uuid.NullUUID  `db:"daemon_id" json:"daemon_id"`
-	GitName     sql.NullString `db:"git_name" json:"git_name"`
-	GitEmail    sql.NullString `db:"git_email" json:"git_email"`
+	WorkspaceID  uuid.UUID      `db:"workspace_id" json:"workspace_id"`
+	Name         string         `db:"name" json:"name"`
+	Provider     AgentProvider  `db:"provider" json:"provider"`
+	Instructions string         `db:"instructions" json:"instructions"`
+	DaemonID     uuid.NullUUID  `db:"daemon_id" json:"daemon_id"`
+	PersonaKey   string         `db:"persona_key" json:"persona_key"`
+	GitName      sql.NullString `db:"git_name" json:"git_name"`
+	GitEmail     sql.NullString `db:"git_email" json:"git_email"`
 }
 
-// Web 端在守护进程分组下创建的实例:待下发,agentd 收编(再次上报同名)后上线
+// Web 端在守护进程分组下创建的实例:待下发,经 desired_agents 全集下发后由心跳上报上线;
+// persona_key 为跨空间记忆标识(显式填写或服务端生成,创建后不可变,service 层保证非空);
+// git 身份与身份指令由操作员创建时显式提供
 func (q *Queries) CreateDaemonAgent(ctx context.Context, arg CreateDaemonAgentParams) (Agent, error) {
 	row := q.db.QueryRowContext(ctx, createDaemonAgent,
 		arg.WorkspaceID,
 		arg.Name,
 		arg.Provider,
+		arg.Instructions,
 		arg.DaemonID,
+		arg.PersonaKey,
 		arg.GitName,
 		arg.GitEmail,
 	)
@@ -138,6 +102,7 @@ func (q *Queries) CreateDaemonAgent(ctx context.Context, arg CreateDaemonAgentPa
 		&i.Status,
 		&i.CustomEnv,
 		pq.Array(&i.ExtraArgs),
+		&i.PersonaKey,
 		&i.GitName,
 		&i.GitEmail,
 		&i.DaemonID,
@@ -221,9 +186,10 @@ func (q *Queries) GetOnlineDaemonIDByAgent(ctx context.Context, id uuid.UUID) (u
 }
 
 const listAgentsByDaemon = `-- name: ListAgentsByDaemon :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents WHERE daemon_id = $1 ORDER BY created_at
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents WHERE daemon_id = $1 ORDER BY created_at
 `
 
+// desired_agents 全集:该 daemon 名下全部实例(与状态无关,声明式对账的期望集)
 func (q *Queries) ListAgentsByDaemon(ctx context.Context, daemonID uuid.NullUUID) ([]Agent, error) {
 	rows, err := q.db.QueryContext(ctx, listAgentsByDaemon, daemonID)
 	if err != nil {
@@ -243,6 +209,7 @@ func (q *Queries) ListAgentsByDaemon(ctx context.Context, daemonID uuid.NullUUID
 			&i.Status,
 			&i.CustomEnv,
 			pq.Array(&i.ExtraArgs),
+			&i.PersonaKey,
 			&i.GitName,
 			&i.GitEmail,
 			&i.DaemonID,
@@ -302,50 +269,6 @@ func (q *Queries) ListDaemonsByWorkspace(ctx context.Context, workspaceID uuid.U
 	return items, nil
 }
 
-const listPendingDaemonAgents = `-- name: ListPendingDaemonAgents :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at FROM agents WHERE daemon_id = $1 AND origin = 'server' AND status = 'pending'
-`
-
-// desired_agents:Web 创建、等待 agentd 收编的实例
-func (q *Queries) ListPendingDaemonAgents(ctx context.Context, daemonID uuid.NullUUID) ([]Agent, error) {
-	rows, err := q.db.QueryContext(ctx, listPendingDaemonAgents, daemonID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Agent{}
-	for rows.Next() {
-		var i Agent
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.Name,
-			&i.Provider,
-			&i.Instructions,
-			&i.Model,
-			&i.Status,
-			&i.CustomEnv,
-			pq.Array(&i.ExtraArgs),
-			&i.GitName,
-			&i.GitEmail,
-			&i.DaemonID,
-			&i.Origin,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markStaleDaemons = `-- name: MarkStaleDaemons :many
 UPDATE daemons SET status = 'offline', updated_at = now()
 WHERE status = 'online'
@@ -379,7 +302,7 @@ func (q *Queries) MarkStaleDaemons(ctx context.Context) ([]uuid.UUID, error) {
 
 const offlineUnreportedDaemonAgents = `-- name: OfflineUnreportedDaemonAgents :execrows
 UPDATE agents SET status = 'offline', updated_at = now()
-WHERE daemon_id = $1 AND origin = 'daemon' AND status = 'online'
+WHERE daemon_id = $1 AND status = 'online'
   AND NOT (name = ANY($2::text[]))
 `
 
@@ -388,7 +311,7 @@ type OfflineUnreportedDaemonAgentsParams struct {
 	Column2  []string      `db:"column_2" json:"column_2"`
 }
 
-// 上报中缺席的机器侧实例置离线;Web 下发(pending)实例不受影响
+// 心跳 busy 名单中缺席的机器侧实例置离线;pending(待下发)实例不受影响
 func (q *Queries) OfflineUnreportedDaemonAgents(ctx context.Context, arg OfflineUnreportedDaemonAgentsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, offlineUnreportedDaemonAgents, arg.DaemonID, pq.Array(arg.Column2))
 	if err != nil {
@@ -493,55 +416,6 @@ func (q *Queries) UpdateDaemonRegistration(ctx context.Context, arg UpdateDaemon
 		&i.PublicKey,
 		&i.Providers,
 		&i.LastHeartbeat,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertDaemonAgent = `-- name: UpsertDaemonAgent :one
-INSERT INTO agents (workspace_id, name, provider, status, daemon_id, origin, git_name, git_email)
-VALUES ($1, $2, $3, 'online', $4, 'daemon', $5, $6)
-ON CONFLICT (daemon_id, name) WHERE daemon_id IS NOT NULL
-DO UPDATE SET provider = EXCLUDED.provider, status = 'online', updated_at = now()
-RETURNING id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
-`
-
-type UpsertDaemonAgentParams struct {
-	WorkspaceID uuid.UUID      `db:"workspace_id" json:"workspace_id"`
-	Name        string         `db:"name" json:"name"`
-	Provider    AgentProvider  `db:"provider" json:"provider"`
-	DaemonID    uuid.NullUUID  `db:"daemon_id" json:"daemon_id"`
-	GitName     sql.NullString `db:"git_name" json:"git_name"`
-	GitEmail    sql.NullString `db:"git_email" json:"git_email"`
-}
-
-// 注册上报的实例按 (daemon, name) upsert;冲突时保留 Git 身份/指令等人工配置
-// (Git 身份占位由调用方计算:同名 + @teammate.local,管理员可后续修正)
-func (q *Queries) UpsertDaemonAgent(ctx context.Context, arg UpsertDaemonAgentParams) (Agent, error) {
-	row := q.db.QueryRowContext(ctx, upsertDaemonAgent,
-		arg.WorkspaceID,
-		arg.Name,
-		arg.Provider,
-		arg.DaemonID,
-		arg.GitName,
-		arg.GitEmail,
-	)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Name,
-		&i.Provider,
-		&i.Instructions,
-		&i.Model,
-		&i.Status,
-		&i.CustomEnv,
-		pq.Array(&i.ExtraArgs),
-		&i.GitName,
-		&i.GitEmail,
-		&i.DaemonID,
-		&i.Origin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

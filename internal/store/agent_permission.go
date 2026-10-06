@@ -9,9 +9,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	db "github.com/teammate/server/internal/db/generated"
 	types "github.com/teammate/server/internal/types"
@@ -164,10 +167,16 @@ func (s *Store) GrantDefaultPermissions(ctx context.Context, agentID uuid.UUID, 
 			GrantedBy:    uuid.NullUUID{UUID: grantedBy, Valid: true},
 		})
 		if err != nil {
-			// Ignore unique constraint conflicts (permission already exists)
-			if fmt.Sprintf("%v", err) != "" {
+			// Skip only a unique-constraint conflict: the permission is
+			// already granted. Any other failure must surface, otherwise the
+			// agent silently starts without its default permissions. The
+			// string fallback covers the driver wrapping the typed error.
+			var pgErr *pgconn.PgError
+			if (errors.As(err, &pgErr) && pgErr.Code == "23505") ||
+				strings.Contains(err.Error(), "23505") {
 				continue
 			}
+			return fmt.Errorf("grant default permission %s: %w", perm, err)
 		}
 	}
 	return nil

@@ -76,6 +76,60 @@ func TestGitHubWebhookSignatureAndIssueCreation(t *testing.T) {
 	}
 }
 
+// TestGitHubWebhookCrossWorkspaceProjectRejected verifies that a trigger whose
+// configured project belongs to a different workspace than the template is
+// rejected with 403 instead of surfacing as an internal error.
+func TestGitHubWebhookCrossWorkspaceProjectRejected(t *testing.T) {
+	router, pgDB, _ := setupTestRouter(t)
+	svc := service.New(pgDB, nil, nil)
+	ctx := context.Background()
+	wsA, _, tpl := createGitHubWebhookTemplate(t, svc, "webhook-secret")
+
+	t.Cleanup(func() {
+		_ = testdb.DeleteWorkspace(pgDB, wsA.ID)
+	})
+
+	wsB, err := svc.Store.CreateWorkspace(ctx, types.CreateWorkspaceParams{
+		Name:        "webhook-ws-b-" + uuid.New().String()[:8],
+		IssuePrefix: "GHB",
+	})
+	if err != nil {
+		t.Fatalf("create workspace B: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = testdb.DeleteWorkspace(pgDB, wsB.ID)
+	})
+	projectB, err := svc.Store.CreateProject(ctx, types.CreateProjectParams{
+		WorkspaceID: wsB.ID,
+		Name:        "webhook-project-b-" + uuid.New().String()[:8],
+		Status:      types.ProjectStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create project B: %v", err)
+	}
+
+	config := json.RawMessage(fmt.Sprintf(`{"project_id":"%s","repo_owner":"acme","repo_name":"rocket","secret":"webhook-secret"}`, projectB.ID))
+	if _, err := svc.Store.UpdateWorkflowTemplate(ctx, types.UpdateWorkflowTemplateParams{
+		ID:             tpl.ID,
+		Name:           tpl.Name,
+		TriggerType:    "github_issue",
+		TriggerConfig:  config,
+		TriggerEnabled: true,
+	}); err != nil {
+		t.Fatalf("update workflow template: %v", err)
+	}
+
+	payload := githubIssuePayload("opened", "acme", "rocket", 43, "Cross workspace trigger")
+	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/github", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "issues")
+	req.Header.Set("X-Hub-Signature-256", signGitHubPayload(payload, "webhook-secret"))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-workspace trigger status = %d, want %d body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
 func createGitHubWebhookTemplate(t *testing.T, svc *service.Service, secret string) (types.Workspace, types.Project, types.WorkflowTemplate) {
 	t.Helper()
 	ctx := context.Background()

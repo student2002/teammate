@@ -176,6 +176,18 @@ func requireWriteAccess(claims svcmw.AuthClaims) error {
 	return nil
 }
 
+// requireAdminAccess checks whether the current authenticated user is a human
+// workspace admin or owner; used for permission-management routes.
+func requireAdminAccess(claims svcmw.AuthClaims) error {
+	if claims.UserType != "member" {
+		return fmt.Errorf("agents cannot manage permissions")
+	}
+	if types.MemberRoleLevel(claims.Role) < 3 {
+		return fmt.Errorf("insufficient permissions: admin role or higher required")
+	}
+	return nil
+}
+
 // checkAgentWorkspace verifies that the Agent belongs to the current authenticated user's workspace.
 // On success returns the Agent record; on failure writes an error response and returns nil.
 func checkAgentWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Request, agentID uuid.UUID) *types.Agent {

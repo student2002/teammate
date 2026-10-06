@@ -78,7 +78,7 @@ func TestGetAgentStats(t *testing.T) {
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 
 	stats, err := s.GetAgentStats(ctx, uuid.MustParse(agent.ID))
 	if err != nil {

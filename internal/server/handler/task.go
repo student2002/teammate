@@ -140,7 +140,11 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	authorID := claims.UserID
 
 	// parse the due date
-	dueDate := service.ParseDueDate(req.DueDate)
+	dueDate, err := service.ParseDueDate(req.DueDate)
+	if err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
 
 	// set default labels
 	labels := req.Labels
@@ -410,7 +414,12 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	// parse the due date
 	var dueDate sql.NullTime
 	if req.DueDate != nil && *req.DueDate != "" {
-		dueDate = service.ParseDueDate(req.DueDate)
+		parsed, err := service.ParseDueDate(req.DueDate)
+		if err != nil {
+			response.BadRequest(w, err.Error())
+			return
+		}
+		dueDate = parsed
 	} else if existingTask.DueDate != nil {
 		dueDate = sql.NullTime{Time: *existingTask.DueDate, Valid: true}
 	}
@@ -452,7 +461,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 			if node.Status == types.TaskNodeStatusInProgress && node.AssigneeID != nil {
 				assigneeID, _ := uuid.Parse(*node.AssigneeID)
 				h.Svc.PublishControlEvent(r.Context(), assigneeID, "task:interrupt", map[string]interface{}{
-					"task_id": fmt.Sprintf("%d", taskID),
+					"task_id": taskID,
 					"node_id": node.ID,
 				})
 			}

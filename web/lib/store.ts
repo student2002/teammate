@@ -56,6 +56,8 @@ interface AppState {
   // 任务
   tasks: MappedTask[];
   setTasks: (tasks: MappedTask[]) => void;
+  // 最近一次任务列表加载是否失败(失败时保留 last-good 数据,视图据此显示降级提示)
+  loadError: boolean;
 
   // 模板
   templates: MappedTemplate[];
@@ -206,6 +208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 任务
   tasks: [],
   setTasks: (tasks) => set({ tasks }),
+  loadError: false,
 
   // 模板
   templates: [],
@@ -319,12 +322,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loadProjectData: async (projectId: string) => {
     try {
-      const result = (await api.listTasks(projectId, "all").catch(() => [])) as TaskWithNodesList;
+      const result = (await api.listTasks(projectId, "all")) as TaskWithNodesList;
       const agents = get().agents;
       const mappedTasks = (result || []).map((item) => mapTaskFromApi(item, agents));
-      set({ tasks: mappedTasks });
+      set({ tasks: mappedTasks, loadError: false });
     } catch {
-      set({ tasks: [] });
+      // 保留 last-good 数据供看板/面板继续使用;仅当现有数据属于其它项目
+      // (切换项目失败)时才清空,避免跨项目脏数据
+      const current = get().tasks;
+      const stale = current.length > 0 && current[0]._projectId !== projectId;
+      set(stale ? { tasks: [], loadError: true } : { loadError: true });
     }
   },
 

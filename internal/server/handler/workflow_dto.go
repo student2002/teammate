@@ -3,6 +3,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,20 +27,23 @@ const (
 	AssigneeTypeHuman         = types.AssigneeTypeHuman
 )
 
-// templateNodeRequest is the template node request body.
+// templateNodeRequest is the template node request body. ID carries the node's
+// identity across node-list replacement: omitting it lets the server generate a
+// new UUID; depends_on entries may only reference nodes that declare an ID.
 type templateNodeRequest struct {
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	SortOrder       int32           `json:"sort_order"`
-	NodeType        NodeType        `json:"node_type"`
-	AssigneeType    AssigneeType    `json:"assignee_type"`
-	AssigneeID      *uuid.UUID      `json:"assignee_id"`
-	TimeoutMinutes  int32           `json:"timeout_minutes"`
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`
+	ID             *uuid.UUID      `json:"id"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	SortOrder      int32           `json:"sort_order"`
+	NodeType       NodeType        `json:"node_type"`
+	AssigneeType   AssigneeType    `json:"assignee_type"`
+	AssigneeID     *uuid.UUID      `json:"assignee_id"`
+	TimeoutMinutes int32           `json:"timeout_minutes"`
+	ReadonlyDirs   json.RawMessage `json:"readonly_dirs"`
 	FullControlDirs json.RawMessage `json:"full_control_dirs"`
-	Artifact        json.RawMessage `json:"artifact"`
-	MaxRejectCycles int32           `json:"max_reject_cycles"`
-	DependsOn       []uuid.UUID     `json:"depends_on"`
+	Artifact       json.RawMessage `json:"artifact"`
+	MaxRejectCycles int32          `json:"max_reject_cycles"`
+	DependsOn      []uuid.UUID     `json:"depends_on"`
 }
 
 // createWorkflowTemplateRequest is the create workflow template request body.
@@ -55,10 +59,12 @@ type createWorkflowTemplateRequest struct {
 }
 
 // updateWorkflowTemplateRequest is the update workflow template request body.
+// All metadata fields are pointers: nil keeps the stored value, a provided
+// value overwrites it (partial-update semantics).
 type updateWorkflowTemplateRequest struct {
-	Name           string                `json:"name"`
-	Description    string                `json:"description"`
-	TriggerType    string                `json:"trigger_type"`
+	Name           *string               `json:"name"`
+	Description    *string               `json:"description"`
+	TriggerType    *string               `json:"trigger_type"`
 	TriggerConfig  json.RawMessage       `json:"trigger_config"`
 	TriggerEnabled *bool                 `json:"trigger_enabled"`
 	NextRunAt      *time.Time            `json:"next_run_at"`
@@ -67,6 +73,7 @@ type updateWorkflowTemplateRequest struct {
 
 // buildCreateTemplateNodeParams builds types.CreateTemplateNodeParams from the handler-layer input.
 func buildCreateTemplateNodeParams(
+	id *uuid.UUID,
 	name string,
 	description string,
 	sortOrder int32,
@@ -80,6 +87,11 @@ func buildCreateTemplateNodeParams(
 	maxRejectCycles int32,
 	dependsOn []uuid.UUID,
 ) types.CreateTemplateNodeParams {
+	var idStr *string
+	if id != nil {
+		s := id.String()
+		idStr = &s
+	}
 	var descPtr *string
 	if description != "" {
 		d := description
@@ -95,6 +107,7 @@ func buildCreateTemplateNodeParams(
 		depStrs = append(depStrs, d.String())
 	}
 	return types.CreateTemplateNodeParams{
+		ID:              idStr,
 		Name:            name,
 		Description:     descPtr,
 		SortOrder:       sortOrder,
@@ -108,6 +121,52 @@ func buildCreateTemplateNodeParams(
 		MaxRejectCycles: maxRejectCycles,
 		DependsOn:       depStrs,
 	}
+}
+
+// validateTemplateNodeDeps rejects depends_on entries that do not reference a
+// node declaring its ID within the same request: the node list is fully
+// replaced, so a dependency on any other id would be dangling after the update.
+func validateTemplateNodeDeps(nodes []templateNodeRequest) error {
+	known := make(map[uuid.UUID]struct{}, len(nodes))
+	for _, n := range nodes {
+		if n.ID == nil {
+			continue
+		}
+		if _, dup := known[*n.ID]; dup {
+			return fmt.Errorf("duplicate node id %s in request", n.ID)
+		}
+		known[*n.ID] = struct{}{}
+	}
+	for _, n := range nodes {
+		for _, dep := range n.DependsOn {
+			if _, ok := known[dep]; !ok {
+				return fmt.Errorf("node %s depends_on unknown node %s (referenced nodes must declare an id in the same request)", n.Name, dep)
+			}
+		}
+	}
+	return nil
+}
+
+// maxTemplateNodeTimeoutMinutes bounds node timeout_minutes (0 = no timeout).
+// maxTemplateNodeMaxRejectCycles bounds reject cycles before escalation to
+// manual intervention; values <= 0 keep the documented "default 5" behavior.
+const (
+	maxTemplateNodeTimeoutMinutes   = 480
+	maxTemplateNodeMaxRejectCycles  = 20
+)
+
+// validateTemplateNodeLimits enforces the documented node field bounds
+// (timeout 0-480 minutes, max_reject_cycles capped at 20).
+func validateTemplateNodeLimits(nodes []templateNodeRequest) error {
+	for _, n := range nodes {
+		if n.TimeoutMinutes < 0 || n.TimeoutMinutes > maxTemplateNodeTimeoutMinutes {
+			return fmt.Errorf("node %s: timeout_minutes must be between 0 and %d", n.Name, maxTemplateNodeTimeoutMinutes)
+		}
+		if n.MaxRejectCycles > maxTemplateNodeMaxRejectCycles {
+			return fmt.Errorf("node %s: max_reject_cycles must be at most %d", n.Name, maxTemplateNodeMaxRejectCycles)
+		}
+	}
+	return nil
 }
 
 // buildCreateWorkflowTemplateParams builds types.CreateWorkflowTemplateParams from the handler-layer input.
@@ -138,16 +197,38 @@ func buildCreateWorkflowTemplateParams(
 	}
 }
 
-// buildUpdateWorkflowTemplateParams builds types.UpdateWorkflowTemplateParams from the handler-layer input.
+// buildUpdateWorkflowTemplateParams merges an update request over the current
+// template record: nil fields keep the stored value, provided values overwrite.
 func buildUpdateWorkflowTemplateParams(
 	id uuid.UUID,
-	name string,
-	description string,
-	triggerType string,
-	triggerConfig json.RawMessage,
-	triggerEnabled *bool,
-	nextRunAt *time.Time,
+	current types.WorkflowTemplate,
+	req updateWorkflowTemplateRequest,
 ) types.UpdateWorkflowTemplateParams {
+	name := current.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+	description := current.Description
+	if req.Description != nil {
+		description = *req.Description
+	}
+	triggerType := current.TriggerType
+	if req.TriggerType != nil {
+		triggerType = *req.TriggerType
+	}
+	triggerConfig := current.TriggerConfig
+	if len(req.TriggerConfig) > 0 {
+		triggerConfig = req.TriggerConfig
+	}
+	triggerEnabled := current.TriggerEnabled
+	if req.TriggerEnabled != nil {
+		triggerEnabled = *req.TriggerEnabled
+	}
+	nextRunAt := current.NextRunAt
+	if req.NextRunAt != nil {
+		nextRunAt = req.NextRunAt
+	}
+
 	var descPtr *string
 	if description != "" {
 		d := description
@@ -159,7 +240,7 @@ func buildUpdateWorkflowTemplateParams(
 		Description:    descPtr,
 		TriggerType:    triggerType,
 		TriggerConfig:  triggerConfig,
-		TriggerEnabled: triggerEnabledValue(triggerEnabled),
+		TriggerEnabled: triggerEnabled,
 		NextRunAt:      nextRunAt,
 	}
 }

@@ -109,6 +109,42 @@ var workspaceDeleteCmd = &cobra.Command{
 	},
 }
 
+var workspaceUseCmd = &cobra.Command{
+	Use:   "use <id>",
+	Short: "Switch the remembered workspace for workspace-scoped commands",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		creds, err := loadCredentials()
+		if err != nil {
+			return fmt.Errorf("not logged in; run 'teammate auth login' first: %w", err)
+		}
+
+		// The server verifies membership and returns the effective role; a
+		// non-member workspace is rejected here rather than at command use.
+		client := newAPIClient()
+		var result struct {
+			WorkspaceID string `json:"workspace_id"`
+			Role        string `json:"role"`
+		}
+		if err := client.Post("/api/auth/switch-workspace", map[string]string{
+			"workspace_id": args[0],
+		}, &result); err != nil {
+			return err
+		}
+
+		creds.WorkspaceID = result.WorkspaceID
+		if creds.WorkspaceID == "" {
+			creds.WorkspaceID = args[0]
+		}
+		if err := saveCredentials(creds); err != nil {
+			return fmt.Errorf("save credentials: %w", err)
+		}
+
+		fmt.Printf("Workspace switched to %s (role: %s)\n", creds.WorkspaceID, result.Role)
+		return nil
+	},
+}
+
 var workspaceMemberCmd = &cobra.Command{
 	Use:   "member",
 	Short: "Manage workspace members",
@@ -141,6 +177,7 @@ func init() {
 	workspaceCmd.AddCommand(workspaceCreateCmd)
 	workspaceCmd.AddCommand(workspaceUpdateCmd)
 	workspaceCmd.AddCommand(workspaceDeleteCmd)
+	workspaceCmd.AddCommand(workspaceUseCmd)
 	workspaceCmd.AddCommand(workspaceMemberCmd)
 	rootCmd.AddCommand(workspaceCmd)
 }

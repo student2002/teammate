@@ -203,9 +203,12 @@ func TestExchangeAPITokenForSession_Success(t *testing.T) {
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
-	_, apiToken := createTestAgent(t, s, ws.ID)
+	_, daemonToken, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "exchange-test-daemon")
+	if err != nil {
+		t.Fatalf("create daemon: %v", err)
+	}
 
-	result, err := s.ExchangeAPITokenForSession(ctx, apiToken)
+	result, err := s.ExchangeAPITokenForSession(ctx, daemonToken)
 	if err != nil {
 		t.Fatalf("ExchangeAPITokenForSession: %v", err)
 	}
@@ -229,9 +232,12 @@ func TestDeleteSessionToken(t *testing.T) {
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
-	_, apiToken := createTestAgent(t, s, ws.ID)
+	_, daemonToken, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "session-test-daemon")
+	if err != nil {
+		t.Fatalf("create daemon: %v", err)
+	}
 
-	session, err := s.ExchangeAPITokenForSession(ctx, apiToken)
+	session, err := s.ExchangeAPITokenForSession(ctx, daemonToken)
 	if err != nil {
 		t.Fatalf("ExchangeAPITokenForSession: %v", err)
 	}

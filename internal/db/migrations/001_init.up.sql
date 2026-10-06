@@ -85,6 +85,12 @@ CREATE TABLE agents (
     status          agent_status NOT NULL DEFAULT 'offline',
     custom_env      JSONB DEFAULT '{}',
     extra_args      TEXT[] DEFAULT '{}',
+    -- persona_key — the cross-workspace memory identity (记忆标识). Instances
+    -- with the same persona_key on one agentd machine share one unified memory.
+    -- Blank means "not set" (the web create path always fills it: explicit
+    -- operator input or a generated unique value); blank rows are never
+    -- delivered-materialized by agentd. Immutable after creation.
+    persona_key     VARCHAR(64) NOT NULL DEFAULT '',
     git_name        VARCHAR(200) DEFAULT '',
     git_email       VARCHAR(300) DEFAULT '',
     daemon_id       UUID,
@@ -174,6 +180,7 @@ CREATE TABLE tasks (
     id             INTEGER PRIMARY KEY DEFAULT nextval('tasks_id_seq'),
     project_id     UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     workflow_name  TEXT NOT NULL DEFAULT '',
+    workflow_template_id UUID,
     title          VARCHAR(500) NOT NULL,
     description    TEXT DEFAULT '',
     constraints    TEXT DEFAULT '',
@@ -361,18 +368,7 @@ CREATE TABLE workflow_trigger_runs (
 CREATE INDEX idx_workflow_trigger_runs_workspace ON workflow_trigger_runs(workspace_id, created_at DESC);
 CREATE INDEX idx_workflow_trigger_runs_template ON workflow_trigger_runs(workflow_template_id, created_at DESC);
 
--- 3.17 sse_event_buffer — SSE event buffer (keyed by daemon or agent subscriber id)
-CREATE TABLE sse_event_buffer (
-    id         BIGSERIAL PRIMARY KEY,
-    runtime_id UUID NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    event_data JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_sse_buffer_runtime ON sse_event_buffer(runtime_id);
-CREATE INDEX idx_sse_buffer_time ON sse_event_buffer(created_at);
-
--- 3.18 skills — skills
+-- 3.17 skills — skills
 CREATE TABLE skills (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -474,7 +470,10 @@ CREATE TABLE agent_permissions (
     resource_id   UUID DEFAULT NULL,
     granted_by    UUID,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(agent_id, permission, resource_type, resource_id)
+    -- NULLS NOT DISTINCT: workspace-wide grants hold resource_id = NULL, and
+    -- with the default NULLS DISTINCT those rows never conflict, so duplicate
+    -- permission rows accumulate unchecked.
+    UNIQUE NULLS NOT DISTINCT (agent_id, permission, resource_type, resource_id)
 );
 CREATE INDEX idx_agent_permissions_agent ON agent_permissions(agent_id);
 
@@ -542,7 +541,7 @@ CREATE INDEX idx_execution_sessions_claude_session ON execution_sessions(claude_
 -- registration (agents.daemon_id) and authenticated on its behalf via X-Agent-ID.
 CREATE TABLE daemons (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id   UUID NOT NULL,
+    workspace_id   UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name           TEXT NOT NULL,
     device_name    TEXT NOT NULL DEFAULT '',
     version        TEXT NOT NULL DEFAULT '',

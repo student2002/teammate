@@ -22,14 +22,12 @@ func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 	agentID, agentToken := createAgent(t, client, srv.URL, wsID, token)
 
 	// Agent attempts to create another agent — should be forbidden
-	body := map[string]interface{}{
-		"name":         "unauthorized-agent",
-		"provider":     "claude",
-		"instructions": "should fail",
-		"model":        "claude-3.5-sonnet",
-	}
-	url := fmt.Sprintf("%s/api/workspaces/%s/agents", srv.URL, wsID)
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, url, agentToken, body)
+	// Instances are created in a daemon group; an agent principal must stay
+	// forbidden there too.
+	daemonID, _ := createTestDaemon(t, client, srv.URL, wsID, token, "sec-box")
+	url := fmt.Sprintf("%s/api/workspaces/%s/daemons/%s/agents", srv.URL, wsID, daemonID)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, url, agentToken, agentID,
+		map[string]string{"name": "unauthorized-agent", "provider": "claude"})
 	if status != http.StatusForbidden {
 		t.Errorf("agent creating agent: expected 403, got %d", status)
 	}
@@ -45,7 +43,7 @@ func TestAgentWriteOperationsRequireMemberRole(t *testing.T) {
 	}
 
 	// Agent attempts to delete agent — should be forbidden
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodDelete, url, agentToken, nil)
+	_, status, _ = doRequestWithAgentKey(t, client, http.MethodDelete, url, agentToken, agentID, nil)
 	if status != http.StatusForbidden {
 		t.Errorf("agent deleting agent: expected 403, got %d", status)
 	}
@@ -125,13 +123,13 @@ func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
 		"total_tokens":  1500,
 	}
 	url := fmt.Sprintf("%s/api/tasks/%d/token-usage", srv.URL, taskID)
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, url, agent2Token, body)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, url, agent2Token, agent2ID, body)
 	if status != http.StatusForbidden {
 		t.Errorf("agent2 reporting token usage for agent1's node: expected 403, got %d", status)
 	}
 
 	// Agent1 can report token usage for its own node
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body)
+	_, status, _ = doRequestWithAgentKey(t, client, http.MethodPost, url, agent1Token, agent1ID, body)
 	if status != http.StatusCreated {
 		t.Errorf("agent1 reporting token usage for own node: expected 201, got %d", status)
 	}
@@ -169,13 +167,13 @@ func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
 		"summary": "Hacked summary",
 	}
 	url := fmt.Sprintf("%s/api/tasks/%d/nodes/%s/summary", srv.URL, taskID, codeNodeID)
-	_, status, _ := doRequestWithAPIKey(t, client, http.MethodPost, url, agent2Token, body)
+	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, url, agent2Token, agent2ID, body)
 	if status != http.StatusForbidden {
 		t.Errorf("agent2 updating summary for agent1's node: expected 403, got %d", status)
 	}
 
 	// Agent1 can update its own node summary
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, url, agent1Token, body)
+	_, status, _ = doRequestWithAgentKey(t, client, http.MethodPost, url, agent1Token, agent1ID, body)
 	if status != http.StatusOK {
 		t.Errorf("agent1 updating summary for own node: expected 200, got %d", status)
 	}

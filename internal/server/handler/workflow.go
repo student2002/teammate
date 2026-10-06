@@ -1,11 +1,12 @@
 // workflow.go provides HTTP API endpoints for creating, listing, updating, and deleting workflow templates.
 //
 // This file provides the following HTTP API endpoints:
-//   - POST /workspaces/{workspaceId}/templates: create a new workflow template and its ordered node definitions
-//   - GET /workspaces/{workspaceId}/templates: list all workflow templates under the workspace
-//   - GET /workspaces/{workspaceId}/templates/{id}: query the details of the specified workflow template
-//   - PUT /workspaces/{workspaceId}/templates/{id}: update the workflow template and its node definitions
-//   - DELETE /workspaces/{workspaceId}/templates/{id}: delete the specified workflow template
+//   - POST /workspaces/{workspaceId}/workflows: create a new workflow template and its ordered node definitions
+//   - GET /workspaces/{workspaceId}/workflows: list all workflow templates under the workspace
+//   - GET /workspaces/{workspaceId}/workflows/{id}: query the details of the specified workflow template
+//   - GET /workspaces/{workspaceId}/workflows/{id}/stats: query usage statistics of the specified workflow template
+//   - PUT /workspaces/{workspaceId}/workflows/{id}: update the workflow template and its node definitions
+//   - DELETE /workspaces/{workspaceId}/workflows/{id}: delete the specified workflow template
 //
 // Workflow templates define the ordered node flow of task execution (e.g. implement -> self-test -> review -> deploy).
 // Node types include standard (AI execution), review (review), and manual (human execution).
@@ -53,6 +54,8 @@ func (h *WorkflowHandler) Routes() chi.Router {
 	r.Post("/", h.CreateWorkflowTemplate)
 	r.Get("/", h.ListWorkflowTemplates)
 	r.Route("/{id}", func(r chi.Router) {
+		r.Get("/", h.GetWorkflowTemplate)
+		r.Get("/stats", h.GetWorkflowTemplateStats)
 		r.Put("/", h.UpdateWorkflowTemplate)
 		r.Delete("/", h.DeleteWorkflowTemplate)
 	})
@@ -122,6 +125,10 @@ func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.
 	// build node parameters
 	// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
 	normalizeTemplateSortOrder(req.Nodes)
+	if err := validateTemplateNodeLimits(req.Nodes); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
 	nodeParams := make([]CreateTemplateNodeParams, 0, len(req.Nodes))
 	for _, n := range req.Nodes {
 		var assigneeID uuid.NullUUID
@@ -169,6 +176,7 @@ func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.
 		}
 
 		nodeParams = append(nodeParams, buildCreateTemplateNodeParams(
+			n.ID,
 			n.Name,
 			n.Description,
 			n.SortOrder,
@@ -241,10 +249,73 @@ func (h *WorkflowHandler) ListWorkflowTemplates(w http.ResponseWriter, r *http.R
 	response.JSON(w, r, resp)
 }
 
-// GetWorkflowTemplate handles the GET /workspaces/{workspaceId}/templates/{id} endpoint, querying the details of the specified workflow template and its nodes.
+// GetWorkflowTemplate handles the GET /workspaces/{workspaceId}/workflows/{id} endpoint, querying the specified workflow template and its nodes.
 //
 // Parameters:
-// UpdateWorkflowTemplate handles the PUT /workspaces/{workspaceId}/templates/{id} endpoint, updating the workflow template and its node definitions.
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the template UUID
+//
+// Returns:
+//   - no return value, writes a JSON response via w, containing the template and its nodes or an error message
+func (h *WorkflowHandler) GetWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid template id")
+		return
+	}
+	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
+		return
+	}
+
+	result, err := service.NewWorkflowService(h.Svc).Get(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.NotFound(w, "workflow template not found")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+
+	response.JSON(w, r, templateWithNodes{
+		templateResponse: toTemplateResponse(result.Template),
+		Nodes:            result.Nodes,
+	})
+}
+
+// GetWorkflowTemplateStats handles the GET /workspaces/{workspaceId}/workflows/{id}/stats endpoint,
+// returning usage count, average completion time, and reject rate for the template.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the template UUID
+//
+// Returns:
+//   - no return value, writes a JSON response via w, containing the template statistics or an error message
+func (h *WorkflowHandler) GetWorkflowTemplateStats(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid template id")
+		return
+	}
+	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
+		return
+	}
+
+	stats, err := service.NewTemplateStatsService(h.Svc).GetStats(r.Context(), id)
+	if err != nil {
+		if err.Error() == "template not found" {
+			response.NotFound(w, "workflow template not found")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+
+	response.JSON(w, r, stats)
+}
+
+// UpdateWorkflowTemplate handles the PUT /workspaces/{workspaceId}/workflows/{id} endpoint, updating the workflow template and its node definitions.
 //
 // Parameters:
 //   - w: HTTP response writer
@@ -270,7 +341,8 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 	}
 
 	// verify the workflow template belongs to the authenticated user's workspace
-	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
+	current := checkWorkflowTemplateWorkspace(h.Svc, w, r, id)
+	if current == nil {
 		return
 	}
 
@@ -280,9 +352,22 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if req.Name != nil && *req.Name == "" {
+		response.BadRequest(w, "name cannot be empty")
+		return
+	}
+
 	// if nodes are provided, build the node parameters
 	var nodeParams []CreateTemplateNodeParams
 	if req.Nodes != nil {
+		if err := validateTemplateNodeDeps(req.Nodes); err != nil {
+			response.BadRequest(w, err.Error())
+			return
+		}
+		if err := validateTemplateNodeLimits(req.Nodes); err != nil {
+			response.BadRequest(w, err.Error())
+			return
+		}
 		// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
 		normalizeTemplateSortOrder(req.Nodes)
 		nodeParams = make([]CreateTemplateNodeParams, 0, len(req.Nodes))
@@ -334,6 +419,7 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 			}
 
 			nodeParams = append(nodeParams, buildCreateTemplateNodeParams(
+				n.ID,
 				n.Name,
 				n.Description,
 				n.SortOrder,
@@ -353,12 +439,8 @@ func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.
 	wfSvc := service.NewWorkflowService(h.Svc)
 	result, err := wfSvc.UpdateWithNodes(r.Context(), buildUpdateWorkflowTemplateParams(
 		id,
-		req.Name,
-		req.Description,
-		req.TriggerType,
-		req.TriggerConfig,
-		req.TriggerEnabled,
-		req.NextRunAt,
+		*current,
+		req,
 	), nodeParams)
 	if err != nil {
 		if err == sql.ErrNoRows {

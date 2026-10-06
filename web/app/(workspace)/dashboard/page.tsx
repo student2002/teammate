@@ -5,6 +5,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import ReactMarkdown from "react-markdown";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/use-permission";
+import { mapTaskFromApi } from "@/lib/mappers";
 import { useTaskLogs } from "@/lib/use-task-logs";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
 import type { MappedTask, MappedAgent, NodeType, NodeTransition } from "@/lib/types";
@@ -354,6 +356,7 @@ interface SubTaskPanelProps {
 function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelProps) {
   const t = useTranslations("dashboard");
   const { dateTime } = useFormatter();
+  const { canEdit } = usePermission();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
 
@@ -380,7 +383,8 @@ function SubTaskPanel({ subTasks = [], parentId, onAddSubTask }: SubTaskPanelPro
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center text-xs text-accent-fg hover:text-accent-fg transition-colors-fast"
+          disabled={!canEdit}
+          className="flex items-center text-xs text-accent-fg hover:text-accent-fg transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> {t('subTasks.new')}
         </button>
@@ -459,6 +463,7 @@ interface CommentPanelProps {
 function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loading }: CommentPanelProps) {
   const t = useTranslations("dashboard");
   const { dateTime } = useFormatter();
+  const { canEdit } = usePermission();
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -466,7 +471,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
   const [showAgentPicker, setShowAgentPicker] = useState(false);
 
   const handleSend = () => {
-    if (!text.trim()) return;
+    if (!canEdit || !text.trim()) return;
     onAddComment(taskId, text.trim(), mentions);
     setText("");
     setMentions([]);
@@ -590,13 +595,15 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
             onKeyDown={(e) =>
               e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())
             }
+            disabled={!canEdit}
             placeholder={t('comments.inputPlaceholder')}
-            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2 text-sm text-fg-muted focus:outline-none focus:border-primary placeholder-fg-faint"
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2 text-sm text-fg-muted focus:outline-none focus:border-primary placeholder-fg-faint disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <div className="relative">
             <button
               onClick={() => setShowAgentPicker(!showAgentPicker)}
-              className={`px-2.5 py-2 rounded-lg border transition-colors-fast btn-press ${
+              disabled={!canEdit}
+              className={`px-2.5 py-2 rounded-lg border transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed ${
                 mentions.length > 0
                   ? "bg-primary/15 border-primary/40 text-primary-fg"
                   : "bg-surface-2 border-line-strong text-fg-subtle hover:text-fg"
@@ -644,7 +651,7 @@ function CommentPanel({ comments = [], taskId, onAddComment, agents = [], loadin
           </div>
           <button
             onClick={handleSend}
-            disabled={!text.trim()}
+            disabled={!canEdit || !text.trim()}
             className="px-3 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors-fast btn-press"
           >
             <Send className="w-4 h-4" />
@@ -851,6 +858,7 @@ interface ClaimButtonProps {
 
 function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
   const t = useTranslations("dashboard");
+  const { canEdit } = usePermission();
   if (task.nodesStatus[nodeIndex] !== "pending") return null;
   if (
     task.reservedForAgent &&
@@ -870,7 +878,8 @@ function ClaimButton({ task, nodeIndex, onClaim }: ClaimButtonProps) {
   return (
     <button
       onClick={() => onClaim(task.id, nodeIndex)}
-      className="absolute -top-2 right-2 px-2 py-0.5 bg-accent/80 hover:bg-accent text-fg text-[10px] rounded-full font-bold transition-colors-fast shadow-lg shadow-accent/30 cursor-pointer"
+      disabled={!canEdit}
+      className="absolute -top-2 right-2 px-2 py-0.5 bg-accent/80 hover:bg-accent text-fg text-[10px] rounded-full font-bold transition-colors-fast shadow-lg shadow-accent/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {t('claimButton.claimNode')}
     </button>
@@ -923,6 +932,7 @@ function WorkflowDetailsPanel({
 }: WorkflowDetailsPanelProps) {
   const t = useTranslations("dashboard");
   const { dateTime } = useFormatter();
+  const { canEdit } = usePermission();
   const [activeTerminalNode, setActiveTerminalNode] = useState(task.currentNode);
   const [userSelectedNode, setUserSelectedNode] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -1145,14 +1155,16 @@ function WorkflowDetailsPanel({
             <>
               <button
                 onClick={() => setShowEditDialog(true)}
-                className="p-1.5 hover:bg-surface-3 rounded text-fg-subtle hover:text-primary-fg transition-colors-fast"
+                disabled={!canEdit}
+                className="p-1.5 hover:bg-surface-3 rounded text-fg-subtle hover:text-primary-fg transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
               {!isInterrupted && (
                 <button
                   onClick={() => handleDoManual("cancel")}
-                  className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center"
+                  disabled={!canEdit}
+                  className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Ban className="w-3.5 h-3.5 mr-1" />
                   {t('actions.cancelTask')}
@@ -1166,7 +1178,8 @@ function WorkflowDetailsPanel({
                 onDeleteTask(task.id);
                 onClose();
               }}
-              className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center"
+              disabled={!canEdit}
+              className="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 text-danger-fg border border-danger/30 rounded-lg transition-colors-fast flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-3.5 h-3.5 mr-1" />
               {t('actions.deleteTask')}
@@ -1443,19 +1456,22 @@ function WorkflowDetailsPanel({
                       <>
                         <button
                           onClick={() => handleDoManual("resume")}
-                          className="flex items-center justify-center px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast"
+                          disabled={!canEdit}
+                          className="flex items-center justify-center px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Activity className="w-4 h-4 mr-2" /> {t('actions.resume')}
                         </button>
                         <button
                           onClick={() => setShowReassignDialog(true)}
-                          className="flex items-center justify-center px-4 py-2 bg-accent-strong/20 hover:bg-accent-strong/30 text-accent-fg rounded-lg text-sm font-medium border border-accent/30 transition-colors-fast"
+                          disabled={!canEdit}
+                          className="flex items-center justify-center px-4 py-2 bg-accent-strong/20 hover:bg-accent-strong/30 text-accent-fg rounded-lg text-sm font-medium border border-accent/30 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <ArrowRight className="w-4 h-4 mr-2" /> {t('actions.reassign')}
                         </button>
                         <button
                           onClick={() => handleDoManual("cancel")}
-                          className="flex items-center justify-center px-4 py-2 bg-danger-strong/20 hover:bg-danger-strong/30 text-danger-fg rounded-lg text-sm font-medium border border-danger/30 transition-colors-fast"
+                          disabled={!canEdit}
+                          className="flex items-center justify-center px-4 py-2 bg-danger-strong/20 hover:bg-danger-strong/30 text-danger-fg rounded-lg text-sm font-medium border border-danger/30 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <XCircle className="w-4 h-4 mr-2" /> {t('actions.cancelTask')}
                         </button>
@@ -1466,20 +1482,23 @@ function WorkflowDetailsPanel({
                           <>
                             <button
                               onClick={handleDoApprove}
-                              className="flex items-center justify-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium shadow-lg shadow-primary/20 transition-colors-fast btn-press"
+                              disabled={!canEdit}
+                              className="flex items-center justify-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium shadow-lg shadow-primary/20 transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <CheckCircle2 className="w-4 h-4 mr-2" /> {t('actions.approve')}
                             </button>
                             <button
                               onClick={() => setShowRejectDialog(true)}
-                              className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-surface-3 text-orange-400 rounded-lg text-sm font-medium border border-line-strong transition-colors-fast"
+                              disabled={!canEdit}
+                              className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-surface-3 text-orange-400 rounded-lg text-sm font-medium border border-line-strong transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <ArrowRight className="w-4 h-4 mr-2 rotate-180" /> {t('actions.rejectTo')}
                             </button>
                             {nodeInProgress && (
                               <button
                                 onClick={() => handleDoManual("manual_intervention")}
-                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast"
+                                disabled={!canEdit}
+                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Pause className="w-4 h-4 mr-2" /> {t('actions.manualIntervention')}
                               </button>
@@ -1487,7 +1506,8 @@ function WorkflowDetailsPanel({
                             {nodeInProgress && (
                               <button
                                 onClick={() => handleDoManual("interrupt")}
-                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-danger-strong/50 text-danger-fg rounded-lg text-sm font-medium border border-line-strong hover:border-danger/50 transition-colors-fast"
+                                disabled={!canEdit}
+                                className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-danger-strong/50 text-danger-fg rounded-lg text-sm font-medium border border-line-strong hover:border-danger/50 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Ban className="w-3.5 h-3.5 mr-2" /> {t('actions.interrupt')}
                               </button>
@@ -1496,7 +1516,8 @@ function WorkflowDetailsPanel({
                         ) : (
                           <button
                             onClick={() => handleDoManual("manual_intervention")}
-                            className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast"
+                            disabled={!canEdit}
+                            className="flex items-center justify-center px-4 py-2 bg-surface-2 hover:bg-warning-strong/50 text-warning-fg rounded-lg text-sm font-medium border border-line-strong hover:border-warning/50 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <AlertCircle className="w-4 h-4 mr-2" /> {t('actions.markManual')}
                           </button>
@@ -2079,17 +2100,63 @@ export default function DashboardPage() {
   const currentProjectId = useAppStore((s) => s.currentProjectId);
   const setCurrentProjectId = useAppStore((s) => s.setCurrentProjectId);
   const loadProjectData = useAppStore((s) => s.loadProjectData);
+  const loadError = useAppStore((s) => s.loadError);
 
   const [selectedTask, setSelectedTask] = useState<MappedTask | null>(null);
+  // 深链选中的任务 id：该任务进入列表前，同步 effect 不因缺失而关闭面板
+  const deepLinkTaskRef = useRef<number | null>(null);
+
+  // Deep link /dashboard?task=N: open the task panel even when the task is
+  // outside the current project filter — locate it across projects, switch
+  // the project context to its owner, then select it. The lookup is not
+  // cancelled by effect re-runs: switching the project mid-flight changes
+  // the deps and would swallow the setSelectedTask of the in-flight pass;
+  // the guard at the top plus the idempotent set make re-entry harmless.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const taskParam = params.get("task");
+    if (!taskParam || projects.length === 0) return;
+    const id = Number(taskParam);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (selectedTask?.id === id || tasks.some((t) => t.id === id)) return;
+
+    (async () => {
+      for (const p of projects) {
+        try {
+          // The single-task endpoint returns the bare task object (no nodes
+          // wrapper), which is enough to locate the owning project.
+          const raw = (await api.getTask(p.id, id)) as { id?: number } | null;
+          if (raw && typeof raw.id === "number") {
+            if (p.id !== currentProjectId) {
+              setCurrentProjectId(p.id);
+              await loadProjectData(p.id);
+            }
+            deepLinkTaskRef.current = id;
+            // Prefer the fully-shaped task (with nodes) from the refreshed
+            // store list; fall back to a bare mapping for the odd case where
+            // the list filter hides it.
+            const listed = useAppStore.getState().tasks.find((t) => t.id === id);
+            setSelectedTask(listed ?? mapTaskFromApi({ task: raw, nodes: [] }));
+            return;
+          }
+        } catch {
+          // the task does not belong to this project; try the next one
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.length, currentProjectId, tasks.length]);
 
   // 使 selectedTask 与 store 更新保持同步（如取消/编辑之后）
   useEffect(() => {
     if (selectedTask) {
       const updated = tasks.find((t) => t.id === selectedTask.id);
       if (updated) {
+        deepLinkTaskRef.current = null;
         setSelectedTask(updated);
-      } else {
-        // 任务已被移除（如已删除）
+      } else if (deepLinkTaskRef.current !== selectedTask.id) {
+        // 任务已被移除（如已删除）。深链任务在目标工程列表刷新完成前
+        // 可能暂不在当前列表中，此时不关闭面板
         setSelectedTask(null);
       }
     }
@@ -2126,8 +2193,8 @@ export default function DashboardPage() {
         const data = await api.getBoardData(currentProjectId);
         setBoardColumns((data as { columns?: { key: string; label: string; tasks: { id: number; title: string; priority: string; type: string; current_node_status: string; current_node_name: string; current_node_type: string; assignee_id: string }[] }[] }).columns || []);
       } catch (e) {
+        // 保留 last-good 看板数据:任务数据仍在 store 中,本地分组兜底可用
         console.error("Failed to fetch board data:", e);
-        setBoardColumns([]);
       }
       // 同时刷新完整任务数据，确保 store 拥有完整的节点信息
       loadProjectData(currentProjectId);
@@ -2502,10 +2569,21 @@ export default function DashboardPage() {
             onClaim={handleClaim}
             agents={agents}
           />
+        ) : tasks.length === 0 && loadError ? (
+          <div className="flex items-center gap-2 text-xs text-fg-muted bg-surface-2 border border-line rounded-lg px-4 py-3">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            {t('loadError')}
+          </div>
         ) : tasks.length === 0 ? (
           <EmptyStateGuide page="dashboard" />
         ) : (
         <div className="flex gap-4 min-w-max h-full pb-32">
+          {loadError && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 text-xs text-fg-muted bg-surface-2 border border-line rounded-lg px-4 py-2 shadow-lg">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              {t('loadError')}
+            </div>
+          )}
           {boardColumns.length > 0
             ? boardColumns.map((col) => {
                 const style = columnStyleMap[col.key] || { type: "pending", icon: "📋" };

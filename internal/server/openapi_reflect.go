@@ -254,10 +254,9 @@ func inferSecurity(path string) []map[string][]interface{} {
 		}
 	}
 
-	// Agent self-management endpoints (rotate token, query in-progress nodes, execute MCP)
+	// Agent self-management endpoints (query in-progress nodes, execute MCP)
 	agentSelfEndpoints := map[string]bool{
-		"rotate-token":        true,
-		"in-progress-nodes":   true,
+		"in-progress-nodes": true,
 	}
 	if strings.Contains(path, "/agents/") && agentSelfEndpoints[lastSeg] {
 		return []map[string][]interface{}{{"ApiKeyAuth": {}}, {"BearerAuth": {}}}
@@ -587,7 +586,7 @@ func sanitizePathForID(path string) string {
 //   - /auth/token-exchange → tokenExchangeResponse
 //   - /auth/switch-workspace → switchWorkspaceResponse
 //   - /tasks/* (single) → taskResponse
-//   - /agents/* (single) → agentResponse or createAgentResponse
+//   - /agents/* (single) → agentResponse
 //   - /workflows/* (single) → templateResponse
 //   - /projects/*/stats → projectStatsResponse
 //   - /agents/*/stats/agent-stats → agentStatsResponse

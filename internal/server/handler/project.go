@@ -204,6 +204,11 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		req.Context,
 	))
 	if err != nil {
+		// duplicate workspace project name (23505) surfaces as 409
+		if isUniqueViolation(err) {
+			response.Conflict(w, "a project with this name already exists in the workspace")
+			return
+		}
 		response.InternalServerError(w, err)
 		return
 	}
@@ -327,33 +332,60 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// project name is required
-	if strings.TrimSpace(req.Name) == "" {
-		response.BadRequest(w, "name is required")
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		response.BadRequest(w, "name must not be empty")
+		return
+	}
+	if req.Status != nil {
+		switch *req.Status {
+		case ProjectStatusPlanned, ProjectStatusActive, ProjectStatusPaused, ProjectStatusCompleted, ProjectStatusArchived:
+		default:
+			response.BadRequest(w, "invalid status: must be one of planned/active/paused/completed/archived")
+			return
+		}
+	}
+	if req.RepoUrl != nil && strings.TrimSpace(*req.RepoUrl) == "" {
+		response.BadRequest(w, "repo_url must not be empty")
 		return
 	}
 
-	// if status is not provided, fetch the current project to preserve the existing status
-	status := req.Status
-	if status == "" {
-		projSvc := service.NewProjectService(h.Svc)
-		existing, err := projSvc.Get(r.Context(), id)
-		if err != nil {
-			response.NotFound(w, "project not found")
-			return
-		}
-		status = existing.Status
+	// merge the provided fields over the current record: nil keeps the stored
+	// value so sparse updates (CLI, API consumers) never clear untouched fields
+	projSvc := service.NewProjectService(h.Svc)
+	existing, err := projSvc.Get(r.Context(), id)
+	if err != nil {
+		response.NotFound(w, "project not found")
+		return
+	}
+	name := existing.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+	description := existing.Description
+	if req.Description != nil {
+		description = *req.Description
+	}
+	status := existing.Status
+	if req.Status != nil {
+		status = *req.Status
+	}
+	repoURL := existing.RepoURL
+	if req.RepoUrl != nil {
+		repoURL = *req.RepoUrl
+	}
+	projectContext := existing.Context
+	if req.Context != nil {
+		projectContext = *req.Context
 	}
 
 	// call service to update the project
-	projSvc := service.NewProjectService(h.Svc)
 	project, err := projSvc.Update(r.Context(), buildUpdateProjectParams(
 		id,
-		req.Name,
-		req.Description,
+		name,
+		description,
 		status,
-		req.RepoUrl,
-		req.Context,
+		repoURL,
+		projectContext,
 	))
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -426,6 +458,21 @@ func (h *ProjectHandler) AddProjectMember(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if req.MemberType != "human" && req.MemberType != "agent" {
+		response.BadRequest(w, "member_type must be human or agent")
+		return
+	}
+	// role is owned by the server: omitted falls back to the column default
+	// 'developer'; any provided value must be a valid project role
+	role := req.Role
+	if role == "" {
+		role = "developer"
+	}
+	if role != "lead" && role != "developer" && role != "reviewer" {
+		response.BadRequest(w, "role must be one of: lead, developer, reviewer")
+		return
+	}
+
 	// convert optional ID fields
 	var agentID uuid.NullUUID
 	if req.AgentID != nil {
@@ -443,7 +490,7 @@ func (h *ProjectHandler) AddProjectMember(w http.ResponseWriter, r *http.Request
 		req.MemberType,
 		agentID,
 		memberID,
-		req.Role,
+		role,
 	))
 	if err != nil {
 		response.InternalServerError(w, err)
@@ -562,6 +609,11 @@ func (h *ProjectHandler) AddProjectReviewer(w http.ResponseWriter, r *http.Reque
 	var req addProjectReviewerRequest
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
+		return
+	}
+
+	if req.MemberType != "human" && req.MemberType != "agent" {
+		response.BadRequest(w, "member_type must be human or agent")
 		return
 	}
 
@@ -901,6 +953,11 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 			uuid.NullUUID{UUID: claims.UserID, Valid: true},
 		))
 		if err != nil {
+			// duplicate repo_url credential (23505) surfaces as 409
+			if isUniqueViolation(err) {
+				response.Conflict(w, "a credential for this repository already exists; update it instead")
+				return
+			}
 			response.InternalServerError(w, err)
 			return
 		}

@@ -368,27 +368,28 @@ const createTask = `-- name: CreateTask :one
 
 INSERT INTO tasks (
     project_id, title, description, constraints,
-    type, priority, status, author_type, author_id, due_date, labels, sequence, workflow_name
+    type, priority, status, author_type, author_id, due_date, labels, sequence, workflow_name, workflow_template_id
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+    $6, $7, $8, $9, $10, $11, $12, $13, $14::uuid
+) RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type CreateTaskParams struct {
-	ProjectID    uuid.UUID      `db:"project_id" json:"project_id"`
-	Title        string         `db:"title" json:"title"`
-	Description  sql.NullString `db:"description" json:"description"`
-	Constraints  sql.NullString `db:"constraints" json:"constraints"`
-	Type         TaskType       `db:"type" json:"type"`
-	Priority     TaskPriority   `db:"priority" json:"priority"`
-	Status       TaskStatus     `db:"status" json:"status"`
-	AuthorType   string         `db:"author_type" json:"author_type"`
-	AuthorID     uuid.UUID      `db:"author_id" json:"author_id"`
-	DueDate      sql.NullTime   `db:"due_date" json:"due_date"`
-	Labels       []string       `db:"labels" json:"labels"`
-	Sequence     int32          `db:"sequence" json:"sequence"`
-	WorkflowName string         `db:"workflow_name" json:"workflow_name"`
+	ProjectID          uuid.UUID      `db:"project_id" json:"project_id"`
+	Title              string         `db:"title" json:"title"`
+	Description        sql.NullString `db:"description" json:"description"`
+	Constraints        sql.NullString `db:"constraints" json:"constraints"`
+	Type               TaskType       `db:"type" json:"type"`
+	Priority           TaskPriority   `db:"priority" json:"priority"`
+	Status             TaskStatus     `db:"status" json:"status"`
+	AuthorType         string         `db:"author_type" json:"author_type"`
+	AuthorID           uuid.UUID      `db:"author_id" json:"author_id"`
+	DueDate            sql.NullTime   `db:"due_date" json:"due_date"`
+	Labels             []string       `db:"labels" json:"labels"`
+	Sequence           int32          `db:"sequence" json:"sequence"`
+	WorkflowName       string         `db:"workflow_name" json:"workflow_name"`
+	WorkflowTemplateID uuid.NullUUID  `db:"workflow_template_id" json:"workflow_template_id"`
 }
 
 // Task queries
@@ -407,12 +408,14 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		pq.Array(arg.Labels),
 		arg.Sequence,
 		arg.WorkflowName,
+		arg.WorkflowTemplateID,
 	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
 		&i.WorkflowName,
+		&i.WorkflowTemplateID,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -927,7 +930,7 @@ func (q *Queries) GetReadyNodes(ctx context.Context, taskID int32) ([]TaskNode, 
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE id = $1
 `
 
@@ -938,6 +941,7 @@ func (q *Queries) GetTask(ctx context.Context, id int32) (Task, error) {
 		&i.ID,
 		&i.ProjectID,
 		&i.WorkflowName,
+		&i.WorkflowTemplateID,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -1302,12 +1306,8 @@ func (q *Queries) IsAgentProjectMember(ctx context.Context, arg IsAgentProjectMe
 }
 
 const listAllTasks = `-- name: ListAllTasks :many
-SELECT id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
-  AND NOT (
-    status IN ('completed', 'cancelled')
-    AND updated_at < CURRENT_DATE
-  )
 ORDER BY created_at DESC
 `
 
@@ -1324,6 +1324,7 @@ func (q *Queries) ListAllTasks(ctx context.Context, projectID uuid.UUID) ([]Task
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1636,12 +1637,15 @@ func (q *Queries) ListTaskNodes(ctx context.Context, taskID int32) ([]TaskNode, 
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
   AND ($2::task_status IS NULL OR status = $2)
-  AND NOT (
-    status IN ('completed', 'cancelled')
-    AND updated_at < CURRENT_DATE
+  AND (
+    $2::task_status IS NOT NULL
+    OR NOT (
+      status IN ('completed', 'cancelled')
+      AND updated_at < CURRENT_DATE
+    )
   )
 ORDER BY created_at DESC
 `
@@ -1651,6 +1655,9 @@ type ListTasksParams struct {
 	Status    NullTaskStatus `db:"status" json:"status"`
 }
 
+// Without an explicit status the view is "active work": finished tasks from
+// before today are hidden. An explicit status filter returns every matching
+// task regardless of age.
 func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, listTasks, arg.ProjectID, arg.Status)
 	if err != nil {
@@ -1664,6 +1671,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, e
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1694,7 +1702,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, e
 }
 
 const listTasksPaginated = `-- name: ListTasksPaginated :many
-SELECT id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
   AND ($2::task_status IS NULL OR status = $2)
   AND ($3::text IS NULL OR title ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
@@ -1730,6 +1738,7 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1999,7 +2008,7 @@ SET title = $2,
     status = $8,
     updated_at = now()
 WHERE id = $1
-RETURNING id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type UpdateTaskParams struct {
@@ -2029,6 +2038,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.ID,
 		&i.ProjectID,
 		&i.WorkflowName,
+		&i.WorkflowTemplateID,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -2137,7 +2147,7 @@ func (q *Queries) UpdateTaskNodeStatus(ctx context.Context, arg UpdateTaskNodeSt
 }
 
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
-UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, project_id, workflow_name, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type UpdateTaskStatusParams struct {
@@ -2152,6 +2162,7 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		&i.ID,
 		&i.ProjectID,
 		&i.WorkflowName,
+		&i.WorkflowTemplateID,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,

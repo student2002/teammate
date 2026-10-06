@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/use-permission";
 import api from "@/lib/api";
 import type { MappedTask } from "@/lib/types";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
@@ -179,6 +180,7 @@ export default function ReviewsPage() {
   const tasks = useAppStore((s) => s.tasks);
   const currentProjectId = useAppStore((s) => s.currentProjectId);
   const loadProjectData = useAppStore((s) => s.loadProjectData);
+  const { canEdit } = usePermission();
 
   const [filter, setFilter] = useState<"all" | "rejected" | "pending_review">(
     "all"
@@ -454,13 +456,15 @@ export default function ReviewsPage() {
                 <div className="flex items-center gap-3 pt-3 border-t border-line-strong/40">
                   <button
                     onClick={() => handleApprove(task.id)}
-                    className="flex items-center gap-2 px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast btn-press"
+                    disabled={!canEdit}
+                    className="flex items-center gap-2 px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <CheckCircle2 className="w-4 h-4" /> {t("approve")}
                   </button>
                   <button
                     onClick={() => setRejectingTask(task)}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600/10 hover:bg-orange-600/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30 transition-colors-fast btn-press"
+                    disabled={!canEdit}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-600/10 hover:bg-orange-600/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30 transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <XCircle className="w-4 h-4" /> {t("reject")}
                   </button>

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -343,7 +344,10 @@ func doRequestWithToken(t *testing.T, client *http.Client, method, url, token st
 	return resp, resp.StatusCode, respBody
 }
 
-// doRequestWithAPIKey executes an HTTP request using an API key (X-API-Key header). // Used for agent authentication scenarios where the agent uses its API Token directly.
+// doRequestWithAPIKey executes an HTTP request using an API key (X-API-Key
+// header). When the body carries an agent identity (agent_id or
+// operator_id), it is also sent as X-Agent-ID so the daemon td_ token
+// authenticates as that agent instance — the production agent path.
 func doRequestWithAPIKey(t *testing.T, client *http.Client, method, url, apiKey string, body interface{}) (*http.Response, int, []byte) {
 	t.Helper()
 
@@ -364,6 +368,52 @@ func doRequestWithAPIKey(t *testing.T, client *http.Client, method, url, apiKey 
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("X-API-Key", apiKey)
+	if m, ok := body.(map[string]interface{}); ok {
+		if id, ok := m["agent_id"].(string); ok && id != "" {
+			req.Header.Set("X-Agent-ID", id)
+		} else if id, ok := m["operator_id"].(string); ok && id != "" {
+			req.Header.Set("X-Agent-ID", id)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	return resp, resp.StatusCode, respBody
+}
+
+// doRequestWithAgentKey executes an HTTP request authenticating as an agent
+// instance the production way: the daemon td_ token in X-API-Key plus the
+// agent UUID in X-Agent-ID.
+func doRequestWithAgentKey(t *testing.T, client *http.Client, method, url, tdKey, agentID string, body interface{}) (*http.Response, int, []byte) {
+	t.Helper()
+
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		reqBody = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("X-API-Key", tdKey)
+	req.Header.Set("X-Agent-ID", agentID)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -525,19 +575,45 @@ func createWorkflowTemplate2Nodes(t *testing.T, client *http.Client, baseURL, ws
 	return tplMap["id"].(string)
 }
 
+// testDaemonCache holds one registered daemon per workspace so agent setup
+// does not spawn a daemon per createAgent call.
+var testDaemonCache sync.Map // key: baseURL|wsID -> testDaemonPair
+
+type testDaemonPair struct {
+	daemonID string
+	tdToken  string
+}
+
+// testWorkspaceDaemon creates (once per workspace) a daemon with the claude
+// provider detected, mirroring the machine-side registration.
+func testWorkspaceDaemon(t *testing.T, client *http.Client, baseURL, wsID, memberToken string) (daemonID, tdToken string) {
+	t.Helper()
+	key := baseURL + "|" + wsID
+	if cached, ok := testDaemonCache.Load(key); ok {
+		pair := cached.(testDaemonPair)
+		return pair.daemonID, pair.tdToken
+	}
+	daemonID, tdToken = createTestDaemon(t, client, baseURL, wsID, memberToken, "test-agents-box")
+	registerProviders(t, client, baseURL, tdToken)
+	testDaemonCache.Store(key, testDaemonPair{daemonID: daemonID, tdToken: tdToken})
+	return daemonID, tdToken
+}
+
+// createAgent creates an agent instance in the workspace's daemon group (the
+// single creation path) and returns (agentID, td_ daemon token). Agent
+// authentication in tests goes through the production path: the td_ token
+// plus X-Agent-ID, resolved by doRequestWithAgentKey.
 func createAgent(t *testing.T, client *http.Client, baseURL, wsID, token string) (string, string) {
 	t.Helper()
 
+	daemonID, tdToken := testWorkspaceDaemon(t, client, baseURL, wsID, token)
 	body := map[string]interface{}{
-		"name":         "agent-" + uuid.New().String()[:8],
-		"provider":     "claude",
-		"instructions": "test agent",
-		"model":        "claude-3.5-sonnet",
-		"extra_args":   []string{},
-		"git_name":     "Test Agent",
-		"git_email":    "agent@test.com",
+		"name":      "agent-" + uuid.New().String()[:8],
+		"provider":  "claude",
+		"git_name":  "Tester",
+		"git_email": "tester@teammate.local",
 	}
-	url := fmt.Sprintf("%s/api/workspaces/%s/agents", baseURL, wsID)
+	url := fmt.Sprintf("%s/api/workspaces/%s/daemons/%s/agents", baseURL, wsID, daemonID)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
 	if status != http.StatusCreated {
 		t.Fatalf("createAgent: expected 201, got %d, body: %s", status, respBody)
@@ -548,8 +624,7 @@ func createAgent(t *testing.T, client *http.Client, baseURL, wsID, token string)
 		t.Fatalf("decode agent: %v", err)
 	}
 	agentID := result["id"].(string)
-	apiToken, _ := result["api_token"].(string)
-	return agentID, apiToken
+	return agentID, tdToken
 }
 
 // grantAgentPermission grants a permission to an agent directly via the service layer (the original HTTP endpoint /permissions has been removed).
@@ -571,7 +646,10 @@ func grantAgentPermission(t *testing.T, client *http.Client, baseURL, wsID, agen
 	// granted_by uses the real member ID corresponding to the token (to avoid foreign key constraint failure)
 	grantedBy := uuid.MustParse(extractMemberIDFromJWT(t, token))
 	if _, err := permSvc.Grant(context.Background(), agentUUID, permission, "*", nil, grantedBy); err != nil {
-		t.Fatalf("grantAgentPermission(%s): %v", permission, err)
+		// An already-granted permission is fine — the agent ends up holding it either way.
+		if !strings.Contains(err.Error(), "23505") {
+			t.Fatalf("grantAgentPermission(%s): %v", permission, err)
+		}
 	}
 }
 
@@ -645,7 +723,7 @@ func claimNode(t *testing.T, client *http.Client, baseURL string, taskID int32, 
 	body := map[string]interface{}{
 		"agent_id": agentID,
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, agentID, body)
 	if status != http.StatusOK {
 		t.Fatalf("claimNode: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -666,7 +744,7 @@ func approveNode(t *testing.T, client *http.Client, baseURL string, taskID int32
 		"operator_type": "agent",
 		"comment":       "approved",
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/approve", agentAPIToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/approve", agentAPIToken, operatorID, body)
 	if status != http.StatusOK {
 		t.Fatalf("approveNode: expected 200, got %d, body: %s", status, respBody)
 	}
@@ -690,7 +768,7 @@ func rejectNode(t *testing.T, client *http.Client, baseURL string, taskID int32,
 	if targetNodeID != nil {
 		body["target_node_id"] = *targetNodeID
 	}
-	_, status, respBody := doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/reject", agentAPIToken, body)
+	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/reject", agentAPIToken, operatorID, body)
 
 	var result map[string]interface{}
 	if status == http.StatusOK {
@@ -746,14 +824,14 @@ func addAgentToProject(t *testing.T, q *dbgen.Queries, projectID, agentID string
 	}
 }
 
-// createDaemonForAgent simulates the daemon-first flow for an existing agent:
-// the web creates a daemon (one-time td_ token), then the machine API registers
-// reporting the agent by name — the upsert binds agents.daemon_id to the daemon.
-// Returns (daemonID, daemonToken).
-func createDaemonForAgent(t *testing.T, client *http.Client, baseURL, workspaceID, memberToken, agentID string) (string, string) {
+// createDaemonForAgent simulates manual binding of an existing agent to a fresh
+// daemon: the web creates the daemon (one-time td_ token), the machine registers
+// (machine info only, no instances), and the test binds the agent row to the
+// daemon directly over SQL. Returns (daemonID, daemonToken).
+func createDaemonForAgent(t *testing.T, client *http.Client, baseURL, workspaceID, memberToken, agentID string, db *sql.DB) (string, string) {
 	t.Helper()
 
-	// fetch the agent's name/provider for the report
+	// fetch the agent's provider for the providers snapshot
 	_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
 		baseURL+"/api/workspaces/"+workspaceID+"/agents/"+agentID, memberToken, nil)
 	if status != http.StatusOK {
@@ -763,11 +841,7 @@ func createDaemonForAgent(t *testing.T, client *http.Client, baseURL, workspaceI
 	if err := json.Unmarshal(respBody, &agent); err != nil {
 		t.Fatalf("createDaemonForAgent: decode agent: %v", err)
 	}
-	name, _ := agent["name"].(string)
 	provider, _ := agent["provider"].(string)
-	if name == "" {
-		t.Fatalf("createDaemonForAgent: agent %s has no name", agentID)
-	}
 
 	// web creates the daemon
 	_, status, respBody = doRequestWithToken(t, client, http.MethodPost,
@@ -784,17 +858,21 @@ func createDaemonForAgent(t *testing.T, client *http.Client, baseURL, workspaceI
 		t.Fatalf("createDaemonForAgent: decode daemon: %v", err)
 	}
 
-	// machine registers, reporting the agent by name
+	// machine registers (machine info only; instances are web-created)
 	registerBody := map[string]interface{}{
 		"device_name": "test-box",
 		"version":     "1.0.0",
 		"providers":   []map[string]interface{}{{"provider": provider, "version": "1.0", "installed": true}},
-		"agents":      []map[string]string{{"name": name, "provider": provider}},
 	}
 	_, status, respBody = doRequestWithAPIKey(t, client, http.MethodPost,
 		baseURL+"/api/daemons/register", created.DaemonToken, registerBody)
 	if status != http.StatusOK {
 		t.Fatalf("createDaemonForAgent: register: %d, body: %s", status, respBody)
+	}
+
+	// bind the agent row to the daemon (manual binding path)
+	if _, err := db.Exec(`UPDATE agents SET daemon_id = $1, status = 'online' WHERE id = $2::uuid`, created.ID, agentID); err != nil {
+		t.Fatalf("createDaemonForAgent: bind agent: %v", err)
 	}
 	return created.ID, created.DaemonToken
 }

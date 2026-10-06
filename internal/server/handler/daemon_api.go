@@ -1,4 +1,4 @@
-// daemon_api.go — machine-side daemon API: registration (agent report + tool
+// daemon_api.go — machine-side daemon API: registration (machine info + tool
 // detection), heartbeat, and graceful deregistration. Authenticated with the
 // daemon's td_ token (daemon principal, no X-Agent-ID).
 package handler
@@ -18,10 +18,13 @@ import (
 // DaemonAPIHandler handles machine-facing daemon endpoints.
 type DaemonAPIHandler struct {
 	Svc *service.Service
+	// heartbeatRL, when non-nil, throttles heartbeat requests per principal
+	// to prevent heartbeat storms.
+	heartbeatRL func(http.Handler) http.Handler
 }
 
-func NewDaemonAPIHandler(svc *service.Service) *DaemonAPIHandler {
-	return &DaemonAPIHandler{Svc: svc}
+func NewDaemonAPIHandler(svc *service.Service, heartbeatRL func(http.Handler) http.Handler) *DaemonAPIHandler {
+	return &DaemonAPIHandler{Svc: svc, heartbeatRL: heartbeatRL}
 }
 
 // Routes returns the machine-side daemon route table (mounted at /api/daemons).
@@ -29,7 +32,11 @@ func (h *DaemonAPIHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
 	r.Post("/register", h.Register)
-	r.Post("/heartbeat", h.Heartbeat)
+	if h.heartbeatRL != nil {
+		r.With(h.heartbeatRL).Post("/heartbeat", h.Heartbeat)
+	} else {
+		r.Post("/heartbeat", h.Heartbeat)
+	}
 	r.Post("/deregister", h.Deregister)
 
 	return r
@@ -51,10 +58,9 @@ func daemonClaims(r *http.Request) (uuid.UUID, bool) {
 //   - version: agentd version
 //   - public_key: daemon RSA public key (git credential encryption)
 //   - providers: detected tool snapshot [{provider,version,installed}]
-//   - agents: reported agent instances [{name,provider}]
 //
 // Response:
-//   - 200: {agents:[{name,agent_id,status}], desired_agents:[{name,provider}], heartbeat_interval}
+//   - 200: {daemon_id, workspace_id, desired_agents:[{agent_id,name,provider}], heartbeat_interval}
 //   - 403: not authenticated as a daemon
 func (h *DaemonAPIHandler) Register(w http.ResponseWriter, r *http.Request) {
 	daemonID, ok := daemonClaims(r)
@@ -78,10 +84,11 @@ func (h *DaemonAPIHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Heartbeat handles POST /api/daemons/heartbeat.
 //
 // Request body (agents optional):
-//   - agents: [{name, busy}]
+//   - agents: [{name, busy}] — instances delivered via desired_agents and
+//     bound by this daemon; online instances absent from the list go offline
 //
 // Response:
-//   - 200: {status:"ok", desired_agents, heartbeat_interval}
+//   - 200: {desired_agents, heartbeat_interval}
 //   - 404: daemon row no longer exists (re-provision required)
 func (h *DaemonAPIHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	daemonID, ok := daemonClaims(r)

@@ -21,13 +21,15 @@ type createProjectRequest struct {
 	Context     string `json:"context"`      // project context
 }
 
-// updateProjectRequest update project request body.
+// updateProjectRequest update project request body. All fields are pointers:
+// nil keeps the stored value, a provided value overwrites it (partial-update
+// semantics owned by the server, identical for every caller).
 type updateProjectRequest struct {
-	Name        string `json:"name"`        // project name
-	Description string `json:"description"` // project description
-	Status      string `json:"status"`      // project status
-	RepoUrl     string `json:"repo_url"`    // Git repository URL
-	Context     string `json:"context"`     // project context
+	Name        *string `json:"name"`        // project name
+	Description *string `json:"description"` // project description
+	Status      *string `json:"status"`      // project status
+	RepoUrl     *string `json:"repo_url"`    // Git repository URL
+	Context     *string `json:"context"`     // project context
 }
 
 // addProjectMemberRequest add project member request body.
@@ -104,7 +106,11 @@ type ProjectStatus = string
 
 // project status constants.
 const (
-	ProjectStatusPlanned = apitypes.ProjectStatusPlanned
+	ProjectStatusPlanned   = apitypes.ProjectStatusPlanned
+	ProjectStatusActive    = apitypes.ProjectStatusActive
+	ProjectStatusPaused    = apitypes.ProjectStatusPaused
+	ProjectStatusCompleted = apitypes.ProjectStatusCompleted
+	ProjectStatusArchived  = apitypes.ProjectStatusArchived
 )
 
 // buildCreateProjectParams builds types.CreateProjectParams from handler-layer input.

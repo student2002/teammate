@@ -37,10 +37,10 @@ func NewAgentHandler(svc *service.Service) *AgentHandler {
 func (h *AgentHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
-	r.Post("/", h.CreateAgent)
 	r.Get("/", h.ListAgents)
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", h.GetAgent)
+		r.Get("/stats", h.GetAgentStats)
 		r.Put("/", h.UpdateAgent)
 		r.Delete("/", h.DeleteAgent)
 		r.Get("/skills", h.ListSkills)
@@ -51,12 +51,45 @@ func (h *AgentHandler) Routes() chi.Router {
 		r.Delete("/mcp-servers/{serverId}", h.RemoveMcpServer)
 		r.Get("/in-progress-nodes", h.GetInProgressNodes)
 		r.Get("/executions", h.ListExecutions)
+		r.Post("/grant-role", h.GrantRole)
+		r.Get("/permissions", h.ListPermissions)
+		r.Post("/permissions", h.GrantPermission)
+		r.Delete("/permissions/{permission}", h.RevokePermission)
 
 		// daemon-only MCP execution endpoint: returns decrypted env_vars, only accessible by the Agent itself
 		r.Get("/execution/mcp-servers", h.GetExecutionMcpServers)
 	})
 
 	return r
+}
+
+// GetAgentStats handles the GET /workspaces/{workspaceId}/agents/{id}/stats endpoint,
+// returning completed task count, token usage, and average completion time for the agent.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter id is the agent UUID
+//
+// Response:
+//   - 200: successfully returns the agent statistics
+//   - 400: invalid agent id
+//   - 404: agent does not exist or belongs to another workspace
+func (h *AgentHandler) GetAgentStats(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	if checkAgentWorkspace(h.Svc, w, r, id) == nil {
+		return
+	}
+
+	stats, err := service.NewStatsService(h.Svc).GetAgentStats(r.Context(), id)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, stats)
 }
 
 // ReadRoutes returns the read-only route table for Agents (query operations only).
@@ -77,7 +110,6 @@ func (h *AgentHandler) ReadRoutes() chi.Router {
 func (h *AgentHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
-	r.Post("/", h.CreateAgent)
 	r.Route("/{id}", func(r chi.Router) {
 		r.Put("/", h.UpdateAgent)
 		r.Delete("/", h.DeleteAgent)
@@ -91,128 +123,6 @@ func (h *AgentHandler) WriteRoutes() chi.Router {
 }
 
 
-// CreateAgent handles the POST /workspaces/{workspaceId}/agents endpoint, creating a new AI agent and generating an API Token.
-//
-// Parameters:
-//   - w: HTTP response writer
-//   - r: HTTP request
-//
-// Request body:
-//   - name: string, agent name (required)
-//   - provider: string, agent provider, default "claude"
-//   - instructions: string, agent execution instructions
-//   - model: string, model to use
-//   - status: string, initial status, default "offline"
-//   - custom_env: object, custom environment variables
-//   - extra_args: string[], extra command-line arguments
-//   - git_name: string, Git commit username
-//   - git_email: string, Git commit email
-//
-// Response:
-//   - 201: created successfully, returns agent info and API Token
-//   - 400: parameter error
-//   - 401: not authenticated
-//   - 403: no permission (requires member or higher role)
-//
-// Processing flow:
-//  1. verify authentication status and write permission
-//  2. parse workspace ID and request body
-//  3. set default values (provider=claude, status=offline)
-//  4. call service to create the agent and generate an API Token
-//  5. record audit log
-func (h *AgentHandler) CreateAgent(w http.ResponseWriter, r *http.Request) {
-	// verify authentication status
-	claims, ok := svcmw.GetAuthFromContext(r.Context())
-	if !ok {
-		response.Unauthorized(w, "authentication required")
-		return
-	}
-	// verify write permission (member or higher)
-	if err := requireWriteAccess(claims); err != nil {
-		response.Forbidden(w, err.Error())
-		return
-	}
-
-	// parse workspace ID
-	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
-	if err != nil {
-		response.BadRequest(w, "invalid workspace id")
-		return
-	}
-
-	// parse request body
-	var req createAgentRequest
-	if err := render.Decode(r, &req); err != nil {
-		response.BadRequest(w, err.Error())
-		return
-	}
-
-	// set default values
-	provider := req.Provider
-	if provider == "" {
-		provider = AgentProviderClaude
-	}
-
-	status := req.Status
-	if status == "" {
-		status = AgentStatusOffline
-	}
-
-	// custom_env is passed through to the service directly as json.RawMessage
-	customEnv := req.CustomEnv
-
-	extraArgs := req.ExtraArgs
-	if extraArgs == nil {
-		extraArgs = []string{}
-	}
-
-	gitName := req.GitName
-	gitEmail := req.GitEmail
-
-	if gitName == "" || gitEmail == "" {
-		response.BadRequest(w, "git_name and git_email are required")
-		return
-	}
-
-	agentSvc := service.NewAgentService(h.Svc)
-
-	// get the creator's member ID for permission granting
-	var grantedBy uuid.UUID
-	if claims.UserID != uuid.Nil {
-		grantedBy = claims.UserID
-	}
-
-	// call service to create the agent
-	result, err := agentSvc.Create(r.Context(), buildCreateAgentParams(
-		workspaceID, req.Name, provider, req.Instructions, req.Model, status, customEnv, extraArgs, gitName, gitEmail,
-	), grantedBy)
-	if err != nil {
-		response.InternalServerError(w, err)
-		return
-	}
-
-	// return creation result (including the API Token)
-	w.WriteHeader(http.StatusCreated)
-	response.JSON(w, r, createAgentResponse{
-		agentResponse: agentToResponseWithEnv(result.Agent),
-		APIToken:      result.APIToken,
-	})
-
-	// record audit log
-	auditSvc := service.NewAuditService(h.Svc)
-	if err := auditSvc.Log(r.Context(), service.AuditLogEntry{
-		WorkspaceID:  workspaceID,
-		ActorType:    claims.UserType,
-		ActorID:      claims.UserID,
-		Action:       "agent.create",
-		ResourceType: "agent",
-		ResourceID:   result.Agent.ID,
-		IPAddress:    r.RemoteAddr,
-		UserAgent:    r.UserAgent(),
-	}); err != nil {
-		slog.Warn("audit log write failed", "err", err)
-	}
-}
 
 // ListAgents handles the GET /workspaces/{workspaceId}/agents endpoint, listing all AI agents under the workspace.
 //
@@ -349,6 +259,14 @@ func (h *AgentHandler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	if err := render.Decode(r, &req); err != nil {
 		response.BadRequest(w, err.Error())
 		return
+	}
+	if req.Status != "" {
+		switch req.Status {
+		case "online", "offline", "busy", "paused", "pending":
+		default:
+			response.BadRequest(w, "invalid status: must be one of online/offline/busy/paused/pending")
+			return
+		}
 	}
 
 	// custom_env is passed through to the service directly as json.RawMessage
@@ -587,9 +505,16 @@ func (h *AgentHandler) AddSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// enabled defaults to true: a bind action implies enable, callers may
+	// explicitly pass false to bind disabled
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
 	// call service to bind the skill
 	agentSvc := service.NewAgentService(h.Svc)
-	skill, err := agentSvc.AddSkill(r.Context(), buildAddAgentSkillParams(agentID, req.SkillID, req.Enabled))
+	skill, err := agentSvc.AddSkill(r.Context(), buildAddAgentSkillParams(agentID, req.SkillID, enabled))
 	if err != nil {
 		response.InternalServerError(w, err)
 		return
@@ -703,9 +628,16 @@ func (h *AgentHandler) AddMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// enabled defaults to true: a bind action implies enable, callers may
+	// explicitly pass false to bind disabled
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
 	// call service to bind the MCP server
 	agentSvc := service.NewAgentService(h.Svc)
-	server, err := agentSvc.AddMcpServer(r.Context(), buildAddAgentMcpServerParams(agentID, req.McpServerID, req.Enabled))
+	server, err := agentSvc.AddMcpServer(r.Context(), buildAddAgentMcpServerParams(agentID, req.McpServerID, enabled))
 	if err != nil {
 		response.InternalServerError(w, err)
 		return
@@ -769,18 +701,6 @@ func (h *AgentHandler) RemoveMcpServer(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// RotateAgentToken handles the POST /workspaces/{workspaceId}/agents/{id}/rotate-token endpoint, rotating the AI agent's API Token.
-//
-// Parameters:
-//   - w: HTTP response writer
-//   - r: HTTP request
-//
-// Response:
-//   - 200: successfully returns the new API Token
-//   - 400: invalid agent ID
-//   - 401: not authenticated
-//   - 403: no permission
-//   - 404: agent does not exist
 // --- Agent permission management ---
 
 // GetInProgressNodes handles the GET /agents/{id}/in-progress-nodes endpoint,
@@ -835,9 +755,12 @@ func (h *AgentHandler) ListExecutions(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := int32(10)
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
-			limit = int32(n)
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 100 {
+			response.BadRequest(w, "limit must be an integer between 1 and 100")
+			return
 		}
+		limit = int32(n)
 	}
 
 	executions, err := service.NewAgentService(h.Svc).ListExecutions(r.Context(), agentID, limit)
@@ -849,4 +772,198 @@ func (h *AgentHandler) ListExecutions(w http.ResponseWriter, r *http.Request) {
 		executions = []types.AgentExecution{}
 	}
 	response.JSON(w, r, executions)
+}
+
+// grantRoleRequest grant role request body.
+type grantRoleRequest struct {
+	Role string `json:"role"` // predefined role name (developer/reviewer/ops)
+}
+
+// GrantRole handles POST /workspaces/{workspaceId}/agents/{id}/grant-role,
+// granting all permissions of a predefined role to the agent.
+//
+// Request body:
+//   - role: string, predefined role name (required)
+//
+// Response:
+//   - 200: {"message": "role granted"}
+//   - 400: missing/unknown role
+func (h *AgentHandler) GrantRole(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if err := requireAdminAccess(claims); err != nil {
+		response.Forbidden(w, err.Error())
+		return
+	}
+
+	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
+		return
+	}
+
+	var req grantRoleRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.Role == "" {
+		response.BadRequest(w, "role is required")
+		return
+	}
+
+	permSvc := service.NewAgentPermissionService(h.Svc)
+	if _, ok := types.AgentRoles[req.Role]; !ok {
+		response.BadRequest(w, "unknown role: " + req.Role)
+		return
+	}
+	if err := permSvc.GrantRolePermissions(r.Context(), agentID, req.Role, claims.UserID); err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, map[string]string{"message": "role granted"})
+}
+
+// ListPermissions handles GET /workspaces/{workspaceId}/agents/{id}/permissions,
+// listing the agent's granted permissions.
+//
+// Response:
+//   - 200: permission list
+//   - 400: invalid agent id
+func (h *AgentHandler) ListPermissions(w http.ResponseWriter, r *http.Request) {
+	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
+		return
+	}
+
+	perms, err := service.NewAgentPermissionService(h.Svc).ListPermissions(r.Context(), agentID)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, perms)
+}
+
+// grantPermissionRequest grant permission request body.
+type grantPermissionRequest struct {
+	Permission string `json:"permission"` // permission string (e.g. task:approve)
+}
+
+// GrantPermission handles POST /workspaces/{workspaceId}/agents/{id}/permissions,
+// granting one permission to the agent at the workspace-wide resource scope.
+//
+// Request body:
+//   - permission: string, permission name (required)
+//
+// Response:
+//   - 201: the granted permission record
+//   - 400: missing/unknown permission
+func (h *AgentHandler) GrantPermission(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if err := requireAdminAccess(claims); err != nil {
+		response.Forbidden(w, err.Error())
+		return
+	}
+
+	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
+		return
+	}
+
+	var req grantPermissionRequest
+	if err := render.Decode(r, &req); err != nil {
+		response.BadRequest(w, err.Error())
+		return
+	}
+	if req.Permission == "" {
+		response.BadRequest(w, "permission is required")
+		return
+	}
+	if !types.IsValidAgentPermission(req.Permission) {
+		response.BadRequest(w, "unknown permission: "+req.Permission)
+		return
+	}
+
+	permSvc := service.NewAgentPermissionService(h.Svc)
+	perm, err := permSvc.Grant(r.Context(), agentID, req.Permission, "*", nil, claims.UserID)
+	if err != nil {
+		if isUniqueViolation(err) {
+			response.Conflict(w, "the agent already holds this permission at the workspace scope")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	response.JSON(w, r, perm)
+}
+
+// RevokePermission handles DELETE /workspaces/{workspaceId}/agents/{id}/permissions/{permission},
+// revoking every workspace-wide grant of the named permission from the agent.
+//
+// Response:
+//   - 204: revoked (or nothing to revoke)
+//   - 400: invalid ids
+func (h *AgentHandler) RevokePermission(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if err := requireAdminAccess(claims); err != nil {
+		response.Forbidden(w, err.Error())
+		return
+	}
+
+	agentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid agent id")
+		return
+	}
+	if checkAgentWorkspace(h.Svc, w, r, agentID) == nil {
+		return
+	}
+	permission := chi.URLParam(r, "permission")
+	if permission == "" {
+		response.BadRequest(w, "permission is required")
+		return
+	}
+
+	permSvc := service.NewAgentPermissionService(h.Svc)
+	perms, err := permSvc.ListPermissions(r.Context(), agentID)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	for _, p := range perms {
+		if p.Permission == permission {
+			permID, err := uuid.Parse(p.ID)
+			if err != nil {
+				continue
+			}
+			if err := permSvc.Revoke(r.Context(), permID); err != nil {
+				response.InternalServerError(w, err)
+				return
+			}
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

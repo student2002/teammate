@@ -78,6 +78,53 @@ describe("mapTaskFromApi", () => {
     expect(task.title).toBe("hi");
     expect(task.nodesStatus).toEqual(["pending"]);
   });
+
+  it("maps the current node's reservation to task level with the agent name", () => {
+    const expires = "2099-01-01T00:00:00Z";
+    const task = mapTaskFromApi(
+      {
+        task: { id: 8, title: "reserved", status: "active" },
+        nodes: [
+          { status: "completed", node_type: "standard", name: "n1" },
+          {
+            status: "pending",
+            node_type: "standard",
+            name: "n2",
+            reserved_for_agent_id: "agent-uuid-1",
+            reservation_expires_at: expires,
+          },
+        ],
+      },
+      [{ id: "agent-uuid-1", name: "claude-01" }]
+    );
+    expect(task.reservedForAgent).toBe("claude-01");
+    expect(task.reservationExpiresAt).toBe(expires);
+  });
+
+  it("falls back to the raw agent id when the agent list lacks it", () => {
+    const task = mapTaskFromApi({
+      task: { id: 9, title: "reserved", status: "active" },
+      nodes: [
+        {
+          status: "pending",
+          node_type: "standard",
+          name: "n1",
+          reserved_for_agent_id: "agent-uuid-2",
+          reservation_expires_at: "2099-01-01T00:00:00Z",
+        },
+      ],
+    });
+    expect(task.reservedForAgent).toBe("agent-uuid-2");
+  });
+
+  it("keeps reservation null when no node holds one", () => {
+    const task = mapTaskFromApi({
+      task: { id: 10, title: "plain", status: "active" },
+      nodes: [{ status: "pending", node_type: "standard", name: "n1" }],
+    });
+    expect(task.reservedForAgent).toBeNull();
+    expect(task.reservationExpiresAt).toBeNull();
+  });
 });
 
 describe("mapTemplateFromApi", () => {

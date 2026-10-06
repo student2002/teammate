@@ -17,9 +17,9 @@ var memoryListCmd = &cobra.Command{
 	Short:   "List memories",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -35,9 +35,9 @@ var memorySearchCmd = &cobra.Command{
 	Short: "Search memories",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
 		client := newAPIClient()
 		var result interface{}
@@ -52,12 +52,15 @@ var memoryAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Add a memory",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		title, _ := cmd.Flags().GetString("title")
 		content, _ := cmd.Flags().GetString("content")
 
-		if wsID == "" || title == "" || content == "" {
-			return fmt.Errorf("--workspace, --title, and --content are required")
+		if title == "" || content == "" {
+			return fmt.Errorf("--title and --content are required")
 		}
 
 		body := map[string]string{

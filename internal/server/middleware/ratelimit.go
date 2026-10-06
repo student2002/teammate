@@ -244,10 +244,12 @@ var (
 		KeyPrefix:   "api",
 	}
 
-	// AgentHeartbeatRateLimit limits agent heartbeat requests (1 per 10 seconds) to prevent heartbeat storms.
+	// AgentHeartbeatRateLimit guards against heartbeat storms while staying
+	// well above the normal 30s cadence (and short bursts after reconnects):
+	// 12 requests per minute per daemon principal.
 	AgentHeartbeatRateLimit = RateLimitConfig{
-		Window:      10 * time.Second,
-		MaxRequests: 1,
+		Window:      1 * time.Minute,
+		MaxRequests: 12,
 		KeyPrefix:   "agent-heartbeat",
 	}
 

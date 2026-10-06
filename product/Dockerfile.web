@@ -19,6 +19,9 @@ ARG NODE_IMAGE=node:22-alpine
 FROM $NODE_IMAGE AS deps
 
 ARG NPM_REGISTRY
+# COREPACK_NPM_REGISTRY must carry the same mirror: corepack fetches the pnpm
+# binary through its own registry client and ignores npm's registry config.
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
 
 WORKDIR /app
@@ -32,6 +35,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 FROM $NODE_IMAGE AS builder
 
 ARG NPM_REGISTRY
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
 
 WORKDIR /app

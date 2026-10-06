@@ -40,15 +40,14 @@ type BoardColumn struct {
 	Tasks []BoardColumnTask `json:"tasks"` // the task list in this column
 }
 
-// ColumnDefs defines the 4 columns of the board and their display order.
-//
-// The board has a fixed set of 4 columns; the rejected status is uniformly placed in the manual_intervention column.
+// ColumnDefs defines the 5 columns of the board and their display order.
 var ColumnDefs = []struct {
 	Key   string
 	Label string
 }{
 	{"pending", "Pending"},
 	{"in_progress", "In Progress"},
+	{"rejected", "Rejected"},
 	{"completed", "Completed"},
 	{"manual_intervention", "Manual Intervention Required"},
 }
@@ -224,7 +223,7 @@ func MapNodeStatusToColumn(status db.TaskNodeStatus) string {
 	case db.TaskNodeStatusCompleted:
 		return "completed"
 	case db.TaskNodeStatusRejected:
-		return "manual_intervention"
+		return "rejected"
 	case db.TaskNodeStatusManualIntervention:
 		return "manual_intervention"
 	default:

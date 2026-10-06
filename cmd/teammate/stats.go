@@ -31,9 +31,13 @@ var statsAgentCmd = &cobra.Command{
 	Short: "Get agent statistics",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
+		}
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Get(fmt.Sprintf("/api/agents/%s/stats", args[0]), &result); err != nil {
+		if err := client.Get(fmt.Sprintf("/api/workspaces/%s/agents/%s/stats", wsID, args[0]), &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -41,6 +45,7 @@ var statsAgentCmd = &cobra.Command{
 }
 
 func init() {
+	statsAgentCmd.Flags().String("workspace", "", "workspace ID")
 	statsCmd.AddCommand(statsProjectCmd)
 	statsCmd.AddCommand(statsAgentCmd)
 	rootCmd.AddCommand(statsCmd)

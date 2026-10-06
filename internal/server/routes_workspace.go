@@ -83,9 +83,14 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 			r.Mount("/mcp-servers", handler.NewMcpHandler(svc).Routes())
 		})
 
-		// Daemons (agentd instances) — member+ write, viewer+ read
+		// Daemons (agentd instances) — human operators only: member+ write,
+		// viewer+ read; agent principals are always rejected (daemon admin is
+		// team-management surface, never reachable by delivered instances).
 		r.Group(func(r chi.Router) {
-			r.Use(permByMethod)
+			r.Use(methodBasedPerm(
+				svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member", "viewer"}, "", reg.agentPerm),
+				svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member"}, "", reg.agentPerm),
+			))
 			r.Mount("/daemons", handler.NewDaemonHandler(svc).Routes())
 		})
 

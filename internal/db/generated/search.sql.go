@@ -13,7 +13,7 @@ import (
 )
 
 const searchAgentsByWorkspace = `-- name: SearchAgentsByWorkspace :many
-SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, git_name, git_email, daemon_id, origin, created_at, updated_at
+SELECT id, workspace_id, name, provider, instructions, model, status, custom_env, extra_args, persona_key, git_name, git_email, daemon_id, origin, created_at, updated_at
 FROM agents
 WHERE workspace_id = $1
   AND name ILIKE $2
@@ -44,6 +44,7 @@ func (q *Queries) SearchAgentsByWorkspace(ctx context.Context, arg SearchAgentsB
 			&i.Status,
 			&i.CustomEnv,
 			pq.Array(&i.ExtraArgs),
+			&i.PersonaKey,
 			&i.GitName,
 			&i.GitEmail,
 			&i.DaemonID,
@@ -66,7 +67,7 @@ func (q *Queries) SearchAgentsByWorkspace(ctx context.Context, arg SearchAgentsB
 
 const searchTasksByWorkspace = `-- name: SearchTasksByWorkspace :many
 
-SELECT t.id, t.project_id, t.workflow_name, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
+SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
 FROM tasks t
 JOIN projects p ON p.id = t.project_id
 WHERE p.workspace_id = $1
@@ -93,6 +94,7 @@ func (q *Queries) SearchTasksByWorkspace(ctx context.Context, arg SearchTasksByW
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -123,7 +125,7 @@ func (q *Queries) SearchTasksByWorkspace(ctx context.Context, arg SearchTasksByW
 }
 
 const searchTasksByWorkspaceAndProject = `-- name: SearchTasksByWorkspaceAndProject :many
-SELECT t.id, t.project_id, t.workflow_name, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
+SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
 FROM tasks t
 JOIN projects p ON p.id = t.project_id
 WHERE p.workspace_id = $1
@@ -151,6 +153,7 @@ func (q *Queries) SearchTasksByWorkspaceAndProject(ctx context.Context, arg Sear
 			&i.ID,
 			&i.ProjectID,
 			&i.WorkflowName,
+			&i.WorkflowTemplateID,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,

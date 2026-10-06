@@ -1,7 +1,7 @@
 "use client";
 // 工作区布局：侧边栏导航、全局搜索、通知中心、主题切换与工作区切换。
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations, useFormatter, useLocale } from "next-intl";
@@ -63,6 +63,19 @@ export default function WorkspaceLayout({
   const [creatingWs, setCreatingWs] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const notifAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  // 点击通知浮层外部时关闭它
+  useEffect(() => {
+    if (!showNotifications) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (notifAnchorRef.current && !notifAnchorRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [showNotifications]);
   const [notifications, setNotifications] = useState<Array<{id: string; type: string; title: string; description: string; created_at: string; task_id?: number}>>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -436,7 +449,7 @@ export default function WorkspaceLayout({
           <div className="flex-1" />
 
           {/* 通知铃铛 */}
-          <div className="relative">
+          <div className="relative" ref={notifAnchorRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="relative w-9 h-9 rounded-lg bg-surface-2/60 hover:bg-surface-3 flex items-center justify-center transition-colors-fast btn-press"

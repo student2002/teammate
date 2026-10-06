@@ -1,5 +1,7 @@
 "use client";
-// 代理列表页：代理由守护进程上报自动出现，按所属守护进程分组展示，此处管理其能力配置（指令/技能/MCP/Git 身份）
+// 代理列表页：实例全部在本页（守护进程分组下）创建并经 desired_agents 下发到机器，
+// 按所属守护进程分组展示，此处管理其能力配置（指令/技能/MCP/Git 身份）。
+// 守护进程只汇报机器信息、工具检测与实例运行状态，不上报实例清单。
 // 与守护进程的接入（创建/token）、删除。
 
 import React, { useState, useEffect, useRef } from "react";
@@ -30,6 +32,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/use-permission";
 import { useTranslations } from "next-intl";
 import type {
   MappedAgent,
@@ -86,7 +89,7 @@ function AgentStatusBadge({ status }: { status: AgentStatus | string }) {
 }
 
 // ==========================================
-// 在工具运行时节点下创建代理实例(Web 端创建,下发到该机器由 agentd 收编)
+// 在工具运行时节点下创建代理实例(Web 端创建,下发到该机器由 agentd 物化)
 // 三层模型:agentd(机器)→ 工具运行时(检测到的 provider)→ agent 实例
 // ==========================================
 const PROVIDER_LABELS: Record<string, string> = {
@@ -109,16 +112,23 @@ function AddAgentModal({
   onClose,
   saving,
   error,
+  existingPersonas,
 }: {
   target: AddAgentTarget;
-  onSave: (data: { name: string; provider: string }) => void;
+  onSave: (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => void;
   onClose: () => void;
   saving: boolean;
   error: string | null;
+  existingPersonas: string[];
 }) {
   const t = useTranslations("agents.addDialog");
   const [name, setName] = useState("");
+  const [personaKey, setPersonaKey] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [gitName, setGitName] = useState("");
+  const [gitEmail, setGitEmail] = useState("");
   const providerLabel = PROVIDER_LABELS[target.provider] || target.provider;
+  const formValid = name.trim() !== "" && gitName.trim() !== "" && gitEmail.trim() !== "";
 
   return (
     <div
@@ -142,9 +152,6 @@ function AddAgentModal({
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-sm text-fg-subtle leading-relaxed">
-            {t("desc", { provider: providerLabel })}
-          </p>
           <div>
             <label className="block text-sm font-medium text-fg-muted mb-2">
               {t("nameLabel")} <span className="text-danger-fg">*</span>
@@ -158,6 +165,64 @@ function AddAgentModal({
             />
             <p className="text-[11px] text-fg-faint mt-1.5">{t("nameHint")}</p>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("personaKeyLabel")}
+            </label>
+            <input
+              value={personaKey}
+              onChange={(e) =>
+                setPersonaKey(e.target.value.trim().toLowerCase())
+              }
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg font-mono focus:outline-none focus:border-primary"
+              placeholder={t("personaKeyPlaceholder")}
+              list="persona-key-options"
+            />
+            <datalist id="persona-key-options">
+              {existingPersonas.map((key) => (
+                <option key={key} value={key} />
+              ))}
+            </datalist>
+            <p className="text-[11px] text-fg-faint mt-1.5">{t("personaKeyHint")}</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("instructionsLabel")}
+            </label>
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={3}
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary resize-y"
+              placeholder={t("instructionsPlaceholder")}
+            />
+            <p className="text-[11px] text-fg-faint mt-1.5">{t("instructionsHint")}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-fg-muted mb-2">
+                {t("gitNameLabel")} <span className="text-danger-fg">*</span>
+              </label>
+              <input
+                value={gitName}
+                onChange={(e) => setGitName(e.target.value)}
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+                placeholder={t("gitNamePlaceholder")}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-fg-muted mb-2">
+                {t("gitEmailLabel")} <span className="text-danger-fg">*</span>
+              </label>
+              <input
+                value={gitEmail}
+                onChange={(e) => setGitEmail(e.target.value.trim())}
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+                placeholder={t("gitEmailPlaceholder")}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-fg-faint">{t("gitHint")}</p>
           <div className="bg-bg/60 border border-line rounded-lg px-4 py-2.5 flex items-center justify-between">
             <span className="text-sm text-fg-subtle">{t("providerLabel")}</span>
             <span className="text-sm text-fg-muted font-mono">
@@ -180,13 +245,17 @@ function AddAgentModal({
           </button>
           <button
             onClick={() =>
-              name &&
+              formValid &&
               onSave({
                 name,
                 provider: target.provider,
+                personaKey,
+                instructions: instructions.trim(),
+                gitName: gitName.trim(),
+                gitEmail: gitEmail.trim(),
               })
             }
-            disabled={!name || saving}
+            disabled={!formValid || saving}
             className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
           >
             {saving ? (
@@ -979,6 +1048,26 @@ function AgentDetailModal({
           </>
         ) : (
           <div className="p-6 space-y-6">
+            {agent.personaKey && (
+              <div>
+                <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>{t("personaLabel")}</span>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(agent.personaKey || "")}
+                    className="text-[11px] px-2 py-0.5 bg-surface-2 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
+                    title={t("personaCopy")}
+                  >
+                    {t("personaCopy")}
+                  </button>
+                </div>
+                <div
+                  className="bg-bg border border-line rounded-lg px-4 py-2 text-sm text-fg-muted font-mono break-all select-all cursor-text"
+                  title={t("personaBadge", { key: agent.personaKey })}
+                >
+                  {agent.personaKey}
+                </div>
+              </div>
+            )}
             <div>
               <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
                 {t("identityLabel")}
@@ -1132,6 +1221,7 @@ export default function AgentsPage() {
   const t = useTranslations("agents");
   const td = useTranslations("daemons");
   const tEmpty = useTranslations("daemons.empty");
+  const { canEdit } = usePermission();
 
   const agents = useAppStore((s) => s.agents);
   const setAgents = useAppStore((s) => s.setAgents);
@@ -1260,13 +1350,20 @@ export default function AgentsPage() {
   };
 
   // Web 端在工具运行时节点下创建实例:server 记录后下发给该机器的 agentd,
-  // 列表先显示"待下发",agentd 收编上线由 10s 轮询自动呈现
-  const handleCreateAgent = async (data: { name: string; provider: string }) => {
+  // 列表先显示"待下发",agentd 物化上线由 10s 轮询自动呈现
+  const handleCreateAgent = async (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => {
     if (!addAgentTarget || !currentWorkspaceId) return;
     setAddingAgent(true);
     setAddAgentError(null);
     try {
-      await api.createDaemonAgent(currentWorkspaceId, addAgentTarget.daemon.id, data);
+      await api.createDaemonAgent(currentWorkspaceId, addAgentTarget.daemon.id, {
+        name: data.name,
+        provider: data.provider,
+        persona_key: data.personaKey,
+        instructions: data.instructions,
+        git_name: data.gitName,
+        git_email: data.gitEmail,
+      });
       setAddAgentTarget(null);
       const agentList = await api.listAgents(currentWorkspaceId);
       if (Array.isArray(agentList)) {
@@ -1401,17 +1498,14 @@ export default function AgentsPage() {
               <div className="text-xs text-fg-subtle flex items-center mt-1 font-mono">
                 <Terminal className="w-3 h-3 mr-1.5" /> {agent.tool}
               </div>
-              {agent.origin && (
-                <div className="mt-1.5">
-                  <span
-                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${
-                      agent.origin === "server"
-                        ? "bg-cyan-500/10 text-cyan-300"
-                        : "bg-surface-3/40 text-fg-subtle"
-                    }`}
-                  >
-                    {agent.origin === "server" ? t("originServer") : t("originDaemon")}
-                  </span>
+              {agent.personaKey && (
+                <div
+                  className="mt-1.5 text-[10px] font-mono text-fg-subtle bg-surface-3/40 rounded px-1.5 py-0.5 w-fit cursor-default"
+                  title={t("personaBadge", { key: agent.personaKey })}
+                >
+                  {(agent.personaKey.length > 12
+                    ? agent.personaKey.slice(0, 12) + "…"
+                    : agent.personaKey)}
                 </div>
               )}
             </div>
@@ -1503,7 +1597,8 @@ export default function AgentsPage() {
                 e.stopPropagation();
                 handleDelete(agent.id);
               }}
-              className="text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast"
+              disabled={!canEdit}
+              className="text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("deleteButton")}
             </button>
@@ -1524,7 +1619,8 @@ export default function AgentsPage() {
         </div>
         <button
           onClick={() => setShowCreateDaemon(true)}
-          className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast shadow-lg shadow-primary/20"
+          disabled={!canEdit}
+          className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Monitor className="w-5 h-5 mr-2" /> {td("addButton")}
         </button>
@@ -1553,7 +1649,8 @@ export default function AgentsPage() {
           </ol>
           <button
             onClick={() => setShowCreateDaemon(true)}
-            className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast"
+            disabled={!canEdit}
+            className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Monitor className="w-4 h-4 mr-2" /> {td("addButton")}
           </button>
@@ -1611,7 +1708,8 @@ export default function AgentsPage() {
                             setDeleteDaemonError(null);
                             setDeletingDaemon(daemon);
                           }}
-                          className="flex items-center text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast"
+                          disabled={!canEdit}
+                          className="flex items-center text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Trash2 className="w-3.5 h-3.5 mr-1" /> {td("deleteButton")}
                         </button>
@@ -1813,6 +1911,7 @@ export default function AgentsPage() {
             }}
             saving={addingAgent}
             error={addAgentError}
+            existingPersonas={[...new Set(agents.map((a) => a.personaKey).filter((k): k is string => !!k))]}
           />
         </ModalPortal>
       )}

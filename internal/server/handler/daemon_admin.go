@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 
+	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/server/response"
 	"github.com/teammate/server/internal/service"
 	"github.com/teammate/server/internal/types"
@@ -39,9 +40,9 @@ func (h *DaemonHandler) Routes() chi.Router {
 	return r
 }
 
-// daemonAgentSummary describes an agent instance reported by the daemon.
-// Populated once registration reporting lands; web-created pending agents
-// also surface here with status "pending".
+// daemonAgentSummary describes an agent instance bound to the daemon.
+// Web-created instances surface here immediately with status "pending" and
+// flip to online/busy once the daemon reports them in heartbeats.
 type daemonAgentSummary struct {
 	Name           string `json:"name"`
 	Provider       string `json:"provider"`
@@ -162,7 +163,7 @@ func (h *DaemonHandler) ListDaemons(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteDaemon handles DELETE /workspaces/{workspaceId}/daemons/{id}.
-// Reported agents go offline but keep their configuration.
+// Its instances go offline but keep their rows.
 func (h *DaemonHandler) DeleteDaemon(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
 	if err != nil {
@@ -207,18 +208,26 @@ func (h *DaemonHandler) RotateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 type createDaemonAgentRequest struct {
-	Name     string `json:"name"`
-	Provider string `json:"provider"`
+	Name         string `json:"name"`
+	Provider     string `json:"provider"`
+	Instructions string `json:"instructions"`
+	PersonaKey   string `json:"persona_key"`
+	GitName      string `json:"git_name"`
+	GitEmail     string `json:"git_email"`
 }
 
 // CreateDaemonAgent handles POST /workspaces/{workspaceId}/daemons/{id}/agents:
-// creates a web-pushed instance under the daemon's tool node. The provider must
-// be present in the daemon's detected-tools snapshot; the instance stays
-// "pending" until the daemon adopts it via registration reporting.
+// creates an instance under the daemon's tool node and grants it the default
+// permission set plus the developer role (the operator in the auth context is
+// the grantor). The provider must be present in the daemon's detected-tools
+// snapshot; git_name/git_email are required, instructions and persona_key are
+// optional (persona is generated when blank and immutable after creation);
+// the instance stays "pending" until delivered via desired_agents and
+// reported online by a heartbeat.
 //
 // Response:
 //   - 201: instance created (pending)
-//   - 400: invalid body, empty name, or provider not detected on the daemon
+//   - 400: invalid body, empty name, missing git identity, or provider not detected on the daemon
 //   - 404: daemon does not exist in this workspace
 //   - 409: an instance with the same name already exists on the daemon
 func (h *DaemonHandler) CreateDaemonAgent(w http.ResponseWriter, r *http.Request) {
@@ -238,14 +247,20 @@ func (h *DaemonHandler) CreateDaemonAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	agent, err := service.NewDaemonService(h.Svc).CreateAgent(r.Context(), workspaceID, daemonID, req.Name, req.Provider)
+	grantedBy := uuid.Nil
+	if claims, ok := svcmw.GetAuthFromContext(r.Context()); ok && claims.UserID != uuid.Nil {
+		grantedBy = claims.UserID
+	}
+
+	agent, err := service.NewDaemonService(h.Svc).CreateAgent(r.Context(), workspaceID, daemonID, req.Name, req.Provider, req.Instructions, req.PersonaKey, req.GitName, req.GitEmail, grantedBy)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate key") {
 			response.Conflict(w, "an instance with this name already exists on the daemon")
 			return
 		}
 		if strings.Contains(err.Error(), "not detected") || strings.Contains(err.Error(), "name is required") ||
-			strings.Contains(err.Error(), "belongs") {
+			strings.Contains(err.Error(), "belongs") || strings.Contains(err.Error(), "invalid persona_key") ||
+			strings.Contains(err.Error(), "git_name and git_email are required") {
 			response.BadRequest(w, err.Error())
 			return
 		}

@@ -21,7 +21,7 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
-	agent, _ := createTestAgent(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	proj := createTestProject(t, s, ws.ID)
 	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 

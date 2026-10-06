@@ -211,7 +211,9 @@ func (s *Server) buildRouter(svc *service.Service) chi.Router {
 			reg.registerAuthProtectedRoutes(r)
 
 			// Machine-side daemon API (daemon-token authenticated)
-			r.Mount("/daemons", handler.NewDaemonAPIHandler(svc).Routes())
+			daemonAPI := handler.NewDaemonAPIHandler(svc,
+				svcmw.RateLimitMiddleware(s.Redis, svcmw.AgentHeartbeatRateLimit, svcmw.UserKeyFunc))
+			r.Mount("/daemons", daemonAPI.Routes())
 
 			// Search, workspaces, projects, tasks, Agents, memories, templates, community, etc.
 			reg.registerWorkspaceRoutes(r)

@@ -195,7 +195,8 @@ type Agent struct {
 	GitEmail      string          `json:"git_email" db:"git_email"`        // Git commit author email
 	DaemonID      string          `json:"daemon_id,omitempty" db:"daemon_id"` // Reporting daemon (agentd instance); empty when unmanaged
 	DaemonName    string          `json:"daemon_name,omitempty" db:"daemon_name"` // Name of the reporting daemon
-	Origin        string          `json:"origin,omitempty" db:"origin"`       // Creation path: "daemon" (machine-reported) or "server" (web-pushed)
+	Origin        string          `json:"origin,omitempty" db:"origin"`       // Creation path: "server" (web-created); "daemon" is a legacy machine-report value no longer produced
+	PersonaKey    string          `json:"persona_key,omitempty" db:"persona_key"` // Cross-workspace memory identity; instances with the same key share one memory on one agentd machine
 	CreatedAt     time.Time       `json:"created_at" db:"created_at"`      // Creation time
 	UpdatedAt     time.Time       `json:"updated_at" db:"updated_at"`      // Update time
 }
@@ -328,6 +329,7 @@ type Task struct {
 	ID           int32      `json:"id" db:"id"`                     // Task ID (auto-increment integer)
 	ProjectID    string     `json:"project_id" db:"project_id"`     // Owning project ID
 	WorkflowName string     `json:"workflow_name" db:"workflow_name"` // Workflow name
+	WorkflowTemplateID *string `json:"workflow_template_id" db:"workflow_template_id"` // Creating template (nil for ad-hoc tasks)
 	Title        string     `json:"title" db:"title"`               // Task title
 	Description  string     `json:"description" db:"description"`   // Task description
 	Constraints  string     `json:"constraints" db:"constraints"`   // Constraints

@@ -48,8 +48,35 @@ func (h *TokenUsageHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
 	r.Post("/", h.ReportTokenUsage)
+	r.Get("/", h.GetTokenUsageByTask)
 
 	return r
+}
+
+// GetTokenUsageByTask handles the GET /tasks/{taskId}/token-usage endpoint, returning
+// the aggregated token usage (input/output/total/cost estimate) for the specified task.
+// Task-level access is enforced by the surrounding TaskAccessMiddleware.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameter taskId is the task ID
+//
+// Returns:
+//   - no return value, writes a JSON response via w, containing the task token usage summary or an error message
+func (h *TokenUsageHandler) GetTokenUsageByTask(w http.ResponseWriter, r *http.Request) {
+	taskIDStr := chi.URLParam(r, "taskId")
+	var taskID int32
+	if _, err := fmt.Sscanf(taskIDStr, "%d", &taskID); err != nil || taskID <= 0 {
+		response.BadRequest(w, "invalid task id")
+		return
+	}
+
+	summary, err := service.NewTokenUsageService(h.Svc).GetByTask(r.Context(), taskID)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, summary)
 }
 
 // ReportTokenUsage handles the POST /tasks/{taskId}/token-usage endpoint, where an Agent reports token usage data for the executing node.

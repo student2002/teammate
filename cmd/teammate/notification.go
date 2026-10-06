@@ -18,12 +18,11 @@ var notificationListCmd = &cobra.Command{
 	Short:   "List notifications",
 	Aliases: []string{"ls"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsID, _ := cmd.Flags().GetString("workspace")
-		memberID, _ := cmd.Flags().GetString("member")
-
-		if wsID == "" {
-			return fmt.Errorf("--workspace is required")
+		wsID, err := resolveWorkspaceID(cmd)
+		if err != nil {
+			return err
 		}
+		memberID, _ := cmd.Flags().GetString("member")
 
 		path := fmt.Sprintf("/api/workspaces/%s/notifications", wsID)
 		if memberID != "" {

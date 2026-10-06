@@ -209,10 +209,16 @@ func stringToInet(s string) pqtype.Inet {
 
 // ToDomainTask converts db.Task to types.Task.
 func ToDomainTask(t db.Task) (types.Task, error) {
+	wtplID := (*string)(nil)
+	if t.WorkflowTemplateID.Valid {
+		v := t.WorkflowTemplateID.UUID.String()
+		wtplID = &v
+	}
 	return types.Task{
-		ID:           t.ID,
-		ProjectID:    t.ProjectID.String(),
-		WorkflowName: t.WorkflowName,
+		ID:                t.ID,
+		ProjectID:         t.ProjectID.String(),
+		WorkflowName:      t.WorkflowName,
+		WorkflowTemplateID: wtplID,
 		Title:        t.Title,
 		Description:  t.Description.String,
 		Constraints:  t.Constraints.String,
@@ -268,6 +274,16 @@ func FromDomainCreateTaskParams(p types.CreateTaskParams) (db.CreateTaskParams, 
 		Labels:       p.Labels,
 		Sequence:     p.Sequence,
 		WorkflowName: p.WorkflowName,
+		WorkflowTemplateID: func() uuid.NullUUID {
+			if p.WorkflowTemplateID == nil {
+				return uuid.NullUUID{}
+			}
+			id, err := uuid.Parse(*p.WorkflowTemplateID)
+			if err != nil {
+				return uuid.NullUUID{}
+			}
+			return uuid.NullUUID{UUID: id, Valid: true}
+		}(),
 	}, nil
 }
 
@@ -667,6 +683,7 @@ func ToDomainAgent(a db.Agent) (types.Agent, error) {
 		GitEmail:      a.GitEmail.String,
 		DaemonID:      daemonID,
 		Origin:        a.Origin,
+		PersonaKey:    a.PersonaKey,
 		CreatedAt:     a.CreatedAt,
 		UpdatedAt:     a.UpdatedAt,
 	}, nil
@@ -707,25 +724,6 @@ func ToDomainAgentSlice(as []db.Agent) ([]types.Agent, error) {
 	return out, nil
 }
 
-// FromDomainCreateAgentParams converts types.CreateAgentParams to db.CreateAgentParams.
-func FromDomainCreateAgentParams(p types.CreateAgentParams) (db.CreateAgentParams, error) {
-	ws, err := stringToUUID(p.WorkspaceID)
-	if err != nil {
-		return db.CreateAgentParams{}, fmt.Errorf("convert workspace id: %w", err)
-	}
-	return db.CreateAgentParams{
-		WorkspaceID:  ws,
-		Name:         p.Name,
-		Provider:     db.AgentProvider(p.Provider),
-		Instructions: p.Instructions,
-		Model:        ptrToNullString(p.Model),
-		Status:       db.AgentStatus(p.Status),
-		CustomEnv:    rawToNullRaw(p.CustomEnv),
-		ExtraArgs:    p.ExtraArgs,
-		GitName:      ptrToNullString(p.GitName),
-		GitEmail:     ptrToNullString(p.GitEmail),
-	}, nil
-}
 
 // FromDomainUpdateAgentParams converts types.UpdateAgentParams to db.UpdateAgentParams.
 func FromDomainUpdateAgentParams(p types.UpdateAgentParams) (db.UpdateAgentParams, error) {
@@ -880,15 +878,16 @@ func FromDomainUpdateProjectParams(p types.UpdateProjectParams) (db.UpdateProjec
 
 // FromDomainListTasksParams converts types.ListTasksParams to db.ListTasksParams.
 //
-// Note: types.ListTasksParams currently only has a WorkspaceID field; the db version needs ProjectID and Status.
-// The caller must fill in Status at the service layer; here it is passed through as a zero value.
 func FromDomainListTasksParams(p types.ListTasksParams) (db.ListTasksParams, error) {
 	pid, err := stringToUUID(p.WorkspaceID)
 	if err != nil {
 		return db.ListTasksParams{}, fmt.Errorf("convert project id: %w", err)
 	}
-	// types.ListTasksParams has no status field; pass NULL (the SQL @status IS NULL branch matches all statuses)
-	return db.ListTasksParams{ProjectID: pid, Status: db.NullTaskStatus{}}, nil
+	params := db.ListTasksParams{ProjectID: pid, Status: db.NullTaskStatus{}}
+	if p.Status != nil {
+		params.Status = db.NullTaskStatus{TaskStatus: db.TaskStatus(*p.Status), Valid: true}
+	}
+	return params, nil
 }
 
 // FromDomainListTasksPaginatedParams converts types.ListTasksPaginatedParams to db.ListTasksPaginatedParams.
@@ -1324,7 +1323,16 @@ func FromDomainCreateTemplateNodeParams(p types.CreateTemplateNodeParams) (db.Cr
 	if err != nil {
 		return db.CreateTemplateNodeParams{}, fmt.Errorf("convert depends on: %w", err)
 	}
+	var nodeID uuid.NullUUID
+	if p.ID != nil {
+		if u, err := uuid.Parse(*p.ID); err == nil {
+			nodeID = uuid.NullUUID{UUID: u, Valid: true}
+		} else {
+			return db.CreateTemplateNodeParams{}, fmt.Errorf("convert template node id: %w", err)
+		}
+	}
 	return db.CreateTemplateNodeParams{
+		NodeID:          nodeID,
 		TemplateID:      tplID,
 		Name:            p.Name,
 		Description:     ptrToNullString(p.Description),

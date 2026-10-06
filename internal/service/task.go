@@ -23,21 +23,35 @@ type TaskService struct {
 	svc *Service
 }
 
+// GetTask fetches a single task by ID.
+//
+// Parameters:
+//   - ctx: request context
+//   - taskID: task ID
+//
+// Returns:
+//   - types.Task: the task record
+//   - error: task not found or query failure
+func (s *TaskService) GetTask(ctx context.Context, taskID int32) (types.Task, error) {
+	return s.svc.Store.GetTask(ctx, taskID)
+}
+
 // ParseDueDate parses a due date string, supporting RFC3339 and YYYY-MM-DD formats.
-// Returns sql.NullTime with Valid=false when parsing fails.
-// Allows the handler layer to avoid importing the store package directly.
-func ParseDueDate(dateStr *string) sql.NullTime {
+// A nil or empty input means "no due date supplied" and yields an invalid NullTime
+// with no error; any non-empty input must be parseable, otherwise an error is
+// returned so callers reject the request instead of silently clearing the due date.
+func ParseDueDate(dateStr *string) (sql.NullTime, error) {
 	if dateStr == nil || *dateStr == "" {
-		return sql.NullTime{}
+		return sql.NullTime{}, nil
 	}
 	parsed, err := time.Parse(time.RFC3339, *dateStr)
 	if err != nil {
 		parsed, err = time.Parse("2006-01-02", *dateStr)
 	}
 	if err != nil {
-		return sql.NullTime{}
+		return sql.NullTime{}, fmt.Errorf("invalid due_date %q: must be RFC3339 or YYYY-MM-DD", *dateStr)
 	}
-	return sql.NullTime{Time: parsed, Valid: true}
+	return sql.NullTime{Time: parsed, Valid: true}, nil
 }
 
 // NewTaskService creates a new TaskService instance.
@@ -69,6 +83,9 @@ type CreateTaskResult struct {
 //   - *CreateTaskResult: contains the Task and the generated node list
 //   - error: possible errors (template not found, database write failure)
 func (s *TaskService) Create(ctx context.Context, projectID uuid.UUID, params types.CreateTaskParams, workflowTemplateID uuid.UUID) (*CreateTaskResult, error) {
+	templateIDStr := workflowTemplateID.String()
+	params.WorkflowTemplateID = &templateIDStr
+
 	templateNodes, err := s.svc.Store.ListTemplateNodes(ctx, workflowTemplateID)
 	if err != nil {
 		return nil, fmt.Errorf("list template nodes: %w", err)

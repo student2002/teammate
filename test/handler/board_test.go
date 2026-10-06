@@ -53,12 +53,12 @@ func TestGetBoard5Columns(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected 'columns' array in response, got: %v", boardResult)
 	}
-	if len(columnsRaw) != 4 {
-		t.Fatalf("expected 4 columns, got %d", len(columnsRaw))
+	if len(columnsRaw) != 5 {
+		t.Fatalf("expected 5 columns, got %d", len(columnsRaw))
 	}
 
-	// Verify column keys in order (rejected goes to manual_intervention)
-	expectedKeys := []string{"pending", "in_progress", "completed", "manual_intervention"}
+	// Verify column keys in order (rejected is its own column)
+	expectedKeys := []string{"pending", "in_progress", "rejected", "completed", "manual_intervention"}
 	for i, colRaw := range columnsRaw {
 		col := colRaw.(map[string]interface{})
 		key := col["key"].(string)

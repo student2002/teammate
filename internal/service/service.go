@@ -185,9 +185,9 @@ func (s *Service) publishToAgent(ctx context.Context, agentID uuid.UUID, eventTy
 // Control events (interrupt/rollback/continuation-invite) must not be lost and
 // are buffered on the daemon stream, replayed via Last-Event-ID after reconnect.
 //
-// Steps:
-//  1. Send the event to the online daemon stream (best-effort delivery)
-//  2. Buffer the event on the daemon stream for offline replay
+// The daemon is resolved regardless of online state and the event goes through
+// a single Hub.Publish: online daemons get the live delivery, offline ones get
+// exactly one buffered copy replayed on reconnect.
 //
 // Parameters:
 //   - ctx: request context
@@ -195,8 +195,6 @@ func (s *Service) publishToAgent(ctx context.Context, agentID uuid.UUID, eventTy
 //   - eventType: control event type (e.g. task:interrupt/node:reject_rollback/node:continuation_invite)
 //   - data: event data (will be JSON-serialized)
 func (s *Service) PublishControlEvent(ctx context.Context, agentID uuid.UUID, eventType string, data interface{}) {
-	s.publishToAgent(ctx, agentID, eventType, data)
-
 	if s.Hub == nil || s.Store == nil {
 		return
 	}
@@ -218,7 +216,7 @@ func (s *Service) PublishControlEvent(ctx context.Context, agentID uuid.UUID, ev
 		Data:  withAgentEnvelope(agentID, dataBytes),
 	}
 
-	if err := s.Hub.BufferEvent(ctx, daemonSubscriberKey(daemonID), event); err != nil {
-		slog.Error("buffer control event for daemon", "daemon_id", daemonID, "event", eventType, "err", err)
+	if err := s.Hub.Publish(ctx, daemonSubscriberKey(daemonID), event); err != nil {
+		slog.Error("publish control event to daemon", "daemon_id", daemonID, "event", eventType, "err", err)
 	}
 }

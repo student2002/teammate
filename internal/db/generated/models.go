@@ -736,6 +736,7 @@ type Agent struct {
 	Status       AgentStatus           `db:"status" json:"status"`
 	CustomEnv    pqtype.NullRawMessage `db:"custom_env" json:"custom_env"`
 	ExtraArgs    []string              `db:"extra_args" json:"extra_args"`
+	PersonaKey   string                `db:"persona_key" json:"persona_key"`
 	GitName      sql.NullString        `db:"git_name" json:"git_name"`
 	GitEmail     sql.NullString        `db:"git_email" json:"git_email"`
 	DaemonID     uuid.NullUUID         `db:"daemon_id" json:"daemon_id"`
@@ -976,33 +977,26 @@ type Skill struct {
 	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
 }
 
-type SseEventBuffer struct {
-	ID        int64           `db:"id" json:"id"`
-	RuntimeID uuid.UUID       `db:"runtime_id" json:"runtime_id"`
-	EventType string          `db:"event_type" json:"event_type"`
-	EventData json.RawMessage `db:"event_data" json:"event_data"`
-	CreatedAt time.Time       `db:"created_at" json:"created_at"`
-}
-
 type Task struct {
-	ID           int32          `db:"id" json:"id"`
-	ProjectID    uuid.UUID      `db:"project_id" json:"project_id"`
-	WorkflowName string         `db:"workflow_name" json:"workflow_name"`
-	Title        string         `db:"title" json:"title"`
-	Description  sql.NullString `db:"description" json:"description"`
-	Constraints  sql.NullString `db:"constraints" json:"constraints"`
-	Type         TaskType       `db:"type" json:"type"`
-	Priority     TaskPriority   `db:"priority" json:"priority"`
-	Status       TaskStatus     `db:"status" json:"status"`
-	AuthorType   string         `db:"author_type" json:"author_type"`
-	AuthorID     uuid.UUID      `db:"author_id" json:"author_id"`
-	DueDate      sql.NullTime   `db:"due_date" json:"due_date"`
-	Labels       []string       `db:"labels" json:"labels"`
-	Sequence     int32          `db:"sequence" json:"sequence"`
-	ParentTaskID sql.NullInt32  `db:"parent_task_id" json:"parent_task_id"`
-	GitBranch    sql.NullString `db:"git_branch" json:"git_branch"`
-	CreatedAt    time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt    time.Time      `db:"updated_at" json:"updated_at"`
+	ID                 int32          `db:"id" json:"id"`
+	ProjectID          uuid.UUID      `db:"project_id" json:"project_id"`
+	WorkflowName       string         `db:"workflow_name" json:"workflow_name"`
+	WorkflowTemplateID uuid.NullUUID  `db:"workflow_template_id" json:"workflow_template_id"`
+	Title              string         `db:"title" json:"title"`
+	Description        sql.NullString `db:"description" json:"description"`
+	Constraints        sql.NullString `db:"constraints" json:"constraints"`
+	Type               TaskType       `db:"type" json:"type"`
+	Priority           TaskPriority   `db:"priority" json:"priority"`
+	Status             TaskStatus     `db:"status" json:"status"`
+	AuthorType         string         `db:"author_type" json:"author_type"`
+	AuthorID           uuid.UUID      `db:"author_id" json:"author_id"`
+	DueDate            sql.NullTime   `db:"due_date" json:"due_date"`
+	Labels             []string       `db:"labels" json:"labels"`
+	Sequence           int32          `db:"sequence" json:"sequence"`
+	ParentTaskID       sql.NullInt32  `db:"parent_task_id" json:"parent_task_id"`
+	GitBranch          sql.NullString `db:"git_branch" json:"git_branch"`
+	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type TaskLog struct {

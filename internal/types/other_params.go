@@ -294,6 +294,7 @@ type SearchTasksByWorkspaceAndProjectParams struct {
 // CreateTemplateNodeParams is the domain parameter struct for creating a workflow template node.
 type CreateTemplateNodeParams struct {
 	TemplateID      string          `json:"template_id"`
+	ID              *string         `json:"id"` // node identity; nil lets the database generate one. Stable ids keep depends_on references valid across node-list replacement.
 	Name            string          `json:"name"`
 	Description     *string         `json:"description"`
 	SortOrder       int32           `json:"sort_order"`

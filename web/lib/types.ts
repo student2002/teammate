@@ -260,6 +260,7 @@ export interface MappedAgent {
   // 上报来源:该代理由哪个守护进程上报
   daemonId?: string;
   daemonName?: string;
+  personaKey?: string;
   // 创建路径:"server" = Web 端在守护进程分组下创建并下发;"daemon" = 机器上 agentd 配置后上报
   origin?: string;
 }

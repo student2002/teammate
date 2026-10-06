@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -171,15 +172,37 @@ func (s *McpService) Update(ctx context.Context, id uuid.UUID, name, url, mcpTyp
 	return maskMCPServerEnvVars(server), nil
 }
 
-// Delete deletes an MCP server.
+// McpServerInUseError reports that the MCP server is still bound to agents;
+// deletion is refused until every binding is removed.
+type McpServerInUseError struct {
+	AgentNames []string
+}
+
+func (e *McpServerInUseError) Error() string {
+	return fmt.Sprintf("mcp server is bound to agents: %s", strings.Join(e.AgentNames, ", "))
+}
+
+// Delete deletes an MCP server. Servers still bound to agents are refused with
+// McpServerInUseError so callers can surface the occupying agent list.
 //
 // Parameters:
 //   - ctx: request context
 //   - id: MCP server ID
 //
 // Returns:
-//   - error: possible errors (server does not exist, database deletion failure)
+//   - error: possible errors (server in use, database deletion failure)
 func (s *McpService) Delete(ctx context.Context, id uuid.UUID) error {
+	agents, err := s.svc.Store.ListAgentsByMcpServer(ctx, id)
+	if err != nil {
+		return fmt.Errorf("list agents bound to mcp server: %w", err)
+	}
+	if len(agents) > 0 {
+		names := make([]string, 0, len(agents))
+		for _, a := range agents {
+			names = append(names, a.Name)
+		}
+		return &McpServerInUseError{AgentNames: names}
+	}
 	return s.svc.Store.DeleteMcpServer(ctx, id)
 }
 

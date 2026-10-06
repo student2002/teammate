@@ -95,22 +95,20 @@ func createTestProject(t *testing.T, s *store.Store, workspaceID string) types.P
 	return proj
 }
 
-func createTestAgent(t *testing.T, s *store.Store, workspaceID string) (types.Agent, string) {
+func createTestAgent(t *testing.T, s *store.Store, workspaceID string) types.Agent {
 	t.Helper()
-	model := "claude-3.5-sonnet"
-	agent, apiToken, err := s.CreateAgent(context.Background(), types.CreateAgentParams{
-		WorkspaceID:  workspaceID,
-		Name:         "agent-" + uuid.New().String()[:8],
-		Provider:     "claude",
-		Instructions: "test agent",
-		Model:        &model,
-		Status:       "offline",
-		ExtraArgs:    []string{},
-	})
+	ctx := context.Background()
+	wsUUID := uuid.MustParse(workspaceID)
+	daemon, _, err := s.CreateDaemon(ctx, wsUUID, "box-"+uuid.NewString()[:6])
 	if err != nil {
-		t.Fatalf("create agent: %v", err)
+		t.Fatalf("create daemon: %v", err)
 	}
-	return agent, apiToken
+	name := "agent-" + uuid.NewString()[:8]
+	agent, err := s.CreateDaemonAgent(ctx, wsUUID, daemon.ID, name, "claude", "", "persona-"+uuid.NewString()[:8], name, name+"@teammate.local")
+	if err != nil {
+		t.Fatalf("create daemon agent: %v", err)
+	}
+	return agent
 }
 
 func createTestWorkflowTemplate(t *testing.T, s *store.Store, workspaceID string, nodeCount int) (types.WorkflowTemplate, []types.WorkflowTemplateNode) {

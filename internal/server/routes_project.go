@@ -24,6 +24,9 @@ func (reg *routeRegistrar) registerProjectRoutes(r chi.Router) {
 		// Review
 		r.Mount("/review", handler.NewReviewHandler(svc).Routes())
 
+		// Stats
+		r.Get("/stats", handler.NewStatsHandler(svc).GetProjectStats)
+
 		// Git credentials (only create, view, modify are supported; deletion is not allowed, to keep task branches traceable)
 		r.Get("/git-credentials", handler.GitCredentialsHandler(svc))
 		r.Post("/git-credentials", handler.CreateGitCredentialHandler(svc))

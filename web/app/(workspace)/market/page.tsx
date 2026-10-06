@@ -829,7 +829,7 @@ export default function MarketPage() {
                   onClick={() => setImporting(wf)}
                   className="flex items-center px-4 py-1.5 bg-primary-strong/10 hover:bg-primary-strong/20 text-primary-fg border border-primary/30 rounded-lg text-sm font-medium transition-colors-fast btn-press"
                 >
-                  <Download className="w-4 h-4 mr-1.5" /> {t("import")}
+                  <Download className="w-4 h-4 mr-1.5" /> {t("importAction")}
                 </button>
               </div>
             </div>

@@ -20,6 +20,7 @@ const (
 	ErrCodeInternal           = "internal"            // Internal server error
 	ErrCodeConflict           = "conflict"            // Resource conflict (e.g. concurrent claim)
 	ErrCodeServiceUnavailable = "service_unavailable" // Service unavailable
+	ErrCodeTooManyRequests    = "too_many_requests"   // Rate limit exceeded or temporarily locked
 )
 
 // ErrNotFound is the domain-layer "resource not found" sentinel error.
@@ -47,6 +48,15 @@ var ErrNodeStateConflict = errors.New("node is not in the expected state")
 // IsNodeStateConflict reports whether the error chain contains a node-state conflict.
 func IsNodeStateConflict(err error) bool {
 	return errors.Is(err, ErrNodeStateConflict)
+}
+
+// ErrPermissionDenied indicates the authenticated principal lacks a required
+// resource-level permission. Handlers map it to 403.
+var ErrPermissionDenied = errors.New("permission denied")
+
+// IsPermissionDenied reports whether the error chain contains a permission denial.
+func IsPermissionDenied(err error) bool {
+	return errors.Is(err, ErrPermissionDenied)
 }
 
 // ErrorResponse is the standard API error-response format.

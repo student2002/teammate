@@ -4,7 +4,6 @@ package service_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"testing"
 
@@ -111,7 +110,7 @@ func TestCommentCreate_PublishesMentionTrigger(t *testing.T) {
 	if err := json.Unmarshal(events[0].Data, &payload); err != nil {
 		t.Fatalf("parse payload: %v", err)
 	}
-	if payload["task_id"] != fmt.Sprintf("%d", env.taskID) {
+	if payload["task_id"] != float64(env.taskID) {
 		t.Errorf("payload task_id = %v, want %d", payload["task_id"], env.taskID)
 	}
 	if payload["comment_id"] == "" || payload["comment_id"] == nil {

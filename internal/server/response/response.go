@@ -250,6 +250,17 @@ func Conflict(w http.ResponseWriter, message string) {
 	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeConflict, Message: message})
 }
 
+// TooManyRequests writes a 429 error response (rate limit exceeded or temporarily locked).
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - message: the error message shown to the caller
+func TooManyRequests(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusTooManyRequests)
+	json.NewEncoder(w).Encode(ErrorBody{Error: types.ErrCodeTooManyRequests, Message: message})
+}
+
 // InternalServerError writes a 500 error response, hiding internal error details in production.
 // Error details are logged to the server log for troubleshooting.
 //

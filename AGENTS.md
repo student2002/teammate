@@ -64,6 +64,13 @@ go test ./test/e2e/ -v -count=1                      # end-to-end
 
 All tests require Docker containers (Postgres + Redis) to be running.
 
+Test connection settings are centralized in `test/testconfig` and driven by environment variables (defaults match `product/docker-compose.yml`):
+
+- Granular PostgreSQL parts: `TEAMS_TEST_PG_HOST` (127.0.0.1), `TEAMS_TEST_PG_PORT` (15432), `TEAMS_TEST_PG_USER` (postgres), `TEAMS_TEST_PG_PASSWORD` (teammate), `TEAMS_TEST_PG_DATABASE` (teammate_test)
+- Full-DSN overrides (highest precedence, required when credentials contain URL-special characters): `TEAMS_TEST_DATABASE_URL`, `TEAMS_TEST_ADMIN_DATABASE_URL`, `TEAMS_TEST_REDIS_URL` (default `redis://127.0.0.1:16379/0`)
+
+Example: against an instance initialized with a different password, run `TEAMS_TEST_PG_PASSWORD=<pass> go test ./...` — no code changes needed.
+
 ## Architecture quick-ref
 
 Four-layer: `Handler → Service → Store → sqlc-generated DB code`
@@ -122,7 +129,7 @@ Configured in `sqlc.yaml` — these affect generated code:
 
 ## Database
 
-- Single consolidated migration: `internal/db/migrations/001_init.up.sql` (32 tables)
+- Single consolidated migration: `internal/db/migrations/001_init.up.sql` (31 tables)
 - 17 query files in `internal/db/queries/`
 - pgvector `vector(1536)` for semantic search on memories
 - Optimistic concurrency via `version` column on task_nodes

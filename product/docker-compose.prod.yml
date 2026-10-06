@@ -26,6 +26,12 @@
 #
 #   docker compose --build-arg GOPROXY=$GOPROXY --build-arg ALPINE_REPO=$ALPINE_REPO \
 #     -f product/docker-compose.prod.yml up -d
+#
+# Dev/prod isolation: this stack owns project name "teammate" (and the
+# teammate_pgdata volume initialized with TEAMS_DB_PASS), while the dev
+# infrastructure (product/docker-compose.yml) runs as project "teammate-dev"
+# with its own volume on ports 15432/16379. Host ports below therefore never
+# collide with the dev stack: postgres 25432, redis 26379, app 28080.
 # ==============================================================
 
 name: teammate
@@ -39,7 +45,7 @@ services:
       POSTGRES_PASSWORD: ${TEAMS_DB_PASS:?TEAMS_DB_PASS is required}
       POSTGRES_DB: teammate
     ports:
-      - "127.0.0.1:15432:5432"
+      - "127.0.0.1:25432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -54,7 +60,7 @@ services:
   redis:
     image: ${DOCKER_REGISTRY:-}redis:7-alpine
     ports:
-      - "127.0.0.1:16379:6379"
+      - "127.0.0.1:26379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -77,7 +83,7 @@ services:
     # 消除"服务已上线但表未建好"的窗口期。手动迁移命令见文件头部注释。
     entrypoint: ["sh", "-c", "teammate-server migrate --path /app/migrations && exec teammate-server"]
     ports:
-      - "${TEAMS_PORT:-8080}:8080"
+      - "${TEAMS_PORT:-28080}:8080"
     environment:
       TEAMS_PORT: "8080"
       TEAMS_DATABASE_URL: "postgres://postgres:${TEAMS_DB_PASS:?TEAMS_DB_PASS is required}@postgres:5432/teammate?sslmode=disable"

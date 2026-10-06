@@ -3,10 +3,10 @@
 -- name: CreateTask :one
 INSERT INTO tasks (
     project_id, title, description, constraints,
-    type, priority, status, author_type, author_id, due_date, labels, sequence, workflow_name
+    type, priority, status, author_type, author_id, due_date, labels, sequence, workflow_name, workflow_template_id
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11, $12, $13
+    $6, $7, $8, $9, $10, $11, $12, $13, sqlc.narg('workflow_template_id')::uuid
 ) RETURNING *;
 
 -- name: GetTask :one
@@ -14,22 +14,24 @@ SELECT * FROM tasks
 WHERE id = $1;
 
 -- name: ListTasks :many
+-- Without an explicit status the view is "active work": finished tasks from
+-- before today are hidden. An explicit status filter returns every matching
+-- task regardless of age.
 SELECT * FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('status')::task_status IS NULL OR status = sqlc.narg('status'))
-  AND NOT (
-    status IN ('completed', 'cancelled')
-    AND updated_at < CURRENT_DATE
+  AND (
+    sqlc.narg('status')::task_status IS NOT NULL
+    OR NOT (
+      status IN ('completed', 'cancelled')
+      AND updated_at < CURRENT_DATE
+    )
   )
 ORDER BY created_at DESC;
 
 -- name: ListAllTasks :many
 SELECT * FROM tasks
 WHERE project_id = $1
-  AND NOT (
-    status IN ('completed', 'cancelled')
-    AND updated_at < CURRENT_DATE
-  )
 ORDER BY created_at DESC;
 
 -- name: UpdateTask :one

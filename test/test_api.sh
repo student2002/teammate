@@ -101,10 +101,12 @@ echo ""
 echo "--- Agents ---"
 check "List Agents" GET "/api/workspaces/$WS_ID/agents" 200 ''
 
-AGENT_CREATE=$(curl -s -X POST "$BASE/api/workspaces/$WS_ID/agents" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{"name":"api-test-agent","provider":"claude","git_name":"API Agent","git_email":"api@test.com"}')
+# Instances are created in a daemon group: daemon + detected provider first.
+DAEMON_CREATE=$(curl -s -X POST "$BASE/api/workspaces/$WS_ID/daemons"     -H "Authorization: Bearer $TOKEN"     -H "Content-Type: application/json"     -d '{"name":"api-test-box"}')
+DAEMON_ID=$(echo "$DAEMON_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
+DAEMON_TOKEN=$(echo "$DAEMON_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['daemon_token'])" 2>/dev/null)
+curl -s -X POST "$BASE/api/daemons/register"     -H "X-API-Key: $DAEMON_TOKEN"     -H "Content-Type: application/json"     -d '{"device_name":"api-test-box","version":"1.0","providers":[{"provider":"claude","version":"1.0","installed":true}]}' > /dev/null
+AGENT_CREATE=$(curl -s -X POST "$BASE/api/workspaces/$WS_ID/daemons/$DAEMON_ID/agents"     -H "Authorization: Bearer $TOKEN"     -H "Content-Type: application/json"     -d '{"name":"api-test-agent","provider":"claude"}')
 AGENT_ID=$(echo "$AGENT_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 if [ -n "$AGENT_ID" ] && [ "$AGENT_ID" != "None" ]; then
     echo "  PASS [create agent $AGENT_ID]"

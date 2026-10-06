@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 type apiClient struct {
@@ -21,9 +23,10 @@ type apiClient struct {
 }
 
 type Credentials struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Email     string    `json:"email,omitempty"`
+	Token       string    `json:"token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Email       string    `json:"email,omitempty"`
+	WorkspaceID string    `json:"workspace_id,omitempty"`
 }
 
 func newAPIClient() *apiClient {
@@ -147,6 +150,19 @@ func credentialsPath() string {
 		return filepath.Join(".teammate", "credentials.json")
 	}
 	return filepath.Join(home, ".teammate", "credentials.json")
+}
+
+// resolveWorkspaceID returns the workspace ID for a command invocation: an
+// explicitly set --workspace flag wins; otherwise the workspace recorded at
+// login (auth login / workspace use) from the login response.
+func resolveWorkspaceID(cmd *cobra.Command) (string, error) {
+	if f := cmd.Flags().Lookup("workspace"); f != nil && f.Changed {
+		return f.Value.String(), nil
+	}
+	if creds, err := loadCredentials(); err == nil && creds.WorkspaceID != "" {
+		return creds.WorkspaceID, nil
+	}
+	return "", fmt.Errorf("--workspace is required (or run 'teammate auth login' / 'teammate workspace use' to remember one)")
 }
 
 func saveCredentials(creds *Credentials) error {

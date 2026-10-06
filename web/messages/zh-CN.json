@@ -176,7 +176,8 @@
   "workflows": {
     "page": {
       "newTemplateName": "新建自定义模板",
-      "newTemplateDesc": "在此输入模板描述..."
+      "newTemplateDesc": "在此输入模板描述...",
+      "defaultNodeName": "AI 加工处理"
     },
     "editor": {
       "title": "设计工作流程模板",
@@ -319,7 +320,27 @@
     "instructionCount": "{count} 个身份指令",
     "dependentSkills": "依赖技能",
     "dependentMcps": "依赖 MCP",
-    "import": "导入",
+    "importAction": "导入",
+    "import": {
+      "title": "导入工作流",
+      "failed": "导入失败",
+      "authorVersion": "作者: {author} · 版本: {version} · {downloads} 次下载",
+      "nodeSequenceLabel": "节点序列",
+      "requiredSkills": "所需技能",
+      "notInstalled": "未安装",
+      "requiredMcps": "所需 MCP",
+      "placeholder": "占位符",
+      "recommendedInstructions": "推荐的代理身份指令",
+      "mcpPlaceholderHint": "MCP 服务器仅创建占位符配置（URL 和凭据置空），需导入后手动填写。",
+      "cancel": "取消",
+      "confirmImport": "确认导入",
+      "importingTitle": "正在导入",
+      "importingDesc": "创建工作流模板、检测缺失依赖...",
+      "successTitle": "导入成功",
+      "successDesc": "工作流模板「{name}」已添加到工作区。",
+      "successHint": "技能与 MCP 服务器未自动创建，请在工作流模板中按需配置。",
+      "finish": "完成"
+    },
     "unknownAuthor": "未知",
     "publishFailed": "发布失败，请检查服务端日志",
     "publish": {
@@ -346,31 +367,13 @@
       "defaultAuthor": "我",
       "cancel": "取消",
       "publish": "发布"
-    },
-    "import": {
-      "title": "导入工作流",
-      "failed": "导入失败",
-      "authorVersion": "作者: {author} · 版本: {version} · {downloads} 次下载",
-      "nodeSequenceLabel": "节点序列",
-      "requiredSkills": "所需技能",
-      "notInstalled": "未安装",
-      "requiredMcps": "所需 MCP",
-      "placeholder": "占位符",
-      "recommendedInstructions": "推荐的代理身份指令",
-      "mcpPlaceholderHint": "MCP 服务器仅创建占位符配置（URL 和凭据置空），需导入后手动填写。",
-      "cancel": "取消",
-      "confirmImport": "确认导入",
-      "importingTitle": "正在导入",
-      "importingDesc": "创建工作流模板、检测缺失依赖...",
-      "successTitle": "导入成功",
-      "successDesc": "工作流模板「{name}」已添加到工作区。",
-      "successHint": "技能与 MCP 服务器未自动创建，请在工作流模板中按需配置。",
-      "finish": "完成"
     }
   },
   "skills": {
     "title": "Skill & MCP 配置",
     "subtitle": "管理工作区可用的技能和 MCP 服务器，AI 代理只能关联已配置的 Skill 和 MCP。",
+    "statusActive": "启用",
+    "statusInactive": "禁用",
     "category": {
       "frontend": "前端",
       "backend": "后端",
@@ -384,7 +387,8 @@
       "storage": "存储",
       "code": "代码",
       "database": "数据库",
-      "service": "服务"
+      "service": "服务",
+      "uncategorized": "未分类"
     },
     "skillsLabel": "技能",
     "categoryCount": "{count} 个分类",
@@ -448,25 +452,36 @@
   },
   "agents": {
     "title": "AI 代理集市",
-    "subtitle": "{count} 个代理 · 按所属守护进程分组，由守护进程上报自动出现，点击卡片查看详情或编辑能力配置。",
-    "fromDaemon": "来自守护进程",
+    "subtitle": "{count} 个代理 · 按所属机器分组。点击卡片查看详情或编辑能力配置。",
+    "fromDaemon": "所属机器",
     "missingGit": "待配置 Git 身份",
     "missingSkills": "未绑定技能",
     "ungrouped": "未归组代理（守护进程未知或已删除）",
     "addAgent": "添加代理",
     "addAgentFailed": "创建代理失败，请重试",
-    "originServer": "网页创建 · 下发",
-    "originDaemon": "本机上报",
     "addDialog": {
       "title": "在 {daemon} · {provider} 下添加实例",
-      "desc": "实例将以 {provider} 运行,下发给该守护进程所在机器,由 agentd 收编后自动上线;也可以直接在机器上的 agentd 配置中添加(自动上报)。两条路径效果一致。",
       "nameLabel": "实例名称",
       "namePlaceholder": "如: 代码助手 / 审核员",
-      "nameHint": "名称即实例在 agentd 本地配置中的标识,同一守护进程内不可重复",
+      "nameHint": "名称是实例在机器上的标识，同一守护进程内不可重复",
+      "personaKeyLabel": "记忆标识",
+      "personaKeyPlaceholder": "可选，如 shared.brain-1（留空自动生成）",
+      "personaKeyHint": "实例的跨空间记忆标识：填入与另一空间实例相同的标识，两实例即共用同一份记忆（在同一台机器的 agentd 上生效）；创建后不可修改。",
+      "instructionsLabel": "身份指令",
+      "instructionsPlaceholder": "可选，如：你是一名严谨的后端实现者…（创建后可在详情中修改）",
+      "instructionsHint": "实例的身份提示词，注入每次执行上下文。",
+      "gitNameLabel": "Git 用户名",
+      "gitNamePlaceholder": "如: 张三",
+      "gitEmailLabel": "Git 邮箱",
+      "gitEmailPlaceholder": "如: zhangsan@corp.com",
+      "gitHint": "实例提交代码时的 Git 身份（user.name / user.email），必填。",
       "providerLabel": "运行工具",
       "cancel": "取消",
-      "submit": "创建并下发"
+      "submit": "创建"
     },
+    "personaBadge": "记忆标识 {key} · 与相同标识的实例共用记忆（同一台机器）",
+    "personaLabel": "记忆标识（创建后不可修改）",
+    "personaCopy": "复制",
     "cardSkills": "技能",
     "cardMcp": "MCP",
     "completedNodes": "完成节点",
@@ -481,7 +496,7 @@
       "busy": "忙碌中",
       "paused": "暂停接单",
       "offline": "离线",
-      "pending": "待下发"
+      "pending": "待上线"
     },
     "multiSelect": {
       "noOptions": "暂无可选项",
@@ -512,6 +527,9 @@
       "skillsLabel": "关联技能",
       "mcpLabel": "MCP 服务器",
       "tokenUsageLabel": "Token 用量",
+      "personaLabel": "记忆标识（创建后不可修改）",
+      "personaCopy": "复制",
+      "personaBadge": "记忆标识 {key} · 与相同标识的实例共用记忆（同一台机器）",
       "inputToken": "输入 Token",
       "outputToken": "输出 Token",
       "historyLabel": "近期执行历史",
@@ -525,8 +543,8 @@
     "noDevice": "未上报设备信息",
     "agentsCount": "{count} 个代理",
     "heartbeat": "心跳",
-    "noAgents": "该守护进程尚未上报任何代理——在机器上的 agentd 配置中添加 agents 后重启即会出现在这里。",
-    "noProviders": "该守护进程尚未上报工具检测——agentd 连接后会自动上报本机可用的编码工具。",
+    "noAgents": "该机器上还没有实例——在下方检测到的工具处点击「添加代理」创建。",
+    "noProviders": "该守护进程尚未上报工具检测，连接后会自动上报可用的编码工具。",
     "noInstances": "尚未创建实例,点击「添加代理」在此工具下创建。",
     "instancesCount": "{count} 个实例",
     "providerMissing": "工具未检测到",
@@ -537,7 +555,7 @@
     "createFailed": "创建守护进程失败，请重试",
     "rotateDialog": {
       "title": "重置守护进程 Token",
-      "confirm": "为 <span>{name}</span> 生成新 Token？旧 Token 立即失效，机器上的 agentd 必须更新配置（daemon.token）后才能重新连接；其下实例会短暂离线直至重连。",
+      "confirm": "为 <span>{name}</span> 生成新 Token？旧 Token 立即失效，机器上的 agentd 必须用新 Token 重新添加该空间连接后才能重新连接；其下实例会短暂离线直至重连。",
       "cancel": "取消",
       "confirmRotate": "确认重置"
     },
@@ -552,7 +570,7 @@
     },
     "create": {
       "title": "接入新守护进程",
-      "desc": "创建后获得一个 daemon token（仅展示一次）。把它配置到工作机上的 agentd，机器上的全部代理将由 agentd 启动时自动上报，无需逐个注册。",
+      "desc": "创建后获得一个 daemon token（仅展示一次）。工作机上的 agentd 用它注册该空间连接。",
       "nameLabel": "守护进程名称",
       "namePlaceholder": "如: dev-box-01",
       "cancel": "取消",
@@ -567,22 +585,22 @@
       "copy": "复制 Token",
       "stepsTitle": "使用步骤",
       "step1": "复制上方 Token，保存到安全位置",
-      "step2": "在工作机的 agentd 配置中将 <code>daemon.token</code> 设为此 Token",
-      "step3": "启动 <code>teammate-agentd</code>，其上报的代理会自动出现在「AI 代理」页",
+      "step2": "在工作机上执行 <code>teammate-agentd workspace add &lt;Token&gt; --name &lt;别名&gt;</code> 接入该空间",
+      "step3": "启动 <code>teammate-agentd</code> 完成注册，然后在「AI 代理」页创建实例",
       "close": "我已保存 Token，关闭"
     },
     "deleteDialog": {
       "title": "删除守护进程",
-      "confirm": "确定删除守护进程 <span>{name}</span> 吗？其上报的 {count} 个代理将全部离线（配置保留，重新接入后恢复）。",
+      "confirm": "确定删除守护进程 <span>{name}</span> 吗？其下 {count} 个实例将全部离线（配置保留，重新接入后恢复）。",
       "cancel": "取消",
       "confirmDelete": "确认删除"
     },
     "empty": {
       "title": "还没有接入守护进程",
-      "desc": "守护进程（agentd）运行在工作机上，一台机器一个。它用下发的 token 注册，并上报本机的全部代理——代理不再需要逐个注册。",
+      "desc": "守护进程（agentd）运行在工作机上，一台机器一个。它用 token 注册并汇报机器与工具状态。",
       "step1": "点击「接入新守护进程」，创建后会获得一个 daemon token（仅展示一次）",
-      "step2": "在工作机上安装并配置 agentd，把 token 写入 ~/.teammate/config.yaml",
-      "step3": "启动 agentd——它上报的代理会自动出现在「AI 代理」页，在那里配置指令/技能/MCP"
+      "step2": "在工作机上安装 agentd，执行 teammate-agentd workspace add &lt;Token&gt; 接入该空间",
+      "step3": "启动 agentd 完成注册，然后在「AI 代理」页创建实例并配置指令/技能/MCP"
     }
   },
   "members": {
@@ -705,28 +723,37 @@
       "title": "还没有历史任务",
       "desc": "这里汇总已结束（完成/取消）的任务与执行记录，方便回顾各节点做了什么。运行任务后会自动出现在此处。",
       "step1": "在一个「工作流模板」上点击「运行」发起任务",
-      "step2": "任务成功后返回本页查看历史执行详情"
+      "step2": "任务成功后返回本页查看历史执行详情",
+      "step3": "在任务详情查看各节点的执行摘要与产出",
+      "step4": "可按状态筛选或搜索定位历史任务"
     },
     "reviews": {
       "title": "待审查队列为空，很好",
       "desc": "工作流中的「审查节点」到达后必须由人类批准，不会自转。有需要你审批的任务时会出现在这里。",
       "step1": "当任务推进到 review 节点时，其会进入本队列",
-      "step2": "进入任务后点击「通过」放行，或「退回」要求返工"
+      "step2": "进入任务后点击「通过」放行，或「退回」要求返工",
+      "step3": "打开审查详情查看节点上下文与执行摘要",
+      "step4": "通过/退回决定任务流向，退回可选目标节点与理由"
     },
     "memory": {
       "title": "还没有共享记忆",
       "desc": "共享记忆是训练好的知识沉淀，供所有代理跨任务复用。你可以在这里查看代理写入的经验与教训。",
       "step1": "代理正常执行任务后会沉淀记忆条目",
-      "step2": "可用语义搜索检索过往经验，让后续任务少走弯路"
+      "step2": "可用语义搜索检索过往经验，让后续任务少走弯路",
+      "step3": "项目维度的经验沉淀，代理执行时自动检索参考",
+      "step4": "人工可增补/验证记忆，置信度影响检索优先级"
     },
     "skills": {
       "title": "配置技能与 MCP",
       "desc": "技能为代理注入领域能力（如如何对接某个柜台），MCP 服务器让代理调用外部工具。两者都能提升代理的实际效果。",
       "step1": "配置需要的技能与 MCP 服务器",
-      "step2": "回到「AI 代理」把技能/MCP 绑定到对应代理"
+      "step2": "回到「AI 代理」把技能/MCP 绑定到对应代理",
+      "step3": "在「工程设置」为目标工程绑定代理与审查员",
+      "step4": "发起任务,由代理执行并在「审查队列」完成审批"
     }
   },
   "dashboard": {
+    "loadError": "任务数据加载失败，正在自动重试…",
     "reassignDialog": {
       "title": "重新分配节点",
       "description": "选择要接管此节点的 AI 代理。节点将重置为待认领并保留给所选代理。",

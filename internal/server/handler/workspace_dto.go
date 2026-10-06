@@ -16,10 +16,11 @@ type createWorkspaceRequest struct {
 	IssuePrefix string `json:"issue_prefix"`
 }
 
-// updateWorkspaceRequest is the update workspace request body.
+// updateWorkspaceRequest is the update workspace request body. Fields are
+// pointers: a nil field keeps the stored value (partial update).
 type updateWorkspaceRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
 }
 
 // createMemberRequest is the create member request body.
@@ -35,6 +36,8 @@ type updateMemberRoleRequest struct {
 }
 
 // buildCreateWorkspaceParams builds types.CreateWorkspaceParams from the handler-layer input.
+// An empty issuePrefix falls back to the schema-level default "MUL": the
+// params struct always writes the column, so the DB default never applies.
 func buildCreateWorkspaceParams(
 	name string,
 	description string,
@@ -46,6 +49,9 @@ func buildCreateWorkspaceParams(
 		d := description
 		descPtr = &d
 	}
+	if issuePrefix == "" {
+		issuePrefix = "MUL"
+	}
 	return apitypes.CreateWorkspaceParams{
 		Name:        name,
 		Description: descPtr,
@@ -54,16 +60,25 @@ func buildCreateWorkspaceParams(
 	}
 }
 
-// buildUpdateWorkspaceParams builds types.UpdateWorkspaceParams from the handler-layer input.
+// buildUpdateWorkspaceParams builds types.UpdateWorkspaceParams from the
+// partial request fields merged over the stored workspace: nil request fields
+// keep the current values.
 func buildUpdateWorkspaceParams(
 	id uuid.UUID,
-	name string,
-	description string,
+	current apitypes.Workspace,
+	req updateWorkspaceRequest,
 ) apitypes.UpdateWorkspaceParams {
+	name := current.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+	description := current.Description
+	if req.Description != nil {
+		description = *req.Description
+	}
 	var descPtr *string
 	if description != "" {
-		d := description
-		descPtr = &d
+		descPtr = &description
 	}
 	return apitypes.UpdateWorkspaceParams{
 		ID:          id.String(),

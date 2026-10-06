@@ -2,6 +2,19 @@
 
 const BASE_URL = "/api";
 
+/** 后端非 2xx 响应：携带状态码与解析后的响应体（message 仍是可读错误文案） */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("token");
@@ -28,16 +41,18 @@ async function request<T = unknown>(
     // 先按文本读取，再尝试解析为 JSON
     const text = await res.text().catch(() => "");
     let errMsg = res.statusText;
+    let data: unknown;
     if (text) {
       try {
-        const data = JSON.parse(text);
-        errMsg = data.message || data.error || errMsg;
+        data = JSON.parse(text);
+        const parsed = data as { message?: string; error?: string };
+        errMsg = parsed.message || parsed.error || errMsg;
       } catch {
         // 不是 JSON，使用纯文本
         errMsg = text;
       }
     }
-    throw new Error(errMsg);
+    throw new ApiError(errMsg, res.status, data);
   }
   if (res.status === 204) return null as T;
   return res.json() as Promise<T>;
@@ -97,8 +112,6 @@ const api = {
     request("GET", `/workspaces/${wsId}/agents`),
   getAgent: (wsId: string, id: string) =>
     request("GET", `/workspaces/${wsId}/agents/${id}`),
-  createAgent: (wsId: string, data: Record<string, unknown>) =>
-    request("POST", `/workspaces/${wsId}/agents`, data),
   updateAgent: (wsId: string, id: string, data: Record<string, unknown>) =>
     request("PUT", `/workspaces/${wsId}/agents/${id}`, data),
   deleteAgent: (wsId: string, id: string) =>

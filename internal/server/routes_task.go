@@ -31,6 +31,9 @@ func (reg *routeRegistrar) registerTaskRoutes(r chi.Router) {
 		// Review (self-review check)
 		r.Mount("/review", handler.NewReviewHandler(svc).Routes())
 
+		// Subtasks
+		r.Mount("/subtasks", handler.NewSubtaskHandler(svc).Routes())
+
 		// Log message upload (agentd → API)
 		r.Post("/messages", handler.NewPostLogMessageHandler(s.Gateway, svc, reg.wsChk).ServeHTTP)
 

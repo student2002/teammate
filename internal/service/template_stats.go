@@ -31,10 +31,9 @@ type TemplateStatsResult struct {
 // GetStats retrieves the statistics for the specified workflow template, including usage count, average completion time, and reject rate.
 //
 // Steps:
-//  1. Get template info by template ID (to obtain the template name)
-//  2. Query statistics using the template name (GetTemplateStats queries by workflow_name)
-//  3. Handle type assertions (avgCompletionSeconds and rejectRate may be float64 or int64)
-//  4. Return the structured statistics
+//  1. Verify the template exists
+//  2. Query statistics aggregated by template id (rename-proof)
+//  3. Return the structured statistics
 //
 // Parameters:
 //   - ctx: request context
@@ -44,15 +43,14 @@ type TemplateStatsResult struct {
 //   - *TemplateStatsResult: template statistics
 //   - error: possible errors (template not found, database query failure)
 func (s *TemplateStatsService) GetStats(ctx context.Context, id uuid.UUID) (*TemplateStatsResult, error) {
-	template, err := s.svc.Store.GetWorkflowTemplate(ctx, id)
-	if err != nil {
+	if _, err := s.svc.Store.GetWorkflowTemplate(ctx, id); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("template not found")
 		}
 		return nil, fmt.Errorf("get workflow template: %w", err)
 	}
 
-	stats, err := s.svc.Store.GetTemplateStats(ctx, template.Name)
+	stats, err := s.svc.Store.GetTemplateStats(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("template not found")
