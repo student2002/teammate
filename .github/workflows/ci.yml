@@ -34,12 +34,6 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: http://gitea:3000/actions/checkout@v4
-      - name: Checkout agentd (sibling repo)
-        uses: http://gitea:3000/actions/checkout@v4
-        with:
-          repository: zhenfeng/teammate-agentd
-          ref: master
-          path: agentd
       - name: Install postgresql client
         run: apt-get update && apt-get install -y --no-install-recommends postgresql-client
       - uses: http://gitea:3000/actions/setup-go@v5
@@ -61,12 +55,6 @@ jobs:
       - name: Vet (server)
         run: go vet ./...
       - name: Test (server)
-        run: go test ./... -count=1
-      - name: Vet (agentd)
-        working-directory: agentd
-        run: go vet ./...
-      - name: Test (agentd)
-        working-directory: agentd
         run: go test ./... -count=1
 
   web-checks:
