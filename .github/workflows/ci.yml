@@ -15,7 +15,7 @@ jobs:
       GOPROXY: https://goproxy.cn,direct
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg17@sha256:feb68f4f15446397d8cac7f4fe48fe4586de83160d1fc48b46283312d1a33966
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: teammate
@@ -26,7 +26,7 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 10s --health-timeout 5s --health-retries 5
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
         ports:
           - "16379:6379"
         options: >-
