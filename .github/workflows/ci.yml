@@ -33,16 +33,16 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - uses: http://host.docker.internal:3000/actions/checkout@v4
+      - uses: http://gitea:3000/actions/checkout@v4
       - name: Checkout agentd (sibling repo)
-        uses: http://host.docker.internal:3000/actions/checkout@v4
+        uses: http://gitea:3000/actions/checkout@v4
         with:
           repository: zhenfeng/teammate-agentd
           ref: master
           path: agentd
       - name: Install postgresql client
         run: apt-get update && apt-get install -y --no-install-recommends postgresql-client
-      - uses: http://host.docker.internal:3000/actions/setup-go@v5
+      - uses: http://gitea:3000/actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
@@ -78,11 +78,11 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: http://host.docker.internal:3000/actions/checkout@v4
-      - uses: http://host.docker.internal:3000/pnpm/action-setup@v4
+      - uses: http://gitea:3000/actions/checkout@v4
+      - uses: http://gitea:3000/pnpm/action-setup@v4
         with:
           version: 10
-      - uses: http://host.docker.internal:3000/actions/setup-node@v4
+      - uses: http://gitea:3000/actions/setup-node@v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
@@ -96,8 +96,8 @@ jobs:
     env:
       GOPROXY: https://goproxy.cn,direct
     steps:
-      - uses: http://host.docker.internal:3000/actions/checkout@v4
-      - uses: http://host.docker.internal:3000/actions/setup-go@v5
+      - uses: http://gitea:3000/actions/checkout@v4
+      - uses: http://gitea:3000/actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
