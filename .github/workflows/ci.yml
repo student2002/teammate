@@ -35,14 +35,14 @@ jobs:
     steps:
       - uses: http://host.docker.internal:3000/actions/checkout@v4
       - name: Checkout agentd (sibling repo)
-        uses: actions/checkout@v4
+        uses: http://host.docker.internal:3000/actions/checkout@v4
         with:
           repository: zhenfeng/teammate-agentd
           ref: master
           path: agentd
       - name: Install postgresql client
         run: apt-get update && apt-get install -y --no-install-recommends postgresql-client
-      - uses: actions/setup-go@v5
+      - uses: http://host.docker.internal:3000/actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
@@ -75,10 +75,10 @@ jobs:
         working-directory: web
     steps:
       - uses: http://host.docker.internal:3000/actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: http://host.docker.internal:3000/pnpm/action-setup@v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: http://host.docker.internal:3000/actions/setup-node@v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
@@ -93,7 +93,7 @@ jobs:
       GOPROXY: https://goproxy.cn,direct
     steps:
       - uses: http://host.docker.internal:3000/actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: http://host.docker.internal:3000/actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
