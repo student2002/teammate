@@ -33,10 +33,10 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - uses: http://gitea:3000/actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Install postgresql client
         run: apt-get update && apt-get install -y --no-install-recommends postgresql-client
-      - uses: http://gitea:3000/actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
@@ -66,11 +66,11 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: http://gitea:3000/actions/checkout@v4
-      - uses: http://gitea:3000/pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
-      - uses: http://gitea:3000/actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
@@ -84,8 +84,8 @@ jobs:
     env:
       GOPROXY: https://goproxy.cn,direct
     steps:
-      - uses: http://gitea:3000/actions/checkout@v4
-      - uses: http://gitea:3000/actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: false
