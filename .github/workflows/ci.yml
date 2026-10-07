@@ -47,7 +47,11 @@ jobs:
           go-version: "1.26"
           cache: true
       - name: Create test database
-        run: PGPASSWORD=teammate psql -h localhost -p 15432 -U postgres -c "CREATE DATABASE teammate_test;"
+        run: PGPASSWORD=teammate psql -h postgres -p 5432 -U postgres -c "CREATE DATABASE teammate_test;"
+      - name: Point test suite at service containers
+        run: |
+          echo "TEAMS_TEST_DATABASE_URL=postgres://postgres:teammate@postgres:5432/teammate_test?sslmode=disable" >> $GITHUB_ENV
+          echo "TEAMS_TEST_REDIS_URL=redis://redis:6379/0" >> $GITHUB_ENV
       - name: Migrate (server)
         run: go run ./cmd/teammate-server migrate ./internal/db/migrations
       - name: Vet (server)
