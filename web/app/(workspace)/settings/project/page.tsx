@@ -1,22 +1,21 @@
 "use client";
 // 项目设置页：成员/审查员管理及 Git 凭据配置。
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import {
   Settings,
   Save,
   AlertTriangle,
   Plus,
   X,
-  Shield,
   Users,
   Trash2,
   GitBranch,
   Eye,
   EyeOff,
   Pencil,
+  Loader2,
 } from "lucide-react";
-import ModalPortal from "@/lib/ModalPortal";
 import { useTranslations } from "next-intl";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
@@ -51,6 +50,225 @@ interface ProjectReviewerRecord {
   member_id?: string;
 }
 
+// 新建工程的内联表单卡:空状态与主视图共用,原位展开不用弹窗
+function NewProjectCard({
+  onSave,
+  onClose,
+  saving,
+  error,
+}: {
+  onSave: (name: string, repoUrl: string) => void;
+  onClose: () => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const t = useTranslations("settings.project");
+  const [name, setName] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const valid = name.trim() !== "" && repoUrl.trim() !== "";
+
+  return (
+    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 shadow-sm transition-all">
+      <div className="flex justify-between items-center pb-3 border-b border-line">
+        <h3 className="text-sm font-bold text-fg flex items-center">
+          <Plus className="w-4 h-4 mr-2 text-primary-fg" />
+          {t("newProject")}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          title={t("cancel")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-3.5 mt-4">
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("projectName")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            placeholder={t("projectNamePlaceholder")}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("repoUrl")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={repoUrl}
+            onChange={(e) => setRepoUrl(e.target.value)}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            placeholder="https://github.com/org/repo.git"
+          />
+        </div>
+        {error && (
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 pt-4 border-t border-line flex justify-end gap-3">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={() => valid && onSave(name.trim(), repoUrl.trim())}
+          disabled={!valid || saving}
+          className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
+        >
+          {saving ? t("creating") : t("create")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Git 凭据的内联表单卡:新建挂在凭据列表上方,编辑挂在对应凭据行下方
+function CredFormCard({
+  editingCred,
+  editingAgentName,
+  form,
+  onFormChange,
+  agentsWithoutCred,
+  hasMemberAgents,
+  showPat,
+  onToggleShowPat,
+  onSave,
+  onCancel,
+  saving,
+  error,
+}: {
+  editingCred: GitCredential | null;
+  editingAgentName: string;
+  form: { agent_id: string; username: string; pat: string };
+  onFormChange: (patch: Partial<{ agent_id: string; username: string; pat: string }>) => void;
+  agentsWithoutCred: Array<{ id: string; name: string }>;
+  hasMemberAgents: boolean;
+  showPat: boolean;
+  onToggleShowPat: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const t = useTranslations("settings.project");
+
+  return (
+    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 mt-2 shadow-sm transition-all">
+      <div className="flex justify-between items-center pb-3 border-b border-line">
+        <h3 className="text-sm font-bold text-fg flex items-center">
+          <GitBranch className="w-4 h-4 mr-2 text-accent-fg" />
+          {editingCred ? t("editCredTitle") : t("addCredTitle")}
+        </h3>
+        <button
+          onClick={onCancel}
+          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          title={t("cancel")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-3.5 mt-4">
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("credAgent")} <span className="text-danger-fg">*</span>
+          </label>
+          {editingCred ? (
+            <input
+              value={editingAgentName}
+              disabled
+              className="w-full bg-surface-2 border border-line-strong rounded-lg px-4 py-2.5 text-fg-muted cursor-not-allowed"
+            />
+          ) : !hasMemberAgents ? (
+            <p className="text-xs text-fg-faint py-2">{t("noMemberAgents")}</p>
+          ) : agentsWithoutCred.length === 0 ? (
+            <p className="text-xs text-fg-faint py-2">{t("allAgentsConfigured")}</p>
+          ) : (
+            <select
+              value={form.agent_id}
+              onChange={(e) => onFormChange({ agent_id: e.target.value })}
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            >
+              <option value="">{t("credAgentPlaceholder")}</option>
+              {agentsWithoutCred.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-[10px] text-fg-faint mt-1.5">{t("credAgentHint")}</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("credUsername")}
+          </label>
+          <input
+            value={form.username}
+            onChange={(e) => onFormChange({ username: e.target.value })}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            placeholder="git"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("patLabel")}{" "}
+            {!editingCred && <span className="text-danger-fg">*</span>}
+            {editingCred && (
+              <span className="text-fg-faint font-normal">{t("patUnchanged")}</span>
+            )}
+          </label>
+          <div className="relative">
+            <input
+              type={showPat ? "text" : "password"}
+              value={form.pat}
+              onChange={(e) => onFormChange({ pat: e.target.value })}
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
+              placeholder={editingCred ? t("patNewPlaceholder") : "ghp_xxxxxxxxxxxx"}
+            />
+            <button
+              type="button"
+              onClick={onToggleShowPat}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
+            >
+              {showPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-fg-faint mt-1.5">{t("patHelp")}</p>
+        </div>
+        {error && (
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 pt-4 border-t border-line flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={onSave}
+          disabled={!form.agent_id || saving || (!editingCred && !form.pat)}
+          className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
+        >
+          {saving ? t("saving") : editingCred ? t("update") : t("add")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectSettingsPage() {
   const t = useTranslations("settings.project");
   const projects = useAppStore((s) => s.projects) as unknown as LocalProject[];
@@ -64,30 +282,32 @@ export default function ProjectSettingsPage() {
     projects[0]?.id || ""
   );
   const [draft, setDraft] = useState<ProjectDraft | null>(null);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [newRepoUrl, setNewRepoUrl] = useState("");
-  const [newGitUsername, setNewGitUsername] = useState("git");
-  const [newPat, setNewPat] = useState("");
-  const [showNewPat, setShowNewPat] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState<string | null>(null);
+  const [deletingProjectBusy, setDeletingProjectBusy] = useState(false);
 
   // Git 凭据状态
   const [gitCredentials, setGitCredentials] = useState<GitCredential[]>([]);
   const [loadingCreds, setLoadingCreds] = useState(false);
-  const [showCredModal, setShowCredModal] = useState(false);
+  const [newCredOpen, setNewCredOpen] = useState(false);
   const [editingCred, setEditingCred] = useState<GitCredential | null>(null);
-  const [credForm, setCredForm] = useState({ repo_url: "", username: "git", pat: "" });
+  const [credForm, setCredForm] = useState({ agent_id: "", username: "git", pat: "" });
   const [savingCred, setSavingCred] = useState(false);
   const [showPat, setShowPat] = useState(false);
+  const [credError, setCredError] = useState<string | null>(null);
 
   // 服务端的项目成员/审查员记录，用于基于差异的保存
   const [serverMembers, setServerMembers] = useState<ProjectMemberRecord[]>([]);
   const [serverReviewers, setServerReviewers] = useState<ProjectReviewerRecord[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // 开发人员卡保存的状态(开发+审查两组一起提交,错误显示在卡内)
+  const [savingMembers, setSavingMembers] = useState(false);
+  const [membersSaved, setMembersSaved] = useState(false);
+  const [memberSaveError, setMemberSaveError] = useState<string | null>(null);
 
   const currentProject = projects.find((p) => p.id === selectedProjectId);
 
@@ -97,7 +317,6 @@ export default function ProjectSettingsPage() {
         members: [...(currentProject.members || [])],
         reviewers: [...(currentProject.reviewers || [])],
       });
-      setSaved(false);
       // 从后端加载真实的项目成员和审查员
       loadProjectMembers(currentProject.id);
     }
@@ -156,40 +375,42 @@ export default function ProjectSettingsPage() {
       .finally(() => setLoadingCreds(false));
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim() || !newRepoUrl.trim() || !newPat.trim()) return;
+  // 新建工程表单的打开/收起;错误独立于页面共享 error 条,保证空状态分支也能看到
+  const openNewProjectForm = () => {
+    setCreateProjectError(null);
+    setShowNewProject(true);
+  };
+
+  const closeNewProjectForm = () => {
+    setShowNewProject(false);
+    setCreateProjectError(null);
+  };
+
+  const handleCreateProject = async (name: string, repoUrl: string) => {
+    if (!name.trim() || !repoUrl.trim()) return;
     if (!workspaceId) {
-      setError(t("noWorkspace"));
+      setCreateProjectError(t("noWorkspace"));
       return;
     }
     try {
       setCreatingProject(true);
+      setCreateProjectError(null);
       const created = (await api.createProject(workspaceId, {
-        name: newProjectName.trim(),
+        name: name.trim(),
         status: "active",
-        repo_url: newRepoUrl.trim(),
+        repo_url: repoUrl.trim(),
       })) as { id: string; name?: string };
-      // 创建 Git 凭据
-      await api.createGitCredential(created.id, {
-        repo_url: newRepoUrl.trim(),
-        username: newGitUsername.trim() || "git",
-        pat: newPat,
-      });
       const newProject: LocalProject = {
         id: created.id,
-        name: created.name || newProjectName.trim(),
+        name: created.name || name.trim(),
         members: [],
         reviewers: [],
       };
       setProjects((prev: LocalProject[]) => [...prev, newProject]);
       setSelectedProjectId(created.id);
       setShowNewProject(false);
-      setNewProjectName("");
-      setNewRepoUrl("");
-      setNewGitUsername("git");
-      setNewPat("");
     } catch (err) {
-      setError(t("createFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
+      setCreateProjectError(t("createFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
     } finally {
       setCreatingProject(false);
     }
@@ -198,6 +419,7 @@ export default function ProjectSettingsPage() {
   const handleDeleteProject = async () => {
     if (!deletingProject || !workspaceId) return;
     try {
+      setDeletingProjectBusy(true);
       await api.deleteProject(workspaceId, deletingProject);
       setProjects((prev: LocalProject[]) =>
         prev.filter((p) => p.id !== deletingProject)
@@ -210,6 +432,8 @@ export default function ProjectSettingsPage() {
       setDeletingProject(null);
     } catch (err) {
       setError(t("deleteFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
+    } finally {
+      setDeletingProjectBusy(false);
     }
   };
 
@@ -222,108 +446,26 @@ export default function ProjectSettingsPage() {
           {t("noProjectsDesc")}
         </p>
         <button
-          onClick={() => setShowNewProject(true)}
+          onClick={openNewProjectForm}
           className="flex items-center px-5 py-2.5 bg-primary-strong hover:bg-primary text-fg rounded-xl text-sm font-medium transition-colors-fast btn-press"
         >
           <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
         </button>
+
+        {showNewProject && (
+          <div className="mt-6 w-full max-w-xl text-left">
+            <NewProjectCard
+              onSave={handleCreateProject}
+              onClose={closeNewProjectForm}
+              saving={creatingProject}
+              error={createProjectError}
+            />
+          </div>
+        )}
+
         <div className="mt-8 w-full max-w-2xl">
           <EmptyStateGuide page="project" />
         </div>
-
-        {showNewProject && (
-          <ModalPortal>
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
-            onClick={() => setShowNewProject(false)}
-          >
-            <div
-              className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-5 border-b border-line">
-                <h3 className="text-lg font-bold text-fg">{t("newProject")}</h3>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    {t("projectName")} <span className="text-danger-fg">*</span>
-                  </label>
-                  <input
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                    placeholder={t("projectNamePlaceholder")}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    {t("repoUrl")} <span className="text-danger-fg">*</span>
-                  </label>
-                  <input
-                    value={newRepoUrl}
-                    onChange={(e) => setNewRepoUrl(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                    placeholder="https://github.com/org/repo.git"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    {t("gitUsername")}
-                  </label>
-                  <input
-                    value={newGitUsername}
-                    onChange={(e) => setNewGitUsername(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                    placeholder="git"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    Personal Access Token <span className="text-danger-fg">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showNewPat ? "text" : "password"}
-                      value={newPat}
-                      onChange={(e) => setNewPat(e.target.value)}
-                      className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
-                      placeholder="ghp_xxxxxxxxxxxx"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPat((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
-                    >
-                      {showNewPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 border-t border-line flex justify-end gap-3">
-                <button
-                  onClick={() => setShowNewProject(false)}
-                  className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  onClick={handleCreateProject}
-                  disabled={
-                    !newProjectName.trim() ||
-                    !newRepoUrl.trim() ||
-                    !newPat.trim() ||
-                    creatingProject
-                  }
-                  className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
-                >
-                  {creatingProject ? t("creating") : t("create")}
-                </button>
-              </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
       </div>
     );
   }
@@ -336,71 +478,95 @@ export default function ProjectSettingsPage() {
     draft.reviewers.includes(id)
   );
 
-  const handleSave = async () => {
+  // 对比草稿与服务端记录,把工程成员差异同步到服务端(新增勾选加入,取消勾选移除)
+  const syncProjectMembers = async () => {
+    const currentAgentMemberIds = serverMembers
+      .filter((m) => m.member_type === "agent" && m.agent_id)
+      .map((m) => m.agent_id!);
+    const toAddMembers = draft!.members.filter(
+      (id) => !currentAgentMemberIds.includes(id)
+    );
+    const toRemoveMembers = serverMembers
+      .filter((m) => m.member_type === "agent" && m.agent_id && !draft!.members.includes(m.agent_id))
+      .map((m) => m.id);
+
+    for (const agentId of toAddMembers) {
+      await api.addProjectMember(workspaceId, selectedProjectId, {
+        member_type: "agent",
+        agent_id: agentId,
+        role: "developer",
+      });
+    }
+    for (const recordId of toRemoveMembers) {
+      await api.removeProjectMember(workspaceId, selectedProjectId, recordId);
+    }
+  };
+
+  // 对比草稿与服务端记录,把审查员差异同步到服务端
+  const syncProjectReviewers = async () => {
+    const currentAgentReviewerIds = serverReviewers
+      .filter((r) => r.member_type === "agent" && r.agent_id)
+      .map((r) => r.agent_id!);
+    const toAddReviewers = draft!.reviewers.filter(
+      (id) => !currentAgentReviewerIds.includes(id)
+    );
+    const toRemoveReviewers = serverReviewers
+      .filter((r) => r.member_type === "agent" && r.agent_id && !draft!.reviewers.includes(r.agent_id))
+      .map((r) => r.id);
+
+    for (const agentId of toAddReviewers) {
+      await api.addProjectReviewer(workspaceId, selectedProjectId, {
+        member_type: "agent",
+        agent_id: agentId,
+      });
+    }
+    for (const recordId of toRemoveReviewers) {
+      await api.removeProjectReviewer(workspaceId, selectedProjectId, recordId);
+    }
+  };
+
+  // 开发人员卡保存:一次同步开发人员与审查员两组,错误显示在卡内
+  const handleSaveMembers = async () => {
     if (!workspaceId || !draft) {
-      setError(t("noWorkspace"));
+      setMemberSaveError(t("noWorkspace"));
       return;
     }
     try {
-      setError(null);
-
-      // 1. 对比并同步项目成员
-      const currentAgentMemberIds = serverMembers
+      setSavingMembers(true);
+      setMemberSaveError(null);
+      await syncProjectMembers();
+      await syncProjectReviewers();
+      // 两组都已提交,分别拉取各自列表对齐基线(不走全量重载)
+      const [membersRes, reviewersRes] = await Promise.all([
+        api.listProjectMembers(workspaceId, selectedProjectId).catch(() => []),
+        api.listProjectReviewers(workspaceId, selectedProjectId).catch(() => []),
+      ]);
+      const freshMembers = (Array.isArray(membersRes) ? membersRes : []) as ProjectMemberRecord[];
+      const freshReviewers = (Array.isArray(reviewersRes) ? reviewersRes : []) as ProjectReviewerRecord[];
+      setServerMembers(freshMembers);
+      setServerReviewers(freshReviewers);
+      const freshMemberIds = freshMembers
         .filter((m) => m.member_type === "agent" && m.agent_id)
         .map((m) => m.agent_id!);
-      const toAddMembers = draft.members.filter(
-        (id) => !currentAgentMemberIds.includes(id)
-      );
-      const toRemoveMembers = serverMembers
-        .filter((m) => m.member_type === "agent" && m.agent_id && !draft.members.includes(m.agent_id))
-        .map((m) => m.id);
-
-      for (const agentId of toAddMembers) {
-        await api.addProjectMember(workspaceId, selectedProjectId, {
-          member_type: "agent",
-          agent_id: agentId,
-          role: "developer",
-        });
-      }
-      for (const recordId of toRemoveMembers) {
-        await api.removeProjectMember(workspaceId, selectedProjectId, recordId);
-      }
-
-      // 2. 对比并同步项目审查员
-      const currentAgentReviewerIds = serverReviewers
+      const freshReviewerIds = freshReviewers
         .filter((r) => r.member_type === "agent" && r.agent_id)
         .map((r) => r.agent_id!);
-      const toAddReviewers = draft.reviewers.filter(
-        (id) => !currentAgentReviewerIds.includes(id)
+      setDraft((prev) =>
+        prev ? { ...prev, members: freshMemberIds, reviewers: freshReviewerIds } : prev
       );
-      const toRemoveReviewers = serverReviewers
-        .filter((r) => r.member_type === "agent" && r.agent_id && !draft.reviewers.includes(r.agent_id))
-        .map((r) => r.id);
-
-      for (const agentId of toAddReviewers) {
-        await api.addProjectReviewer(workspaceId, selectedProjectId, {
-          member_type: "agent",
-          agent_id: agentId,
-        });
-      }
-      for (const recordId of toRemoveReviewers) {
-        await api.removeProjectReviewer(workspaceId, selectedProjectId, recordId);
-      }
-
-      // 3. 从后端重新加载成员以同步状态
-      await loadProjectMembers(selectedProjectId);
-
       setProjects((prev: LocalProject[]) =>
         prev.map((p) =>
           p.id === selectedProjectId
-            ? { ...p, members: draft.members, reviewers: draft.reviewers }
+            ? { ...p, members: freshMemberIds, reviewers: freshReviewerIds }
             : p
         )
       );
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setMembersSaved(true);
+      setTimeout(() => setMembersSaved(false), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("saveFailed"));
+      setMemberSaveError(err instanceof Error ? err.message : t("saveFailed"));
+    } finally {
+      setSavingMembers(false);
     }
   };
 
@@ -415,7 +581,6 @@ export default function ProjectSettingsPage() {
           }
         : prev
     );
-    setSaved(false);
   };
 
   const toggleReviewer = (agentId: string) => {
@@ -429,54 +594,63 @@ export default function ProjectSettingsPage() {
           }
         : prev
     );
-    setSaved(false);
   };
 
   const addAllMembers = () => {
     const allIds = agents.map((a) => a.id);
     setDraft((prev) => (prev ? { ...prev, members: allIds } : prev));
-    setSaved(false);
   };
 
   const clearMembers = () => {
     setDraft((prev) => (prev ? { ...prev, members: [] } : prev));
-    setSaved(false);
   };
 
   // ── Git 凭据处理器 ──
+  // 可绑定凭据的 Agent：工程成员中尚未配置凭据的 Agent（每个 Agent 一张专属凭据）
+  const memberAgents = agents.filter((a) => draft?.members.includes(a.id));
+  const agentsWithoutCred = memberAgents.filter(
+    (a) => !gitCredentials.some((c) => c.agent_id === a.id)
+  );
+
+  // 新建与编辑凭据的内联表单互斥;错误显示在表单卡内
   const openNewCred = () => {
     setEditingCred(null);
-    setCredForm({ repo_url: "", username: "git", pat: "" });
+    setCredForm({ agent_id: "", username: "git", pat: "" });
     setShowPat(false);
-    setShowCredModal(true);
+    setCredError(null);
+    setNewCredOpen(true);
   };
 
   const openEditCred = (cred: GitCredential) => {
+    setNewCredOpen(false);
     setEditingCred(cred);
-    setCredForm({ repo_url: cred.repo_url, username: cred.username, pat: "" });
+    setCredForm({ agent_id: cred.agent_id, username: cred.username, pat: "" });
     setShowPat(false);
-    setShowCredModal(true);
+    setCredError(null);
+  };
+
+  const closeCredForm = () => {
+    setNewCredOpen(false);
+    setEditingCred(null);
+    setCredError(null);
   };
 
   const handleSaveCred = async () => {
-    if (!credForm.repo_url.trim()) return;
+    if (!credForm.agent_id) return;
+    if (!editingCred && !credForm.pat) return;
     try {
       setSavingCred(true);
+      setCredError(null);
       if (editingCred) {
+        // 绑定关系不可变更，只更新用户名和令牌
         const data: Record<string, unknown> = {
-          repo_url: credForm.repo_url.trim(),
           username: credForm.username.trim() || "git",
         };
         if (credForm.pat) data.pat = credForm.pat;
         await api.updateGitCredential(selectedProjectId, editingCred.id, data);
       } else {
-        if (!credForm.pat) {
-          setError(t("patRequired"));
-          setSavingCred(false);
-          return;
-        }
         await api.createGitCredential(selectedProjectId, {
-          repo_url: credForm.repo_url.trim(),
+          agent_id: credForm.agent_id,
           username: credForm.username.trim() || "git",
           pat: credForm.pat,
         });
@@ -485,9 +659,10 @@ export default function ProjectSettingsPage() {
       const res = await api.listGitCredentials(selectedProjectId);
       const creds = ((res as Record<string, unknown>)?.credentials ?? res) as GitCredential[];
       setGitCredentials(Array.isArray(creds) ? creds : []);
-      setShowCredModal(false);
+      setNewCredOpen(false);
+      setEditingCred(null);
     } catch (err) {
-      setError(t("saveCredFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
+      setCredError(t("saveCredFailed", { message: err instanceof Error ? err.message : t("unknownError") }));
     } finally {
       setSavingCred(false);
     }
@@ -510,24 +685,24 @@ export default function ProjectSettingsPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowNewProject(true)}
+            onClick={openNewProjectForm}
             className="flex items-center px-4 py-2.5 bg-surface-2 hover:bg-surface-3 text-fg-muted hover:text-fg rounded-xl text-sm font-medium transition-colors-fast border border-line-strong"
           >
             <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
           </button>
-          <button
-            onClick={handleSave}
-            className={`flex items-center px-5 py-2.5 rounded-xl text-sm font-medium transition-colors-normal btn-press ${
-              saved
-                ? "bg-success-strong text-fg"
-                : "bg-primary-strong hover:bg-primary text-fg"
-            }`}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {saved ? t("saved") : t("saveSettings")}
-          </button>
         </div>
       </div>
+
+      {showNewProject && (
+        <div className="mb-6">
+          <NewProjectCard
+            onSave={handleCreateProject}
+            onClose={closeNewProjectForm}
+            saving={creatingProject}
+            error={createProjectError}
+          />
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger-fg">
@@ -541,18 +716,58 @@ export default function ProjectSettingsPage() {
           <label className="block text-sm font-medium text-fg-muted">
             {t("currentProject")}
           </label>
-          {currentProject && (
-            <button
-              onClick={() => setDeletingProject(selectedProjectId)}
-              className="flex items-center px-2.5 py-1 text-[10px] text-danger-fg hover:text-danger-fg hover:bg-danger/10 rounded-lg transition-colors-fast"
-            >
-              <Trash2 className="w-3 h-3 mr-1" /> {t("deleteProject")}
-            </button>
-          )}
+          {currentProject &&
+            (deletingProject ? (
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <span className="flex items-center gap-1.5 text-xs text-danger-fg leading-relaxed">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  {t("deleteConfirmPrefix")}{" "}
+                  <span className="font-medium">
+                    {projects.find((p) => p.id === deletingProject)?.name}
+                  </span>{" "}
+                  {t("deleteConfirmSuffix")}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDeletingProject(null)}
+                    disabled={deletingProjectBusy}
+                    className="px-3 py-1.5 text-xs font-medium bg-surface-3/50 border border-line-strong/50 rounded-md hover:bg-surface-3 transition-colors-fast disabled:opacity-50"
+                  >
+                    {t("cancel")}
+                  </button>
+                  <button
+                    onClick={handleDeleteProject}
+                    disabled={deletingProjectBusy}
+                    className="btn-press flex items-center px-3 py-1.5 text-xs font-medium bg-danger-strong hover:bg-danger text-fg rounded-md transition-colors-fast disabled:opacity-50"
+                  >
+                    {deletingProjectBusy ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    )}
+                    {t("delete")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setDeletingProject(selectedProjectId)}
+                className="flex items-center px-2.5 py-1 text-[10px] text-danger-fg hover:text-danger-fg hover:bg-danger/10 rounded-lg transition-colors-fast"
+              >
+                <Trash2 className="w-3 h-3 mr-1" /> {t("deleteProject")}
+              </button>
+            ))}
         </div>
         <select
           value={selectedProjectId}
-          onChange={(e) => setSelectedProjectId(e.target.value)}
+          onChange={(e) => {
+            // 切换工程后原工程的删除确认、凭据表单与成员保存态不再适用,一并清理
+            setDeletingProject(null);
+            closeCredForm();
+            setMemberSaveError(null);
+            setMembersSaved(false);
+            setSelectedProjectId(e.target.value);
+          }}
           className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
         >
           {projects.map((p) => (
@@ -563,7 +778,7 @@ export default function ProjectSettingsPage() {
         </select>
       </div>
 
-      {/* 成员管理 */}
+      {/* 开发人员与审查员(单列表双勾选) */}
       <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -586,80 +801,23 @@ export default function ProjectSettingsPage() {
             >
               <X className="w-3 h-3 mr-1" /> {t("clear")}
             </button>
+            <button
+              onClick={handleSaveMembers}
+              disabled={savingMembers}
+              className={`btn-press flex items-center px-3 py-1 text-[10px] font-medium rounded-lg transition-colors-fast disabled:opacity-50 ${
+                membersSaved
+                  ? "bg-success-strong text-fg"
+                  : "bg-primary-strong hover:bg-primary text-fg"
+              }`}
+            >
+              {savingMembers ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <Save className="w-3 h-3 mr-1" />
+              )}
+              {membersSaved ? t("saved") : t("saveMembers")}
+            </button>
           </div>
-        </div>
-        {loadingMembers ? (
-          <p className="text-sm text-fg-faint py-4 text-center">{t("loadingMembers")}</p>
-        ) : agents.length === 0 ? (
-          <p className="text-sm text-fg-faint py-4 text-center">
-            {t("noAgentsHint")}
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {agents.map((agent) => {
-              const isMember = draft.members.includes(agent.id);
-              return (
-                <label
-                  key={agent.id}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors-normal ${
-                    isMember
-                      ? "bg-success/5 border-success/30 hover:bg-success/10"
-                      : "bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isMember}
-                    onChange={() => toggleMember(agent.id)}
-                    className="w-4 h-4 rounded border-line-strong bg-bg text-success focus:ring-success/30"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-fg font-medium">
-                        {agent.name}
-                      </span>
-                      <span className="text-[10px] text-fg-faint bg-surface-3/50 px-1.5 py-0.5 rounded">
-                        {agent.tool}
-                      </span>
-                      {isMember && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success-fg border border-success/20">
-                          {t("joined")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      agent.status === "online" || agent.status === "busy"
-                        ? "bg-success/10 text-success-fg"
-                        : agent.status === "paused"
-                          ? "bg-warning/10 text-warning-fg"
-                          : "bg-fg-faint/10 text-fg-subtle"
-                    }`}
-                  >
-                    {agent.status === "online"
-                      ? t("statusOnline")
-                      : agent.status === "busy"
-                        ? t("statusBusy")
-                        : agent.status === "paused"
-                          ? t("statusPaused")
-                          : t("statusOffline")}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 审查员 */}
-      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
-        <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-4 h-4 text-warning-fg" />
-          <h2 className="text-sm font-bold text-fg">{t("reviewers")}</h2>
-          <span className="text-[10px] text-fg-faint bg-surface-3/50 px-2 py-0.5 rounded-full">
-            {t("reviewerCount", { count: draft.reviewers.length })}
-          </span>
         </div>
 
         {/* 自我审查警告条 */}
@@ -677,35 +835,39 @@ export default function ProjectSettingsPage() {
           </div>
         )}
 
-        {agents.length === 0 ? (
+        {memberSaveError && (
+          <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger-fg">
+            {memberSaveError}
+          </div>
+        )}
+        {loadingMembers ? (
+          <p className="text-sm text-fg-faint py-4 text-center">{t("loadingMembers")}</p>
+        ) : agents.length === 0 ? (
           <p className="text-sm text-fg-faint py-4 text-center">
             {t("noAgentsHint")}
           </p>
         ) : (
           <div className="space-y-2">
             {agents.map((agent) => {
+              const isMember = draft.members.includes(agent.id);
               const isReviewer = draft.reviewers.includes(agent.id);
-              const isSelfReview =
-                isReviewer && draft.members.includes(agent.id);
+              const isSelfReview = isMember && isReviewer;
               return (
-                <label
+                <div
                   key={agent.id}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors-normal ${
-                    isReviewer
-                      ? "bg-warning/5 border-warning/30 hover:bg-warning/10"
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors-normal ${
+                    isMember
+                      ? "bg-success/5 border-success/30 hover:bg-success/10"
                       : "bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50"
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isReviewer}
-                    onChange={() => toggleReviewer(agent.id)}
-                    className="w-4 h-4 rounded border-line-strong bg-bg text-warning focus:ring-warning/30"
-                  />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm text-fg font-medium">
                         {agent.name}
+                      </span>
+                      <span className="text-[10px] text-fg-faint bg-surface-3/50 px-1.5 py-0.5 rounded">
+                        {agent.tool}
                       </span>
                       {isSelfReview && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-warning/10 text-warning-fg border border-warning/20">
@@ -715,7 +877,54 @@ export default function ProjectSettingsPage() {
                       )}
                     </div>
                   </div>
-                </label>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full ${
+                      agent.status === "online" || agent.status === "busy"
+                        ? "bg-success/10 text-success-fg"
+                        : agent.status === "paused"
+                        ? "bg-warning/10 text-warning-fg"
+                        : "bg-fg-faint/10 text-fg-subtle"
+                    }`}
+                  >
+                    {agent.status === "online"
+                      ? t("statusOnline")
+                      : agent.status === "busy"
+                        ? t("statusBusy")
+                        : agent.status === "paused"
+                        ? t("statusPaused")
+                        : t("statusOffline")}
+                  </span>
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isMember}
+                      onChange={() => toggleMember(agent.id)}
+                      className="w-4 h-4 rounded border-line-strong bg-bg text-success focus:ring-success/30"
+                    />
+                    <span
+                      className={`text-xs font-medium ${
+                        isMember ? "text-success-fg" : "text-fg-subtle"
+                      }`}
+                    >
+                      {t("roleDev")}
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isReviewer}
+                      onChange={() => toggleReviewer(agent.id)}
+                      className="w-4 h-4 rounded border-line-strong bg-bg text-warning focus:ring-warning/30"
+                    />
+                    <span
+                      className={`text-xs font-medium ${
+                        isReviewer ? "text-warning-fg" : "text-fg-subtle"
+                      }`}
+                    >
+                      {t("roleReviewer")}
+                    </span>
+                  </label>
+                </div>
               );
             })}
           </div>
@@ -743,6 +952,25 @@ export default function ProjectSettingsPage() {
           {t("gitCredHint")}
         </p>
 
+        {newCredOpen && (
+          <div className="mb-4">
+            <CredFormCard
+              editingCred={null}
+              editingAgentName=""
+              form={credForm}
+              onFormChange={(patch) => setCredForm((f) => ({ ...f, ...patch }))}
+              agentsWithoutCred={agentsWithoutCred}
+              hasMemberAgents={memberAgents.length > 0}
+              showPat={showPat}
+              onToggleShowPat={() => setShowPat((v) => !v)}
+              onSave={handleSaveCred}
+              onCancel={closeCredForm}
+              saving={savingCred}
+              error={credError}
+            />
+          </div>
+        )}
+
         {loadingCreds ? (
           <p className="text-sm text-fg-faint py-4 text-center">{t("loading")}</p>
         ) : gitCredentials.length === 0 ? (
@@ -753,271 +981,71 @@ export default function ProjectSettingsPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {gitCredentials.map((cred) => (
-              <div
-                key={cred.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50 transition-colors-normal group card-hover"
-              >
-                <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-                  <GitBranch className="w-4 h-4 text-violet-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-fg font-medium truncate">
-                    {cred.repo_url}
+            {gitCredentials.map((cred) => {
+              const agentName =
+                cred.agent_name ||
+                agents.find((a) => a.id === cred.agent_id)?.name ||
+                cred.agent_id;
+              const editingThis = editingCred?.id === cred.id;
+              return (
+                <Fragment key={cred.id}>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50 transition-colors-normal group card-hover">
+                    <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                      <GitBranch className="w-4 h-4 text-violet-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm text-fg font-medium">
+                        <span className="truncate">{agentName}</span>
+                        <span className="text-[10px] text-fg-faint bg-surface-3/50 px-1.5 py-0.5 rounded shrink-0">
+                          {t("credOwnerBadge")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-[10px] text-fg-faint">
+                          {t("credUser", { username: cred.username })}
+                        </span>
+                        <span className="text-[10px] text-fg-faint">
+                          {t("credToken", { token: cred.pat_masked || "****" })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openEditCred(cred)}
+                        className="p-1.5 rounded-lg hover:bg-surface-3/50 text-fg-subtle hover:text-fg transition-colors-fast"
+                        title={t("edit")}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-[10px] text-fg-faint">
-                      {t("credUser", { username: cred.username })}
-                    </span>
-                    <span className="text-[10px] text-fg-faint">
-                      {t("credToken", { token: cred.pat_masked || "****" })}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEditCred(cred)}
-                    className="p-1.5 rounded-lg hover:bg-surface-3/50 text-fg-subtle hover:text-fg transition-colors-fast"
-                    title={t("edit")}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+                  {editingThis && (
+                    <CredFormCard
+                      editingCred={editingCred}
+                      editingAgentName={
+                        editingCred.agent_name ||
+                        agents.find((a) => a.id === editingCred.agent_id)?.name ||
+                        editingCred.agent_id
+                      }
+                      form={credForm}
+                      onFormChange={(patch) => setCredForm((f) => ({ ...f, ...patch }))}
+                      agentsWithoutCred={agentsWithoutCred}
+                      hasMemberAgents={memberAgents.length > 0}
+                      showPat={showPat}
+                      onToggleShowPat={() => setShowPat((v) => !v)}
+                      onSave={handleSaveCred}
+                      onCancel={closeCredForm}
+                      saving={savingCred}
+                      error={credError}
+                    />
+                  )}
+                </Fragment>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* 新建项目弹窗 */}
-      {showNewProject && (
-        <ModalPortal>
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
-          onClick={() => setShowNewProject(false)}
-        >
-          <div
-            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5 border-b border-line">
-              <h3 className="text-lg font-bold text-fg">{t("newProject")}</h3>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("projectName")} <span className="text-danger-fg">*</span>
-                </label>
-                <input
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder={t("projectNamePlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("repoUrl")} <span className="text-danger-fg">*</span>
-                </label>
-                <input
-                  value={newRepoUrl}
-                  onChange={(e) => setNewRepoUrl(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder="https://github.com/org/repo.git"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("gitUsername")}
-                </label>
-                <input
-                  value={newGitUsername}
-                  onChange={(e) => setNewGitUsername(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder="git"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  Personal Access Token <span className="text-danger-fg">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPat ? "text" : "password"}
-                    value={newPat}
-                    onChange={(e) => setNewPat(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
-                    placeholder="ghp_xxxxxxxxxxxx"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPat((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
-                  >
-                    {showNewPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="p-5 border-t border-line flex justify-end gap-3">
-              <button
-                onClick={() => setShowNewProject(false)}
-                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
-              >
-                {t("cancel")}
-              </button>
-              <button
-                onClick={handleCreateProject}
-                disabled={
-                  !newProjectName.trim() ||
-                  !newRepoUrl.trim() ||
-                  !newPat.trim() ||
-                  creatingProject
-                }
-                className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
-              >
-                {creatingProject ? t("creating") : t("create")}
-              </button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* 删除确认弹窗 */}
-      {deletingProject && (
-        <ModalPortal>
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
-          onClick={() => setDeletingProject(null)}
-        >
-          <div
-            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[400px] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5 border-b border-line">
-              <h3 className="text-lg font-bold text-fg flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-danger-fg" /> {t("deleteConfirmTitle")}
-              </h3>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-fg-muted">
-                {t("deleteConfirmPrefix")}{" "}
-                <span className="text-fg font-medium">
-                  {projects.find((p) => p.id === deletingProject)?.name}
-                </span>{" "}
-                {t("deleteConfirmSuffix")}
-              </p>
-            </div>
-            <div className="p-5 border-t border-line flex justify-end gap-3">
-              <button
-                onClick={() => setDeletingProject(null)}
-                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
-              >
-                {t("cancel")}
-              </button>
-              <button
-                onClick={handleDeleteProject}
-                className="px-5 py-2 bg-danger-strong hover:bg-danger text-fg rounded-lg text-sm font-medium btn-press"
-              >
-                {t("delete")}
-              </button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* Git 凭据弹窗 */}
-      {showCredModal && (
-        <ModalPortal>
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
-          onClick={() => setShowCredModal(false)}
-        >
-          <div
-            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[520px] max-h-[80vh] overflow-y-auto shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5 border-b border-line">
-              <h3 className="text-lg font-bold text-fg">
-                {editingCred ? t("editCredTitle") : t("addCredTitle")}
-              </h3>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("credRepoUrl")} <span className="text-danger-fg">*</span>
-                </label>
-                <input
-                  value={credForm.repo_url}
-                  onChange={(e) => setCredForm((f) => ({ ...f, repo_url: e.target.value }))}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder="https://github.com/org/repo.git"
-                />
-                <p className="text-[10px] text-fg-faint mt-1.5">
-                  {t("credRepoHint")}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("credUsername")}
-                </label>
-                <input
-                  value={credForm.username}
-                  onChange={(e) => setCredForm((f) => ({ ...f, username: e.target.value }))}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder="git"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {t("patLabel")}{" "}
-                  {!editingCred && <span className="text-danger-fg">*</span>}
-                  {editingCred && (
-                    <span className="text-fg-faint font-normal">{t("patUnchanged")}</span>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPat ? "text" : "password"}
-                    value={credForm.pat}
-                    onChange={(e) => setCredForm((f) => ({ ...f, pat: e.target.value }))}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary pr-10"
-                    placeholder={editingCred ? t("patNewPlaceholder") : "ghp_xxxxxxxxxxxx"}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPat((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-muted"
-                  >
-                    {showPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-fg-faint mt-1.5">
-                  {t("patHelp")}
-                </p>
-              </div>
-            </div>
-            <div className="p-5 border-t border-line flex justify-end gap-3">
-              <button
-                onClick={() => setShowCredModal(false)}
-                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg"
-              >
-                {t("cancel")}
-              </button>
-              <button
-                onClick={handleSaveCred}
-                disabled={!credForm.repo_url.trim() || savingCred || (!editingCred && !credForm.pat)}
-                className="px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
-              >
-                {savingCred ? t("saving") : editingCred ? t("update") : t("add")}
-              </button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
     </div>
   );
 }

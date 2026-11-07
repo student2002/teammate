@@ -321,6 +321,23 @@ func (s *AuthService) GetGitCredentialsByProject(ctx context.Context, projectID 
 	return s.svc.Store.GetGitCredentialsByProject(ctx, projectID)
 }
 
+// GetGitCredentialsByProjectAndAgent retrieves the Git credential bound to one
+// agent inside the specified project (at most one, enforced by a unique
+// constraint). The agent-facing API uses this so a daemon only ever sees its
+// own credential.
+//
+// Parameters:
+//   - ctx: request context
+//   - projectID: project ID
+//   - agentID: agent ID
+//
+// Returns:
+//   - []types.GitCredential: the agent's Git credentials (0 or 1 entries)
+//   - error: possible errors (database query failure)
+func (s *AuthService) GetGitCredentialsByProjectAndAgent(ctx context.Context, projectID, agentID uuid.UUID) ([]types.GitCredential, error) {
+	return s.svc.Store.GetGitCredentialsByProjectAndAgent(ctx, projectID, agentID)
+}
+
 // CreateGitCredential creates a new Git credential.
 //
 // Parameters:

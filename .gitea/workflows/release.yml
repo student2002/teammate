@@ -1,0 +1,66 @@
+# Release: build and push prebuilt images to the self-hosted Gitea container registry.
+#
+# Trigger: pushing a version tag (v0.1.0 -> image tags 0.1.0 and latest).
+# Lives under .gitea/workflows/ so only Gitea Actions runs it; GitHub never sees a
+# workflow pointing at host.docker.internal.
+#
+# Required repository configuration (Settings -> Actions):
+#   secrets.TEAMS_REGISTRY_USER   registry account (Gitea username)
+#   secrets.TEAMS_REGISTRY_TOKEN  access token with write:package
+#   vars.TEAMS_REGISTRY           e.g. host.docker.internal:3000/zhenfeng
+#   vars.NEXT_PUBLIC_API_BASE_URL API base URL for the server-side `/api` rewrite; must be
+#                                reachable from the web container (e.g. http://app:8080), not public
+#
+# The runner shares the host Docker daemon, so plain `docker`/`docker buildx` steps
+# are used instead of docker/* actions (not mirrored in this Gitea instance).
+name: Release Images
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  images:
+    name: Build and push amd64 images
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ vars.TEAMS_REGISTRY }}
+      GOPROXY: https://goproxy.cn,direct
+      NPM_REGISTRY: https://registry.npmmirror.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Login to registry
+        run: |
+          registry_host="${REGISTRY%%/*}"
+          echo "${{ secrets.TEAMS_REGISTRY_TOKEN }}" \
+            | docker login "$registry_host" -u "${{ secrets.TEAMS_REGISTRY_USER }}" --password-stdin
+
+      - name: Create buildx builder
+        run: docker buildx create --name teammate --driver docker-container --use
+
+      - name: Build and push server image
+        run: |
+          img="$REGISTRY/teammate-server"
+          cache="$REGISTRY/teammate-server-buildcache:cache"
+          docker buildx build --platform linux/amd64 --push \
+            --cache-from "type=registry,ref=$cache" \
+            --cache-to "type=registry,ref=$cache,mode=max" \
+            --build-arg GOPROXY="$GOPROXY" \
+            -f product/Dockerfile \
+            -t "$img:$VERSION" -t "$img:latest" .
+
+      - name: Build and push web image
+        run: |
+          img="$REGISTRY/teammate-web"
+          cache="$REGISTRY/teammate-web-buildcache:cache"
+          docker buildx build --platform linux/amd64 --push \
+            --cache-from "type=registry,ref=$cache" \
+            --cache-to "type=registry,ref=$cache,mode=max" \
+            --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}" \
+            -f product/Dockerfile.web \
+            -t "$img:$VERSION" -t "$img:latest" .

@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import ModalPortal from "@/lib/ModalPortal";
+import RunFlowCanvas, { type RunFlowNode } from "@/lib/workflow-canvas/RunFlowDemo";
 import { useTranslations, useFormatter } from "next-intl";
 
 
@@ -1111,6 +1112,11 @@ function WorkflowDetailsPanel({
 
   const totalNodes = nodeNames.length;
   const completedCount = task.nodesStatus.filter((s) => s === "completed").length;
+  // 画布节点:与 nodeNames/nodesStatus 同序(数组下标对齐)
+  const rawFlowNodes = (task._rawNodes || []) as RunFlowNode[];
+  const pendingClaimNodes = rawFlowNodes
+    .map((node, index) => ({ node, index }))
+    .filter(({ index }) => (task.nodesStatus || [])[index] === "pending");
 
   return (
     <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-surface/95 backdrop-blur-xl border-t border-line-strong panel-shadow z-50 animate-fade-in-up">
@@ -1202,8 +1208,8 @@ function WorkflowDetailsPanel({
               </div>
             )}
 
-            {/* 工作流进度条 */}
-            <div className="overflow-x-auto max-w-full">
+            {/* 工作流进度(画布:并发链路/当前节点一目了然,替换原一维进度条) */}
+            <div>
               <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-4 flex items-center justify-between">
                 <span>{t('workflow.progress')}</span>
                 <div className="w-1/3 h-1.5 bg-surface-2 rounded-full overflow-hidden shrink-0 ml-4">
@@ -1213,73 +1219,26 @@ function WorkflowDetailsPanel({
                   />
                 </div>
               </div>
-              <div className="flex items-center min-w-max space-x-2 pb-2">
-                {nodeNames.map((stepName: string, index: number) => {
-                  const status = (task.nodesStatus || [])[index] || "pending";
-                  let color = "text-fg-faint border-line-strong bg-surface-2/50";
-                  let icon: React.ReactNode = <div className="w-2.5 h-2.5 rounded-full bg-surface-3" />;
-                  if (status === "completed") {
-                    color = "text-success-fg border-success/30 bg-success/10";
-                    icon = <CheckCircle2 className="w-4 h-4" />;
-                  } else if (status === "in_progress") {
-                    color = "text-primary-fg border-primary bg-primary/20 ring-2 ring-primary/30";
-                    icon = <Activity className="w-4 h-4 animate-pulse" />;
-                  } else if (status === "rejected") {
-                    color = "text-orange-400 border-orange-500 bg-orange-500/20";
-                    icon = <XCircle className="w-4 h-4" />;
-                  } else if (status === "manual_intervention") {
-                    color = "text-danger-fg border-danger bg-danger/20 ring-2 ring-danger/50 animate-pulse";
-                    icon = <ShieldAlert className="w-4 h-4" />;
-                  }
-
-                  return (
-                    <React.Fragment key={index}>
-                      <div
-                        onClick={() => status !== "pending" && handleNodeClick(index)}
-                        className={`flex flex-col items-center p-3 rounded-lg border w-32 relative cursor-pointer transition-all ${color} ${activeTerminalNode === index ? "ring-1 ring-fg shadow-lg" : ""} ${status === "pending" ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        {status === "in_progress" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-primary text-fg text-[10px] rounded-full font-bold">
-                            {t('nodeStatus.active')}
-                          </div>
-                        )}
-                        {status === "rejected" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-orange-500 text-fg text-[10px] rounded-full font-bold">
-                            {t('nodeStatus.needsRework')}
-                          </div>
-                        )}
-                        {status === "manual_intervention" && (
-                          <div className="absolute -top-2 px-2 py-0.5 bg-danger text-fg text-[10px] rounded-full font-bold">
-                            {t('nodeStatus.blocked')}
-                          </div>
-                        )}
-                        <div className="mb-2">{icon}</div>
-                        <span className="text-xs font-medium text-center line-clamp-2">{stepName}</span>
-                        <span className="text-[9px] text-fg-faint mt-1 text-center">
-                          {task.nodeAgents?.[index] || ""}
-                        </span>
-                        {(task.nodeTokens as Record<string, unknown>)?.[index] !== undefined && (task.nodeTokens as Record<string, unknown>)?.[index] !== null && (
-                          <span className="text-[8px] text-fg-faint mt-0.5 font-mono">
-                            ⧗ {String((task.nodeTokens as Record<string, unknown>)[index])}
-                          </span>
-                        )}
-                        {(task.nodeTimeouts as Record<string, number>)?.[index] &&
-                          (task.nodeTimeouts as Record<string, number>)[index] > 0 && (
-                            <span className="text-[8px] text-fg-faint mt-0.5">
-                              {t('nodeStatus.timeout', { minutes: (task.nodeTimeouts as Record<string, number>)[index] })}
-                            </span>
-                          )}
-                        <ClaimButton task={task} nodeIndex={index} onClaim={onClaim} />
-                      </div>
-                      {index < nodeNames.length - 1 && (
-                        <div
-                          className={`w-8 h-px shrink-0 ${task.currentNode > index ? "bg-success/50" : "bg-surface-3"}`}
-                        />
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
+              <RunFlowCanvas
+                nodes={rawFlowNodes}
+                currentIndex={task.currentNode}
+                activeIndex={activeTerminalNode}
+                onNodeClick={handleNodeClick}
+              />
+              {/* 待认领节点(保留原进度条的认领入口) */}
+              {pendingClaimNodes.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap mt-2">
+                  {pendingClaimNodes.map(({ node, index }) => (
+                    <div
+                      key={node.id}
+                      className="flex items-center gap-2 text-xs text-fg-subtle bg-surface-2/40 border border-line-strong/50 rounded-md px-2.5 py-1.5"
+                    >
+                      <span>{node.name}</span>
+                      <ClaimButton task={task} nodeIndex={index} onClaim={onClaim} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 人工介入原因提示 */}

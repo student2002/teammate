@@ -2,6 +2,7 @@
 package handler_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -19,6 +20,7 @@ import (
 	"github.com/teammate/server/internal/server/handler"
 	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/service"
+	"github.com/teammate/server/internal/store"
 )
 
 // setupAuthSessionTestRouter creates a test router with full auth handlers,
@@ -185,6 +187,71 @@ func TestWhoamiUnauthenticated(t *testing.T) {
 		t.Fatalf("whoami without auth: expected 401, got %d", resp.StatusCode)
 	}
 	t.Log("whoami correctly returns 401 when unauthenticated")
+}
+
+// TestWhoamiDeletedMember verifies that a validly-signed token whose member
+// row no longer exists (e.g. the database was reset) gets 401 so the client
+// drops the token and re-authenticates — not a 500.
+func TestWhoamiDeletedMember(t *testing.T) {
+	_, db, _ := setupTestRouter(t)
+
+	svc := service.New(db, nil, nil)
+	r := chi.NewRouter()
+	authHandler := handler.NewAuthHandler(svc, testJWTSecret)
+	r.Mount("/api/auth", authHandler.Routes())
+	r.Group(func(r chi.Router) {
+		r.Use(svcmw.AuthMiddleware(testJWTSecret, testAPIKeyAuthenticator(svc), nil, nil))
+		r.Get("/api/auth/whoami", authHandler.Whoami)
+	})
+	ts := httptest.NewServer(r)
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+
+	email := "whoami-deleted-" + uuid.New().String()[:8] + "@test.com"
+	regBody := map[string]string{"name": "Deleted Member", "email": email, "password": "Test123456"}
+	_, status, respBody := doRequest(t, client, http.MethodPost, ts.URL+"/api/auth/register", regBody)
+	if status != http.StatusCreated {
+		t.Fatalf("register: expected 201, got %d, body: %s", status, respBody)
+	}
+	var regResult map[string]interface{}
+	json.Unmarshal(respBody, &regResult)
+	jwtToken := regResult["token"].(string)
+
+	// whoami works before deletion and yields the member id
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("whoami request: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("whoami before delete: expected 200, got %d", resp.StatusCode)
+	}
+	var info map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&info)
+	resp.Body.Close()
+	memberID, _ := info["id"].(string)
+	if memberID == "" {
+		t.Fatalf("whoami response missing id: %v", info)
+	}
+
+	// remove the member behind the still-valid token (DB-reset scenario)
+	if err := store.New(db).DeleteMember(context.Background(), uuid.MustParse(memberID)); err != nil {
+		t.Fatalf("DeleteMember: %v", err)
+	}
+
+	// the same token must now get 401, not 500
+	req2, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/whoami", nil)
+	req2.Header.Set("Authorization", "Bearer "+jwtToken)
+	resp2, err := client.Do(req2)
+	if err != nil {
+		t.Fatalf("whoami request after delete: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("whoami after member deleted: expected 401, got %d", resp2.StatusCode)
+	}
 }
 
 // TestRSAEncryptionRoundtrip verifies RSA encryption roundtrip:

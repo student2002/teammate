@@ -786,22 +786,18 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 				response.Forbidden(w, "agent lacks git:push permission")
 				return
 			}
-		}
 
-		// query Git credentials
-		authSvc := service.NewAuthService(svc, "")
-		credentials, err := authSvc.GetGitCredentialsByProject(r.Context(), projectID)
-		if err != nil {
-			response.InternalServerError(w, err)
-			return
-		}
-
-		// Agent path: decrypt the AES-encrypted PAT, then re-encrypt with the Agent's public key
-		if claims.UserType == "agent" {
-			agentID := claims.UserID
+			// Agent path: only the credential bound to the requesting agent is
+			// returned — a daemon principal can never fetch another agent's PAT
+			authSvc := service.NewAuthService(svc, "")
+			credentials, err := authSvc.GetGitCredentialsByProjectAndAgent(r.Context(), projectID, claims.UserID)
+			if err != nil {
+				response.InternalServerError(w, err)
+				return
+			}
 
 			// get the Agent's latest public key
-			publicKeyPEM, err := authSvc.GetLatestPublicKeyForAgent(r.Context(), agentID)
+			publicKeyPEM, err := authSvc.GetLatestPublicKeyForAgent(r.Context(), claims.UserID)
 			if err != nil {
 				response.NotFound(w, fmt.Sprintf("no public key found for agent: %v", err))
 				return
@@ -814,6 +810,13 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 				return
 			}
 
+			// the credential no longer stores a repo URL; the agentd contract
+			// expects one, so fill it with the project's repository URL
+			project, err := projSvc.Get(r.Context(), projectID)
+			if err != nil {
+				response.InternalServerError(w, err)
+				return
+			}
 
 			// process each credential
 			result := make([]encryptedCredential, 0, len(credentials))
@@ -835,7 +838,7 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 				credID, _ := uuid.Parse(cred.ID)
 				result = append(result, encryptedCredential{
 					ID:           credID,
-					RepoUrl:      cred.RepoURL,
+					RepoUrl:      project.RepoURL,
 					Username:     cred.Username,
 					EncryptedPAT: base64.StdEncoding.EncodeToString(encrypted),
 				})
@@ -849,6 +852,32 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 		}
 
 		// human user path: decrypt the PAT for masked display
+
+		authSvc := service.NewAuthService(svc, "")
+		credentials, err := authSvc.GetGitCredentialsByProject(r.Context(), projectID)
+		if err != nil {
+			response.InternalServerError(w, err)
+			return
+		}
+
+		// resolve agent names for display; an agent row is deleted together
+		// with its credentials, so a failed lookup falls back to the raw ID
+		agentSvc := service.NewAgentService(svc)
+		agentNames := make(map[uuid.UUID]string, len(credentials))
+		for _, cred := range credentials {
+			agentID, err := uuid.Parse(cred.AgentID)
+			if err != nil {
+				response.InternalServerError(w, err)
+				return
+			}
+			if _, seen := agentNames[agentID]; seen {
+				continue
+			}
+			agentNames[agentID] = agentID.String()
+			if agent, err := agentSvc.Get(r.Context(), agentID); err == nil {
+				agentNames[agentID] = agent.Name
+			}
+		}
 
 		// process each credential
 		result := make([]maskedCredential, 0, len(credentials))
@@ -866,9 +895,13 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 				return
 			}
 			credID, _ := uuid.Parse(cred.ID)
+			credPID, _ := uuid.Parse(cred.ProjectID)
+			agentID, _ := uuid.Parse(cred.AgentID)
 			result = append(result, maskedCredential{
 				ID:        credID,
-				RepoUrl:   cred.RepoURL,
+				ProjectID: credPID,
+				AgentID:   agentID,
+				AgentName: agentNames[agentID],
 				Username:  cred.Username,
 				MaskedPAT: maskPAT(plainPAT),
 				CreatedBy: createdBy,
@@ -914,8 +947,8 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 		}
 
 		// verify required fields
-		if req.RepoUrl == "" {
-			response.BadRequest(w, "repo_url is required")
+		if req.AgentID == nil || *req.AgentID == uuid.Nil {
+			response.BadRequest(w, "agent_id is required")
 			return
 		}
 		if req.PAT == "" {
@@ -923,11 +956,19 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 			return
 		}
 
+		// the bound agent must be an explicit member of the project (the web
+		// form only offers member agents; enforce it server-side as well)
+		projSvc := service.NewProjectService(svc)
+		if err := projSvc.CheckAgentProjectAccess(r.Context(), *req.AgentID, projectID); err != nil {
+			response.Forbidden(w, err.Error())
+			return
+		}
+
 		// validate PAT scope: warn if using a classic (account-scoped) token
 		if !isFineGrainedPAT(req.PAT, req.PATType) {
-			log.Printf("[git-credentials] WARNING: project %s is using a classic/broad-scope PAT for %s — "+
+			log.Printf("[git-credentials] WARNING: project %s is using a classic/broad-scope PAT for agent %s — "+
 				"this token can access ALL repositories. Consider using a fine-grained/project-scoped token instead.",
-				projectID, req.RepoUrl)
+				projectID, req.AgentID)
 		}
 
 		// set default username
@@ -947,15 +988,15 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 		authSvc := service.NewAuthService(svc, "")
 		credential, err := authSvc.CreateGitCredential(r.Context(), buildCreateGitCredentialParams(
 			projectID,
-			req.RepoUrl,
+			*req.AgentID,
 			username,
 			encryptedPAT,
 			uuid.NullUUID{UUID: claims.UserID, Valid: true},
 		))
 		if err != nil {
-			// duplicate repo_url credential (23505) surfaces as 409
+			// duplicate (project, agent) credential (23505) surfaces as 409
 			if isUniqueViolation(err) {
-				response.Conflict(w, "a credential for this repository already exists; update it instead")
+				response.Conflict(w, "a credential for this agent already exists; update it instead")
 				return
 			}
 			response.InternalServerError(w, err)
@@ -976,6 +1017,13 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 			}
 		}
 
+		// resolve the bound agent's name for display
+		agentSvc := service.NewAgentService(svc)
+		agentName := credential.AgentID
+		if agent, err := agentSvc.Get(r.Context(), *req.AgentID); err == nil {
+			agentName = agent.Name
+		}
+
 		// decrypt the PAT for masked display
 		plainPAT, _ := crypto.DecryptPAT(credential.EncryptedPAT)
 
@@ -986,7 +1034,8 @@ func CreateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 		response.JSON(w, r, credentialResponse{
 			ID:           credID,
 			ProjectID:    credPID,
-			RepoUrl:      credential.RepoURL,
+			AgentID:      *req.AgentID,
+			AgentName:    agentName,
 			Username:     credential.Username,
 			MaskedPAT:    maskPAT(plainPAT),
 			ScopeWarning: scopeWarning,
@@ -1045,11 +1094,7 @@ func UpdateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 			return
 		}
 
-		// use existing values as defaults
-		repoUrl := existing.RepoURL
-		if req.RepoUrl != "" {
-			repoUrl = req.RepoUrl
-		}
+		// use existing values as defaults; the agent binding is immutable
 		username := existing.Username
 		if req.Username != "" {
 			username = req.Username
@@ -1068,7 +1113,6 @@ func UpdateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 		// call service to update the credential
 		credential, err := authSvc.UpdateGitCredential(r.Context(), buildUpdateGitCredentialParams(
 			credentialID,
-			repoUrl,
 			username,
 			encryptedPAT,
 		))
@@ -1085,6 +1129,14 @@ func UpdateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 			}
 		}
 
+		// resolve the bound agent's name for display
+		agentSvc := service.NewAgentService(svc)
+		boundAgentID, _ := uuid.Parse(credential.AgentID)
+		agentName := credential.AgentID
+		if agent, err := agentSvc.Get(r.Context(), boundAgentID); err == nil {
+			agentName = agent.Name
+		}
+
 		// decrypt the PAT for masked display
 		plainPAT, _ := crypto.DecryptPAT(credential.EncryptedPAT)
 
@@ -1094,7 +1146,8 @@ func UpdateGitCredentialHandler(svc *service.Service) http.HandlerFunc {
 		response.JSON(w, r, credentialResponse{
 			ID:        updID,
 			ProjectID: updPID,
-			RepoUrl:   credential.RepoURL,
+			AgentID:   boundAgentID,
+			AgentName: agentName,
 			Username:  credential.Username,
 			MaskedPAT: maskPAT(plainPAT),
 			CreatedBy: createdBy,

@@ -69,6 +69,10 @@ interface AppState {
   setSkills: (skills: Skill[]) => void;
   setMcpServers: (servers: McpServer[]) => void;
 
+  // 自定义主题(运行时上传,部署级共享)
+  customThemes: import("./themes/dynamic").CustomThemeInfo[];
+  setCustomThemes: (themes: import("./themes/dynamic").CustomThemeInfo[]) => void;
+
   // 加载
   loading: boolean;
   setLoading: (loading: boolean) => void;
@@ -219,6 +223,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   mcpServers: [],
   setSkills: (skills) => set({ skills }),
   setMcpServers: (mcpServers) => set({ mcpServers }),
+
+  // 自定义主题(运行时上传,部署级共享)
+  customThemes: [],
+  setCustomThemes: (customThemes) => set({ customThemes }),
 
   // 加载
   loading: true,

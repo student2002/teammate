@@ -51,6 +51,9 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_WS_URL=
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 
+# 镜像运行时走 server.js（standalone 产物），必须开启该开关；本地开发构建不设此变量
+ENV NEXT_BUILD_STANDALONE=1
+
 RUN corepack enable && pnpm build
 
 # ---- Runtime stage ----

@@ -25,6 +25,8 @@ import {
   Bell,
   Search,
   History,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import ModalPortal from "@/lib/ModalPortal";
 import ThemeSwitcher from "@/lib/themes/ThemeSwitcher";
@@ -80,6 +82,8 @@ export default function WorkspaceLayout({
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<{id: string; type: string; title: string; subtitle?: string}>>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   const user = useAppStore((s) => s.user);
   const setUser = useAppStore((s) => s.setUser);
@@ -104,6 +108,30 @@ export default function WorkspaceLayout({
       router.push("/login");
     }
   }, [loading, user, router]);
+
+  // 侧边栏收纳：挂载后恢复上次状态（首帧先按展开渲染，避免 SSR 水合不一致）
+  useEffect(() => {
+    setSidebarCollapsed(localStorage.getItem("sidebar.collapsed") === "1");
+    // 过渡类延迟到恢复宽度绘制之后再挂：若与宽度变更同帧提交，过渡会在刷新时
+    // 重放一次收起动画；单个 rAF 仍可能早于 React 提交恢复帧，需双层 rAF
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setSidebarReady(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    localStorage.setItem("sidebar.collapsed", next ? "1" : "0");
+    if (next) {
+      setShowWsSwitcher(false);
+      setShowWsOverview(false);
+    }
+  };
 
   // 定时获取通知
   useEffect(() => {
@@ -185,129 +213,158 @@ export default function WorkspaceLayout({
 
   return (
     <div className="flex h-screen bg-bg text-fg-muted font-sans overflow-hidden selection:bg-primary/30">
-      {/* 侧边栏 */}
-      <div className="w-64 bg-surface/95 backdrop-blur-sm border-r border-line/80 flex flex-col shrink-0 relative z-20">
-        {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-line">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent-strong rounded-lg flex items-center justify-center mr-3 font-bold text-fg shadow-lg shadow-primary/25 animate-fade-in">
-            T
-          </div>
-          <span className="text-lg font-semibold text-fg tracking-wide animate-fade-in">
-            Teammate
-          </span>
-        </div>
-
-        <div className="p-4 flex-1 overflow-y-auto">
-          {/* 工作区选择器 */}
-          <div className="relative mb-4">
+      {/* 侧边栏（可收纳：展开 w-64 / 收起为 64px 图标窄栏） */}
+      <div
+        className={`${sidebarCollapsed ? "w-16" : "w-64"} bg-surface/95 backdrop-blur-sm border-r border-line/80 flex flex-col shrink-0 relative z-20 ${sidebarReady ? "transition-all-normal" : ""}`}
+      >
+        {/* Logo 与收纳开关 */}
+        {sidebarCollapsed ? (
+          <div className="py-3 px-2 flex flex-col items-center gap-1 border-b border-line">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent-strong rounded-lg flex items-center justify-center font-bold text-fg shadow-lg shadow-primary/25">
+              T
+            </div>
             <button
-              onClick={() => setShowWsSwitcher(!showWsSwitcher)}
-              className="w-full text-xs font-semibold text-fg-faint uppercase tracking-wider px-2 flex items-center justify-between hover:text-fg-muted transition-colors-fast"
+              onClick={toggleSidebar}
+              className="w-full flex items-center justify-center py-1 rounded-md text-fg-faint hover:text-fg hover:bg-surface-2 transition-colors-fast"
+              title={t("expandSidebar")}
             >
-              <span className="truncate">
-                {t("workspace")} : {(currentWs?.issuePrefix || currentWs?.slug || "LOADING").toUpperCase()}
-              </span>
-              <ChevronDown className={`w-3 h-3 shrink-0 ml-1 transition-transform duration-200 ${showWsSwitcher ? "rotate-180" : ""}`} />
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="h-16 flex items-center px-6 border-b border-line">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent-strong rounded-lg flex items-center justify-center mr-3 font-bold text-fg shadow-lg shadow-primary/25 animate-fade-in">
+              T
+            </div>
+            <span className="text-lg font-semibold text-fg tracking-wide animate-fade-in flex-1">
+              Teammate
+            </span>
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-md text-fg-faint hover:text-fg hover:bg-surface-2 transition-colors-fast"
+              title={t("collapseSidebar")}
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className={`${sidebarCollapsed ? "px-2 py-4" : "p-4"} flex-1 overflow-y-auto`}>
+          {/* 工作区选择器/详情均为文字内容，收起态整体隐藏 */}
+          {!sidebarCollapsed && (
+            <>
+            {/* 工作区选择器 */}
+            <div className="relative mb-4">
+              <button
+                onClick={() => setShowWsSwitcher(!showWsSwitcher)}
+                className="w-full text-xs font-semibold text-fg-faint uppercase tracking-wider px-2 flex items-center justify-between hover:text-fg-muted transition-colors-fast"
+              >
+                <span className="truncate">
+                  {t("workspace")} : {(currentWs?.issuePrefix || currentWs?.slug || "LOADING").toUpperCase()}
+                </span>
+                <ChevronDown className={`w-3 h-3 shrink-0 ml-1 transition-transform duration-200 ${showWsSwitcher ? "rotate-180" : ""}`} />
+              </button>
+
+              {showWsSwitcher && (
+                <div className="absolute left-0 right-0 top-full mt-1 mx-1 bg-surface-2 border border-line-strong rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
+                  {workspaces.map((ws) => (
+                    <button
+                      key={ws.id}
+                      onClick={() => handleSwitchWorkspace(ws.id)}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors-fast ${
+                        ws.id === currentWs?.id
+                          ? "bg-primary/10 text-primary-fg"
+                          : "text-fg-muted hover:bg-surface-3/50"
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate flex-1">{ws.name}</span>
+                      {ws.issuePrefix && (
+                        <span className="text-[10px] text-fg-faint font-mono">{ws.issuePrefix}</span>
+                      )}
+                      {ws.id === currentWs?.id && <Check className="w-3.5 h-3.5 text-primary-fg shrink-0" />}
+                    </button>
+                  ))}
+                  <div className="border-t border-line-strong">
+                    {perm.canManageMembers && (
+                      <button
+                        onClick={() => {
+                          setShowCreateWs(true);
+                          setShowWsSwitcher(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-primary-fg hover:bg-surface-3/50 flex items-center gap-2 transition-colors-fast"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {t("createWorkspace")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 工作区详情开关 */}
+            <button
+              onClick={() => setShowWsOverview(!showWsOverview)}
+              className="w-full text-[10px] text-fg-faint mb-4 px-2 flex items-center hover:text-fg-subtle transition-colors-fast"
+            >
+              <ChevronRight
+                className={`w-2.5 h-2.5 mr-1 transition-transform duration-200 ${showWsOverview ? "rotate-90" : ""}`}
+              />
+              {t("workspaceDetails")}
             </button>
 
-            {showWsSwitcher && (
-              <div className="absolute left-0 right-0 top-full mt-1 mx-1 bg-surface-2 border border-line-strong rounded-xl shadow-xl z-50 overflow-hidden animate-scale-in">
-                {workspaces.map((ws) => (
-                  <button
-                    key={ws.id}
-                    onClick={() => handleSwitchWorkspace(ws.id)}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors-fast ${
-                      ws.id === currentWs?.id
-                        ? "bg-primary/10 text-primary-fg"
-                        : "text-fg-muted hover:bg-surface-3/50"
-                    }`}
-                  >
-                    <Building2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate flex-1">{ws.name}</span>
-                    {ws.issuePrefix && (
-                      <span className="text-[10px] text-fg-faint font-mono">{ws.issuePrefix}</span>
-                    )}
-                    {ws.id === currentWs?.id && <Check className="w-3.5 h-3.5 text-primary-fg shrink-0" />}
-                  </button>
-                ))}
-                <div className="border-t border-line-strong">
+            {showWsOverview && (
+              <div className="mb-4 mx-2 p-3 bg-surface-2/60 border border-line-strong/50 rounded-xl space-y-2 text-xs animate-scale-in">
+                <div className="flex justify-between">
+                  <span className="text-fg-faint">{t("projectCount")}</span>
+                  <span className="text-fg font-medium">
+                    {currentWs?.stats?.projects ?? projects.length}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fg-faint">{t("agentCount")}</span>
+                  <span className="text-fg font-medium">{agents.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fg-faint">{t("activeTaskCount")}</span>
+                  <span className="text-fg font-medium">
+                    {tasks.filter((t) => t.priorityState === "in_progress").length}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fg-faint">{t("manualInterventionCount")}</span>
+                  <span className="text-danger-fg font-medium">
+                    {tasks.filter((t) => t.priorityState === "manual_intervention").length}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-line-strong/50 space-y-1.5">
                   {perm.canManageMembers && (
-                    <button
-                      onClick={() => {
-                        setShowCreateWs(true);
-                        setShowWsSwitcher(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-primary-fg hover:bg-surface-3/50 flex items-center gap-2 transition-colors-fast"
+                    <Link
+                      href="/members"
+                      prefetch={false}
+                      onClick={() => setShowWsOverview(false)}
+                      className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      {t("createWorkspace")}
-                    </button>
+                      <Settings className="w-3 h-3 mr-1.5" />
+                      {t("memberManage")}
+                    </Link>
+                  )}
+                  {perm.isAdmin && (
+                    <Link
+                      href="/settings/workspace"
+                      prefetch={false}
+                      onClick={() => setShowWsOverview(false)}
+                      className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
+                    >
+                      <Settings className="w-3 h-3 mr-1.5" />
+                      {t("workspaceSettings")}
+                    </Link>
                   )}
                 </div>
               </div>
             )}
-          </div>
-
-          {/* 工作区详情开关 */}
-          <button
-            onClick={() => setShowWsOverview(!showWsOverview)}
-            className="w-full text-[10px] text-fg-faint mb-4 px-2 flex items-center hover:text-fg-subtle transition-colors-fast"
-          >
-            <ChevronRight
-              className={`w-2.5 h-2.5 mr-1 transition-transform duration-200 ${showWsOverview ? "rotate-90" : ""}`}
-            />
-            {t("workspaceDetails")}
-          </button>
-
-          {showWsOverview && (
-            <div className="mb-4 mx-2 p-3 bg-surface-2/60 border border-line-strong/50 rounded-xl space-y-2 text-xs animate-scale-in">
-              <div className="flex justify-between">
-                <span className="text-fg-faint">{t("projectCount")}</span>
-                <span className="text-fg font-medium">
-                  {currentWs?.stats?.projects ?? projects.length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-fg-faint">{t("agentCount")}</span>
-                <span className="text-fg font-medium">{agents.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-fg-faint">{t("activeTaskCount")}</span>
-                <span className="text-fg font-medium">
-                  {tasks.filter((t) => t.priorityState === "in_progress").length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-fg-faint">{t("manualInterventionCount")}</span>
-                <span className="text-danger-fg font-medium">
-                  {tasks.filter((t) => t.priorityState === "manual_intervention").length}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-line-strong/50 space-y-1.5">
-                {perm.canManageMembers && (
-                  <Link
-                    href="/members"
-                    prefetch={false}
-                    onClick={() => setShowWsOverview(false)}
-                    className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
-                  >
-                    <Settings className="w-3 h-3 mr-1.5" />
-                    {t("memberManage")}
-                  </Link>
-                )}
-                {perm.isAdmin && (
-                  <Link
-                    href="/settings/workspace"
-                    prefetch={false}
-                    onClick={() => setShowWsOverview(false)}
-                    className="w-full text-left text-fg-subtle hover:text-fg flex items-center py-1 transition-colors-fast"
-                  >
-                    <Settings className="w-3 h-3 mr-1.5" />
-                    {t("workspaceSettings")}
-                  </Link>
-                )}
-              </div>
-            </div>
+            </>
           )}
 
           {/* 导航 */}
@@ -321,7 +378,8 @@ export default function WorkspaceLayout({
                   key={item.id}
                   href={item.href}
                   prefetch={false}
-                  className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-all-normal group relative ${
+                  title={sidebarCollapsed ? t(item.labelKey) : undefined}
+                  className={`w-full flex items-center ${sidebarCollapsed ? "justify-center px-0" : "px-3"} py-2.5 rounded-lg transition-all-normal group relative ${
                     isActive
                       ? "bg-primary/15 text-primary-fg font-medium shadow-md shadow-primary/10 border border-primary/30"
                       : "hover:bg-surface-2/60 hover:text-fg border border-transparent"
@@ -330,48 +388,71 @@ export default function WorkspaceLayout({
                   {isActive && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary-fg rounded-r-full shadow-sm shadow-primary-fg/50" />
                   )}
-                  <item.icon className={`w-5 h-5 mr-3 transition-transform-fast group-hover:scale-110 ${isActive ? "text-primary-fg" : ""}`} />
-                  {t(item.labelKey)}
+                  <item.icon className={`w-5 h-5 ${sidebarCollapsed ? "" : "mr-3"} transition-transform-fast group-hover:scale-110 ${isActive ? "text-primary-fg" : ""}`} />
+                  {!sidebarCollapsed && t(item.labelKey)}
                 </Link>
               );
             })}
           </nav>
         </div>
 
-        {/* 用户信息与退出登录 */}
-        <div className="p-4 border-t border-line bg-surface">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center min-w-0">
+        {/* 用户信息与退出登录：收起态只留语言/主题/退出三个图标 */}
+        <div className={`${sidebarCollapsed ? "px-2 py-4" : "p-4"} border-t border-line bg-surface`}>
+          {sidebarCollapsed ? (
+            <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleLocale}
-                className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 flex items-center justify-center mr-2 shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-fg-muted"
+                className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 flex items-center justify-center shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-fg-muted"
                 title={locale === "zh-CN" ? "Switch to English" : "切换到中文"}
               >
                 {locale === "zh-CN" ? "EN" : "中"}
               </button>
-              <div className="mr-3">
-                <ThemeSwitcher />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-fg truncate">
-                  {user?.name || "Admin"}
-                </div>
-                <div className="text-[10px] text-fg-faint truncate">
-                  {perm.isViewer ? t("readOnly") : (user?.role || "Owner")}
-                </div>
-              </div>
+              <ThemeSwitcher />
+              <button
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  setUser(null);
+                }}
+                className="p-1.5 text-fg-faint hover:text-danger-fg hover:bg-surface-2 rounded transition-colors-fast shrink-0"
+                title={t("logout")}
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem("token");
-                setUser(null);
-              }}
-              className="p-1.5 text-fg-faint hover:text-danger-fg hover:bg-surface-2 rounded transition-colors-fast shrink-0"
-              title={t("logout")}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center min-w-0">
+                <button
+                  onClick={toggleLocale}
+                  className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 flex items-center justify-center mr-2 shrink-0 transition-colors-fast btn-press text-[10px] font-bold text-fg-muted"
+                  title={locale === "zh-CN" ? "Switch to English" : "切换到中文"}
+                >
+                  {locale === "zh-CN" ? "EN" : "中"}
+                </button>
+                <div className="mr-3">
+                  <ThemeSwitcher />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-fg truncate">
+                    {user?.name || "Admin"}
+                  </div>
+                  <div className="text-[10px] text-fg-faint truncate">
+                    {perm.isViewer ? t("readOnly") : (user?.role || "Owner")}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  setUser(null);
+                }}
+                className="p-1.5 text-fg-faint hover:text-danger-fg hover:bg-surface-2 rounded transition-colors-fast shrink-0"
+                title={t("logout")}
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

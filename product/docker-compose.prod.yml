@@ -15,6 +15,14 @@
 #   TEAMMATE_ENCRYPTION_KEY_BASE64=<32-byte Base64>
 #   TEAMS_ALLOWED_ORIGINS=<frontend domain>
 #
+# Two startup paths share this file:
+#   Zero-build (prebuilt images):  docker compose --env-file product/.env -f product/docker-compose.prod.yml pull
+#                                  docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
+#   Local build (after source changes): add --build
+# Image source is parameterized:
+#   TEAMS_REGISTRY   default host.docker.internal:3000/zhenfeng (Gitea container registry)
+#   TEAMS_IMAGE_TAG  default latest; pin a release tag (e.g. 0.1.0) for reproducible prod
+#
 # Example key generation:
 #   echo "TEAMS_JWT_SECRET=$(openssl rand -hex 32)" >> .env
 #   echo "TEAMMATE_ENCRYPTION_KEY_BASE64=$(openssl rand 32 | base64 -w0)" >> .env
@@ -70,6 +78,9 @@ services:
 
   # ---- Teammate API Server ----
   app:
+    image: ${TEAMS_REGISTRY:-host.docker.internal:3000/zhenfeng}/teammate-server:${TEAMS_IMAGE_TAG:-latest}
+    # 本地无镜像时拉取预构建镜像；`up -d --build` 仍强制本地构建并覆盖同名镜像
+    pull_policy: missing
     build:
       context: ..
       dockerfile: product/Dockerfile
@@ -106,6 +117,9 @@ services:
 
   # ---- Teammate Frontend ----
   web:
+    image: ${TEAMS_REGISTRY:-host.docker.internal:3000/zhenfeng}/teammate-web:${TEAMS_IMAGE_TAG:-latest}
+    # 本地无镜像时拉取预构建镜像；`up -d --build` 仍强制本地构建并覆盖同名镜像
+    pull_policy: missing
     build:
       context: ..
       dockerfile: product/Dockerfile.web

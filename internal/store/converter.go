@@ -1449,7 +1449,7 @@ func ToDomainGitCredential(g db.GitCredential) (types.GitCredential, error) {
 	return types.GitCredential{
 		ID:           g.ID.String(),
 		ProjectID:    g.ProjectID.String(),
-		RepoURL:      g.RepoUrl,
+		AgentID:      g.AgentID.String(),
 		Username:     g.Username,
 		EncryptedPAT: g.EncryptedPat,
 		CreatedBy:    nullUUIDToString(g.CreatedBy),

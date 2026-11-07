@@ -49,24 +49,26 @@ type addProjectReviewerRequest struct {
 
 // createGitCredentialRequest create Git credential request body.
 type createGitCredentialRequest struct {
-	RepoUrl  string `json:"repo_url"`  // Git repository URL
-	Username string `json:"username"`  // username
-	PAT      string `json:"pat"`       // personal access token
+	AgentID  *uuid.UUID `json:"agent_id"` // bound member agent (immutable after creation)
+	Username string     `json:"username"` // username
+	PAT      string     `json:"pat"`      // personal access token
 	// PATType indicates the token type: "fine_grained" (repository scope) or "classic" (account scope).
 	// "fine_grained" is recommended for least-privilege access.
 	PATType string `json:"pat_type"`
 }
 
-// updateGitCredentialRequest update Git credential request body.
+// updateGitCredentialRequest update Git credential request body. The agent
+// binding is immutable, so only the username and PAT can be changed.
 type updateGitCredentialRequest struct {
-	RepoUrl  string `json:"repo_url"`  // Git repository URL
-	Username string `json:"username"`  // username
-	PAT      string `json:"pat"`       // new personal access token
+	Username string `json:"username"` // username
+	PAT      string `json:"pat"`      // new personal access token (empty keeps the stored one)
 }
 
 // --- response DTOs ---
 
 // encryptedCredential encrypted credential response body (Agent path).
+// repo_url is the owning project's repository URL: the credential itself no
+// longer stores one, and the agentd contract expects the field.
 type encryptedCredential struct {
 	ID           uuid.UUID `json:"id"`
 	RepoUrl      string    `json:"repo_url"`
@@ -77,9 +79,11 @@ type encryptedCredential struct {
 // maskedCredential masked credential response body (human user path).
 type maskedCredential struct {
 	ID        uuid.UUID  `json:"id"`
-	RepoUrl   string     `json:"repo_url"`
+	ProjectID uuid.UUID  `json:"project_id"`
+	AgentID   uuid.UUID  `json:"agent_id"`
+	AgentName string     `json:"agent_name"`
 	Username  string     `json:"username"`
-	MaskedPAT string     `json:"masked_pat"`
+	MaskedPAT string     `json:"pat_masked"`
 	CreatedBy *uuid.UUID `json:"created_by"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
@@ -89,9 +93,10 @@ type maskedCredential struct {
 type credentialResponse struct {
 	ID           uuid.UUID  `json:"id"`
 	ProjectID    uuid.UUID  `json:"project_id"`
-	RepoUrl      string     `json:"repo_url"`
+	AgentID      uuid.UUID  `json:"agent_id"`
+	AgentName    string     `json:"agent_name"`
 	Username     string     `json:"username"`
-	MaskedPAT    string     `json:"masked_pat"`
+	MaskedPAT    string     `json:"pat_masked"`
 	ScopeWarning string     `json:"scope_warning,omitempty"`
 	CreatedBy    *uuid.UUID `json:"created_by"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -215,7 +220,7 @@ func buildCreateProjectReviewerParams(
 // buildCreateGitCredentialParams builds types.CreateGitCredentialParams from handler-layer input.
 func buildCreateGitCredentialParams(
 	projectID uuid.UUID,
-	repoUrl string,
+	agentID uuid.UUID,
 	username string,
 	encryptedPat string,
 	createdBy uuid.NullUUID,
@@ -227,7 +232,7 @@ func buildCreateGitCredentialParams(
 	}
 	return apitypes.CreateGitCredentialParams{
 		ProjectID:    projectID.String(),
-		RepoURL:      repoUrl,
+		AgentID:      agentID.String(),
 		Username:     username,
 		EncryptedPAT: encryptedPat,
 		CreatedBy:    cb,
@@ -237,13 +242,11 @@ func buildCreateGitCredentialParams(
 // buildUpdateGitCredentialParams builds types.UpdateGitCredentialParams from handler-layer input.
 func buildUpdateGitCredentialParams(
 	id uuid.UUID,
-	repoUrl string,
 	username string,
 	encryptedPat string,
 ) apitypes.UpdateGitCredentialParams {
 	return apitypes.UpdateGitCredentialParams{
 		ID:           id.String(),
-		RepoURL:      repoUrl,
 		Username:     username,
 		EncryptedPAT: encryptedPat,
 	}

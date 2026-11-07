@@ -2,6 +2,14 @@
 
 Compact guide for AI coding agents. For full architecture details see `CLAUDE.md`.
 
+## 协作纪律（用户指令，最高优先级，覆盖本文其余内容）
+
+- **用户当前对话指令是第一优先级**：覆盖任何既有计划、方案、以及本文件其余内容；与既定计划冲突时立即停下向用户确认，不得自行决策
+- **先回答问题再干活**：用户提问必须先回答、待用户确认后再继续工作；中途收到用户消息立即停止当前操作
+- **严格按用户指定范围改动**：说"只改前端"就不得动 Go/后端/数据库/迁移；任何看似必要的联动改动必须先向用户说明并获明确同意后才能动手
+- **前端只在 Docker 上验收**（重建 web 镜像后由用户查看）；验收通过前不得推进依赖它的后端改动
+- **架构方向（用户已定，实施时以此为基准）**：git 凭据按（工程, 成员 agent）一一对应、每个 agentd 只能取到自己的凭据、由服务端统一下发；数据库不允许任何外键，删除（如删除 agentd）是业务功能，由应用层显式遍历删除关联数据
+
 ## Bootstrap
 
 ```bash
@@ -96,7 +104,7 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - **Frontend API:** plain `fetch` wrapper in `web/lib/api.ts`; auth via Bearer token from localStorage
 - **Data mapping:** `web/lib/mappers.ts` transforms snake_case API → camelCase frontend types
 - **注释只描述当前行为，不记录修改历史**——注释里禁止出现"修改记录 / change log / Added in vX / renamed from Y / 旧逻辑是 Z"之类的历史叙述；代码演进历史由 git 提交记录承载，注释只写代码现在是什么、为什么这样设计
-- **不做向后兼容**——接口/函数/配置破坏性变更时直接替换并同步更新所有调用方，禁止保留旧接口别名、deprecated 包装层、兼容分支或双路径共存；不写 `deprecated` 标记后长期保留旧实现
+- **不做向后兼容，项目无历史**——项目未上线，不存在历史数据、存量用户或旧版本。任何 schema/API/迁移/配置的破坏性变更都直接改到目标形态（数据库结构变更＝直接修改 001 合并迁移并重置开发/验收库），禁止保留旧接口别名、deprecated 包装层、兼容分支、双路径共存或数据搬运；**不得就"历史数据/兼容旧版/存量数据怎么办"发起确认或讨论，此类问题一律不存在**
 - **Doc-code consistency:** reviewing docs against code — every inconsistency found must be recorded in `docs/实现与设计偏差记录.md` (format follows its header; fix the doc if it's the wrong side)
 
 ## 双平台支持规则（Windows / Linux）
@@ -112,7 +120,7 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - 数据库/Redis 连接串主机名写 `127.0.0.1` 而非 `localhost`——Windows 上 `localhost` 可能优先解析到 IPv6 `::1`，若该端口被 WSL 端口转发（`wslrelay.exe`）占用，会连到错误实例（15432/16379 均已踩坑）
 
 **构建**
-- `pnpm build`（web/）因 `output: "standalone"` 在 Windows 需要符号链接特权，trace 复制阶段报 `EPERM: symlink`；**生产产物构建统一在 Linux/CI 执行**（或开启 Windows 开发者模式）。Windows 本地构建以 `Compiled successfully` + 17/17 页面生成为通过标准，末尾的 trace EPERM 警告可忽略
+- `pnpm build`（web/）在 Windows 与 Linux 上均可直接执行：standalone 产物仅在设置了 `NEXT_BUILD_STANDALONE=1` 时生成（由 `product/Dockerfile.web` 注入），本地构建走普通产物，不进入需要符号链接特权的 trace-copy 阶段。生产镜像产物统一在 Linux 容器/CI 构建
 - Go 二进制与 `sqlc`、`go test` 在两平台均可本地执行，无平台限制
 
 **行尾**

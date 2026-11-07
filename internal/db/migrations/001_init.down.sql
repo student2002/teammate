@@ -51,3 +51,4 @@ DROP TYPE IF EXISTS agent_status;
 DROP TYPE IF EXISTS agent_provider;
 
 DROP EXTENSION IF EXISTS vector;
+DROP TABLE IF EXISTS custom_themes;

@@ -496,6 +496,20 @@ func (s *Store) GetGitCredentialsByProject(ctx context.Context, projectID uuid.U
 	return ToDomainGitCredentialSlice(creds)
 }
 
+// GetGitCredentialsByProjectAndAgent queries the Git credentials of one agent
+// inside the specified project. The agent-facing API uses this so a daemon
+// principal can only ever fetch the credential bound to its own agent.
+func (s *Store) GetGitCredentialsByProjectAndAgent(ctx context.Context, projectID, agentID uuid.UUID) ([]types.GitCredential, error) {
+	creds, err := s.q.ListGitCredentialsByProjectAndAgent(ctx, db.ListGitCredentialsByProjectAndAgentParams{
+		ProjectID: projectID,
+		AgentID:   agentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list git credentials by project and agent: %w", err)
+	}
+	return ToDomainGitCredentialSlice(creds)
+}
+
 // CreateGitCredential creates a new Git credential record.
 //
 // The credential contains an encrypted PAT (Personal Access Token), used for repository access authentication.
@@ -512,6 +526,10 @@ func (s *Store) CreateGitCredential(ctx context.Context, arg types.CreateGitCred
 	if err != nil {
 		return types.GitCredential{}, fmt.Errorf("parse project id: %w", err)
 	}
+	agentUUID, err := uuid.Parse(arg.AgentID)
+	if err != nil {
+		return types.GitCredential{}, fmt.Errorf("parse agent id: %w", err)
+	}
 	var createdBy uuid.NullUUID
 	if arg.CreatedBy != nil {
 		cu, err := uuid.Parse(*arg.CreatedBy)
@@ -522,7 +540,7 @@ func (s *Store) CreateGitCredential(ctx context.Context, arg types.CreateGitCred
 	}
 	cred, err := s.q.CreateGitCredential(ctx, db.CreateGitCredentialParams{
 		ProjectID:    projectUUID,
-		RepoUrl:      arg.RepoURL,
+		AgentID:      agentUUID,
 		Username:     arg.Username,
 		EncryptedPat: arg.EncryptedPAT,
 		CreatedBy:    createdBy,
@@ -549,7 +567,6 @@ func (s *Store) UpdateGitCredential(ctx context.Context, arg types.UpdateGitCred
 	}
 	cred, err := s.q.UpdateGitCredential(ctx, db.UpdateGitCredentialParams{
 		ID:           id,
-		RepoUrl:      arg.RepoURL,
 		Username:     arg.Username,
 		EncryptedPat: arg.EncryptedPAT,
 	})

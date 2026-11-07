@@ -336,17 +336,17 @@ CREATE UNIQUE INDEX idx_tokens_lookup ON auth_tokens(lookup_hash);
 CREATE INDEX idx_tokens_owner ON auth_tokens(owner_type, owner_id);
 CREATE INDEX idx_auth_tokens_session ON auth_tokens(lookup_hash) WHERE token_type = 'session';
 
--- 3.16 git_credentials — Git credentials
+-- 3.16 git_credentials — Git credentials (one per (project, member agent))
 CREATE TABLE git_credentials (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    repo_url      VARCHAR(500) NOT NULL,
+    agent_id      UUID NOT NULL,
     username      VARCHAR(200) NOT NULL DEFAULT 'git',
     encrypted_pat TEXT NOT NULL,
     created_by    UUID,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(project_id, repo_url)
+    UNIQUE(project_id, agent_id)
 );
 CREATE INDEX idx_git_credentials_project ON git_credentials(project_id);
 
@@ -553,3 +553,16 @@ CREATE TABLE daemons (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_daemons_workspace ON daemons(workspace_id);
+
+-- 3.19 custom_themes — 运行时上传的自定义主题（部署后经前端导入入口安装，不改源码）
+-- 无外键：created_by 仅记录上传者(展示用)；主题为部署级共享资源
+CREATE TABLE custom_themes (
+    id          VARCHAR(64) PRIMARY KEY,
+    name_zh     VARCHAR(100) NOT NULL,
+    name_en     VARCHAR(100) NOT NULL,
+    icon        VARCHAR(20) NOT NULL DEFAULT 'sparkles',
+    vars        JSONB NOT NULL,
+    created_by  UUID,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

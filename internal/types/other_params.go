@@ -122,16 +122,16 @@ type UpdateSessionClaudeIDParams struct {
 // CreateGitCredentialParams is the domain parameter struct for creating a Git credential.
 type CreateGitCredentialParams struct {
 	ProjectID    string  `json:"project_id"`
-	RepoURL      string  `json:"repo_url"`
+	AgentID      string  `json:"agent_id"`
 	Username     string  `json:"username"`
 	EncryptedPAT string  `json:"encrypted_pat"`
 	CreatedBy    *string `json:"created_by"`
 }
 
 // UpdateGitCredentialParams is the domain parameter struct for updating a Git credential.
+// The agent binding is immutable, so only username and PAT are updatable.
 type UpdateGitCredentialParams struct {
 	ID           string `json:"id"`
-	RepoURL      string `json:"repo_url"`
 	Username     string `json:"username"`
 	EncryptedPAT string `json:"encrypted_pat"`
 }

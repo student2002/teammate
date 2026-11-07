@@ -106,20 +106,18 @@ interface AddAgentTarget {
   version: string;
 }
 
-function AddAgentModal({
+function AddAgentCard({
   target,
   onSave,
   onClose,
   saving,
   error,
-  existingPersonas,
 }: {
   target: AddAgentTarget;
   onSave: (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => void;
   onClose: () => void;
   saving: boolean;
   error: string | null;
-  existingPersonas: string[];
 }) {
   const t = useTranslations("agents.addDialog");
   const [name, setName] = useState("");
@@ -131,148 +129,135 @@ function AddAgentModal({
   const formValid = name.trim() !== "" && gitName.trim() !== "" && gitEmail.trim() !== "";
 
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[500px] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line flex justify-between items-center">
-          <h2 className="text-xl font-bold text-fg flex items-center">
-            <Monitor className="w-5 h-5 mr-2 text-cyan-400" />
-            {t("title", { daemon: target.daemon.name, provider: providerLabel })}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 flex flex-col shadow-sm transition-all">
+      <div className="flex justify-between items-center pb-3 border-b border-line">
+        <h3 className="text-sm font-bold text-fg flex items-center">
+          <Monitor className="w-4 h-4 mr-2 text-cyan-400" />
+          {t("inlineTitle")}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          title={t("cancel")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-3.5 mt-4">
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("nameLabel")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.trim())}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            placeholder={t("namePlaceholder")}
+            autoFocus
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("nameHint")}</p>
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("nameLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value.trim())}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-              placeholder={t("namePlaceholder")}
-              autoFocus
-            />
-            <p className="text-[11px] text-fg-faint mt-1.5">{t("nameHint")}</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("personaKeyLabel")}
-            </label>
-            <input
-              value={personaKey}
-              onChange={(e) =>
-                setPersonaKey(e.target.value.trim().toLowerCase())
-              }
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg font-mono focus:outline-none focus:border-primary"
-              placeholder={t("personaKeyPlaceholder")}
-              list="persona-key-options"
-            />
-            <datalist id="persona-key-options">
-              {existingPersonas.map((key) => (
-                <option key={key} value={key} />
-              ))}
-            </datalist>
-            <p className="text-[11px] text-fg-faint mt-1.5">{t("personaKeyHint")}</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("instructionsLabel")}
-            </label>
-            <textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              rows={3}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary resize-y"
-              placeholder={t("instructionsPlaceholder")}
-            />
-            <p className="text-[11px] text-fg-faint mt-1.5">{t("instructionsHint")}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2">
-                {t("gitNameLabel")} <span className="text-danger-fg">*</span>
-              </label>
-              <input
-                value={gitName}
-                onChange={(e) => setGitName(e.target.value)}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                placeholder={t("gitNamePlaceholder")}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2">
-                {t("gitEmailLabel")} <span className="text-danger-fg">*</span>
-              </label>
-              <input
-                value={gitEmail}
-                onChange={(e) => setGitEmail(e.target.value.trim())}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                placeholder={t("gitEmailPlaceholder")}
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-fg-faint">{t("gitHint")}</p>
-          <div className="bg-bg/60 border border-line rounded-lg px-4 py-2.5 flex items-center justify-between">
-            <span className="text-sm text-fg-subtle">{t("providerLabel")}</span>
-            <span className="text-sm text-fg-muted font-mono">
-              {providerLabel}
-              {target.version ? ` · v${target.version}` : ""}
-            </span>
-          </div>
-          {error && (
-            <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-        </div>
-        <div className="p-5 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={() =>
-              formValid &&
-              onSave({
-                name,
-                provider: target.provider,
-                personaKey,
-                instructions: instructions.trim(),
-                gitName: gitName.trim(),
-                gitEmail: gitEmail.trim(),
-              })
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("personaKeyLabel")}
+          </label>
+          <input
+            value={personaKey}
+            onChange={(e) =>
+              setPersonaKey(e.target.value.trim().toLowerCase())
             }
-            disabled={!formValid || saving}
-            className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            {t("submit")}
-          </button>
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg font-mono focus:outline-none focus:border-primary"
+            placeholder={t("personaKeyPlaceholder")}
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("personaKeyHint")}</p>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("instructionsLabel")}
+          </label>
+          <textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            rows={3}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary resize-y"
+            placeholder={t("instructionsPlaceholder")}
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("instructionsHint")}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("gitNameLabel")} <span className="text-danger-fg">*</span>
+            </label>
+            <input
+              value={gitName}
+              onChange={(e) => setGitName(e.target.value)}
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+              placeholder={t("gitNamePlaceholder")}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-fg-muted mb-2">
+              {t("gitEmailLabel")} <span className="text-danger-fg">*</span>
+            </label>
+            <input
+              value={gitEmail}
+              onChange={(e) => setGitEmail(e.target.value.trim())}
+              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+              placeholder={t("gitEmailPlaceholder")}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-fg-faint">{t("gitHint")}</p>
+        <div className="bg-bg/60 border border-line rounded-lg px-4 py-2.5 flex items-center justify-between">
+          <span className="text-sm text-fg-subtle">{t("providerLabel")}</span>
+          <span className="text-sm text-fg-muted font-mono">
+            {providerLabel}
+            {target.version ? ` · v${target.version}` : ""}
+          </span>
+        </div>
+        {error && (
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-auto pt-4 border-t border-line flex justify-end gap-3">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={() =>
+            formValid &&
+            onSave({
+              name,
+              provider: target.provider,
+              personaKey,
+              instructions: instructions.trim(),
+              gitName: gitName.trim(),
+              gitEmail: gitEmail.trim(),
+            })
+          }
+          disabled={!formValid || saving}
+          className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4 mr-2" />
+          )}
+          {t("submit")}
+        </button>
       </div>
     </div>
   );
 }
 
 // ==========================================
-// 守护进程相关：相对时间 / 状态徽标 / 弹窗
+// 守护进程相关：相对时间 / 状态徽标 / 内联组件
 // ==========================================
 function formatRelative(t: ReturnType<typeof useTranslations>, iso: string): string {
   if (!iso) return "—";
@@ -307,7 +292,8 @@ function DaemonStatusBadge({ status }: { status: DaemonStatus }) {
   );
 }
 
-function CreateDaemonModal({
+// 接入守护进程的内联表单卡:在机器列表最上方原位展开,不用弹窗
+function CreateDaemonCard({
   onSave,
   onClose,
   saving,
@@ -322,69 +308,66 @@ function CreateDaemonModal({
   const [name, setName] = useState("");
 
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[480px] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line flex justify-between items-center">
-          <h2 className="text-xl font-bold text-fg">{t("title")}</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 mb-8 shadow-sm transition-all">
+      <div className="flex justify-between items-center pb-3 border-b border-line">
+        <h3 className="text-sm font-bold text-fg flex items-center">
+          <Server className="w-4 h-4 mr-2 text-primary-fg" />
+          {t("title")}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          title={t("cancel")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-3.5 mt-4">
+        <p className="text-sm text-fg-subtle leading-relaxed">{t("desc")}</p>
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            {t("nameLabel")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            placeholder={t("namePlaceholder")}
+            autoFocus
+          />
         </div>
-        <div className="p-5 space-y-4">
-          <p className="text-sm text-fg-subtle leading-relaxed">{t("desc")}</p>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("nameLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-              placeholder={t("namePlaceholder")}
-              autoFocus
-            />
-          </div>
-          {error && (
-            <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-              {error}
-            </p>
+        {error && (
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 pt-4 border-t border-line flex justify-end gap-3">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={() => name.trim() && onSave(name.trim())}
+          disabled={!name.trim() || saving}
+          className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4 mr-2" />
           )}
-        </div>
-        <div className="p-5 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={() => name.trim() && onSave(name.trim())}
-            disabled={!name.trim() || saving}
-            className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            {t("submit")}
-          </button>
-        </div>
+          {t("submit")}
+        </button>
       </div>
     </div>
   );
 }
 
-function DaemonTokenRevealModal({
+// daemon token 一次性展示的内联提示条:挂在对应机器分组头部下方,关闭后不再重现
+function DaemonTokenBanner({
   daemonName,
   daemonToken,
   onClose,
@@ -403,76 +386,71 @@ function DaemonTokenRevealModal({
   };
 
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/98 backdrop-blur-xl border border-warning/30 rounded-2xl w-[560px] max-h-[85vh] overflow-y-auto shadow-2xl shadow-warning/10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-warning/20 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-fg flex items-center gap-2">
-            <span className="text-warning-fg">&#9888;</span> {t("title")}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="bg-surface-2/40 border border-warning/30 rounded-xl p-5 mb-4 shadow-sm">
+      <div className="flex justify-between items-center pb-3 border-b border-warning/20">
+        <h3 className="text-sm font-bold text-fg flex items-center">
+          <AlertTriangle className="w-4 h-4 text-warning-fg shrink-0 mr-2" />
+          {t("title")}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          title={t("close")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-4 mt-4">
+        <div className="bg-warning/5 border border-warning/20 rounded-lg p-3.5">
+          <p className="text-sm text-warning-fg font-medium mb-1">{t("importantTitle")}</p>
+          <p className="text-xs text-warning-fg/70">{t("importantDesc")}</p>
         </div>
-        <div className="p-5 space-y-5">
-          <div className="bg-warning/5 border border-warning/20 rounded-lg p-4">
-            <p className="text-sm text-warning-fg font-medium mb-1">{t("importantTitle")}</p>
-            <p className="text-xs text-warning-fg/70">{t("importantDesc")}</p>
-          </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-semibold text-fg-subtle uppercase tracking-wider">
-                {t("tokenLabel")} · {daemonName}
-              </label>
-              <button
-                onClick={handleCopy}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors-fast ${
-                  copied
-                    ? "bg-success-strong text-fg"
-                    : "bg-primary/10 text-primary-fg border border-primary/20 hover:bg-primary/20"
-                }`}
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? t("copied") : t("copy")}
-              </button>
-            </div>
-            <div className="bg-bg border border-line-strong rounded-lg p-4 break-all font-mono text-sm text-fg select-all">
-              {daemonToken}
-            </div>
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-semibold text-fg-subtle uppercase tracking-wider">
+              {t("tokenLabel")} · {daemonName}
+            </label>
+            <button
+              onClick={handleCopy}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors-fast ${
+                copied
+                  ? "bg-success-strong text-fg"
+                  : "bg-primary/10 text-primary-fg border border-primary/20 hover:bg-primary/20"
+              }`}
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? t("copied") : t("copy")}
+            </button>
           </div>
-
-          <div className="bg-surface-2/50 border border-line-strong rounded-lg p-4">
-            <p className="text-xs font-semibold text-fg-subtle uppercase tracking-wider mb-3">
-              {t("stepsTitle")}
-            </p>
-            <ol className="space-y-2 text-sm text-fg-muted">
-              {["step1", "step2", "step3"].map((key, i) => (
-                <li key={key} className="flex items-start gap-2">
-                  <span className="text-primary-fg font-bold shrink-0">{i + 1}.</span>
-                  <span>
-                    {t.rich(key, {
-                      code: (chunks) => (
-                        <code className="text-primary-fg bg-primary/10 px-1.5 py-0.5 rounded">
-                          {chunks}
-                        </code>
-                      ),
-                    })}
-                  </span>
-                </li>
-              ))}
-            </ol>
+          <div className="bg-bg border border-line-strong rounded-lg p-4 break-all font-mono text-sm text-fg select-all">
+            {daemonToken}
           </div>
         </div>
-        <div className="p-5 border-t border-line flex justify-end">
+
+        <div className="bg-surface-2/50 border border-line-strong rounded-lg p-4">
+          <p className="text-xs font-semibold text-fg-subtle uppercase tracking-wider mb-3">
+            {t("stepsTitle")}
+          </p>
+          <ol className="space-y-2 text-sm text-fg-muted">
+            {["step1", "step2", "step3"].map((key, i) => (
+              <li key={key} className="flex items-start gap-2">
+                <span className="text-primary-fg font-bold shrink-0">{i + 1}.</span>
+                <span>
+                  {t.rich(key, {
+                    code: (chunks) => (
+                      <code className="text-primary-fg bg-primary/10 px-1.5 py-0.5 rounded">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="flex justify-end">
           <button
             onClick={onClose}
             className="btn-press px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium"
@@ -485,145 +463,110 @@ function DaemonTokenRevealModal({
   );
 }
 
-function ConfirmDeleteDaemonModal({
+// 删除机器的原位二次确认簇:替换机器头部按钮组,红色确认态
+function DaemonDeleteConfirm({
   daemon,
   onConfirm,
-  onClose,
+  onCancel,
   deleting,
   error,
 }: {
   daemon: MappedDaemon;
   onConfirm: () => void;
-  onClose: () => void;
+  onCancel: () => void;
   deleting: boolean;
   error: string | null;
 }) {
   const t = useTranslations("daemons.deleteDialog");
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-danger/30 rounded-2xl w-[440px] shadow-2xl shadow-danger/10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center shrink-0 mt-0.5">
-            <AlertTriangle className="w-5 h-5 text-danger-fg" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-fg mb-1">{t("title")}</h3>
-            <p className="text-sm text-fg-subtle">
-              {t.rich("confirm", {
-                name: daemon.name,
-                count: daemon.agentCount,
-                span: (chunks) => (
-                  <span className="text-fg font-medium">{chunks}</span>
-                ),
-              })}
-            </p>
-            {error && (
-              <p className="text-sm text-danger-fg mt-2 bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="p-4 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={deleting}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast disabled:opacity-50"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="btn-press flex items-center px-4 py-2 bg-danger-strong hover:bg-danger text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-          >
-            {deleting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4 mr-2" />
-            )}
-            {t("confirmDelete")}
-          </button>
-        </div>
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <span className="flex items-center gap-1.5 text-xs text-danger-fg leading-relaxed">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+        {t.rich("confirm", {
+          name: daemon.name,
+          count: daemon.agentCount,
+          span: (chunks) => <span className="text-fg font-medium">{chunks}</span>,
+        })}
+      </span>
+      {error && (
+        <span className="text-xs text-danger-fg bg-danger/10 border border-danger/20 rounded px-2 py-1">
+          {error}
+        </span>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCancel}
+          disabled={deleting}
+          className="px-3 py-1.5 text-xs font-medium bg-surface-3/50 border border-line-strong/50 rounded-md hover:bg-surface-3 transition-colors-fast disabled:opacity-50"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={deleting}
+          className="btn-press flex items-center px-3 py-1.5 text-xs font-medium bg-danger-strong hover:bg-danger text-fg rounded-md disabled:opacity-50 transition-colors-fast"
+        >
+          {deleting ? (
+            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+          ) : (
+            <Trash2 className="w-3.5 h-3.5 mr-1" />
+          )}
+          {t("confirmDelete")}
+        </button>
       </div>
     </div>
   );
 }
 
-// ==========================================
-// 重置 daemon token 确认弹窗(旧 token 立即失效)
-// ==========================================
-function ConfirmRotateTokenModal({
+// 重置 token 的原位二次确认簇:替换机器头部按钮组,warning 确认态(旧 token 立即失效)
+function DaemonRotateConfirm({
   daemon,
   onConfirm,
-  onClose,
+  onCancel,
   rotating,
   error,
 }: {
   daemon: MappedDaemon;
   onConfirm: () => void;
-  onClose: () => void;
+  onCancel: () => void;
   rotating: boolean;
   error: string | null;
 }) {
   const t = useTranslations("daemons.rotateDialog");
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-warning/30 rounded-2xl w-[440px] shadow-2xl shadow-warning/10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center shrink-0 mt-0.5">
-            <KeyRound className="w-5 h-5 text-warning-fg" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-fg mb-1">{t("title")}</h3>
-            <p className="text-sm text-fg-subtle leading-relaxed">
-              {t.rich("confirm", {
-                name: daemon.name,
-                span: (chunks) => (
-                  <span className="text-fg font-medium">{chunks}</span>
-                ),
-              })}
-            </p>
-            {error && (
-              <p className="text-sm text-danger-fg mt-2 bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="p-4 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={rotating}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast disabled:opacity-50"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={rotating}
-            className="btn-press flex items-center px-4 py-2 bg-warning-strong hover:bg-warning text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-          >
-            {rotating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <KeyRound className="w-4 h-4 mr-2" />
-            )}
-            {t("confirmRotate")}
-          </button>
-        </div>
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <span className="flex items-center gap-1.5 text-xs text-warning-fg leading-relaxed">
+        <KeyRound className="w-3.5 h-3.5 shrink-0" />
+        {t.rich("confirm", {
+          name: daemon.name,
+          span: (chunks) => <span className="text-fg font-medium">{chunks}</span>,
+        })}
+      </span>
+      {error && (
+        <span className="text-xs text-danger-fg bg-danger/10 border border-danger/20 rounded px-2 py-1">
+          {error}
+        </span>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCancel}
+          disabled={rotating}
+          className="px-3 py-1.5 text-xs font-medium bg-surface-3/50 border border-line-strong/50 rounded-md hover:bg-surface-3 transition-colors-fast disabled:opacity-50"
+        >
+          {t("cancel")}
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={rotating}
+          className="btn-press flex items-center px-3 py-1.5 text-xs font-medium bg-warning-strong hover:bg-warning text-fg rounded-md disabled:opacity-50 transition-colors-fast"
+        >
+          {rotating ? (
+            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+          ) : (
+            <KeyRound className="w-3.5 h-3.5 mr-1" />
+          )}
+          {t("confirmRotate")}
+        </button>
       </div>
     </div>
   );
@@ -854,10 +797,7 @@ function ConfirmDeleteModal({
 }
 
 // ==========================================
-// 代理编辑弹窗（技能/MCP 管理）
-// ==========================================
-// ==========================================
-// 代理详情弹窗(查看 + 内置编辑模式,点击「编辑」原地切换)
+// 代理详情面板(查看 + 内置编辑模式,点击「编辑」原地切换)
 // ==========================================
 interface HistoryItem {
   task: string;
@@ -865,16 +805,14 @@ interface HistoryItem {
   status: string;
 }
 
-function AgentDetailModal({
+function AgentDetailPanel({
   agent,
-  onClose,
   onSaveEdit,
   saving,
   skills,
   mcpServers,
 }: {
   agent: MappedAgent;
-  onClose: () => void;
   onSaveEdit: (id: string, fields: Partial<MappedAgent>) => Promise<boolean>;
   saving: boolean;
   skills: Skill[];
@@ -882,7 +820,6 @@ function AgentDetailModal({
 }) {
   const t = useTranslations("agents.detail");
   const te = useTranslations("agents.edit");
-  const ta = useTranslations("agents");
   const [editing, setEditing] = useState(false);
   const [identity, setIdentity] = useState("");
   const [gitName, setGitName] = useState("");
@@ -918,256 +855,187 @@ function AgentDetailModal({
   };
 
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[640px] max-h-[80vh] overflow-y-auto shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-6 border-b border-line flex justify-between items-center sticky top-0 bg-surface z-10">
-          <div className="flex items-center">
-            <div className="w-12 h-12 rounded-xl bg-surface-3/80 border border-line-strong flex items-center justify-center mr-4">
-              <Bot className="w-7 h-7 text-primary-fg" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-fg">{agent.name}</h2>
-              <div className="text-xs text-fg-subtle flex items-center mt-1">
-                <Terminal className="w-3 h-3 mr-1" /> {agent.tool}
-              </div>
-              {agent.daemonName && (
-                <div className="text-[11px] text-fg-faint flex items-center mt-1">
-                  <Monitor className="w-3 h-3 mr-1" />
-                  {ta("fromDaemon")} {agent.daemonName}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {!editing && (
-              <button
-                onClick={enterEdit}
-                className="flex items-center px-3 py-1.5 text-xs font-medium text-primary-fg hover:text-primary-fg bg-primary/10 border border-primary/20 rounded-md transition-colors-fast"
-              >
-                <Save className="w-3.5 h-3.5 mr-1" /> {t("editButton")}
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+    <div className="mt-4 pt-4 border-t border-line">
+      {!editing && (
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={enterEdit}
+            className="flex items-center px-3 py-1.5 text-xs font-medium text-primary-fg hover:text-primary-fg bg-primary/10 border border-primary/20 rounded-md transition-colors-fast"
+          >
+            <Save className="w-3.5 h-3.5 mr-1" /> {t("editButton")}
+          </button>
         </div>
-
-        {editing ? (
-          <>
-            <div className="p-6 space-y-5">
+      )}
+      {editing ? (
+        <>
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-fg-muted mb-2">
+                {te("identityLabel")}
+              </label>
+              <textarea
+                value={identity}
+                onChange={(e) => setIdentity(e.target.value)}
+                rows={3}
+                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary resize-none font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {te("identityLabel")}
+                  {te("gitNameLabel")}
                 </label>
-                <textarea
-                  value={identity}
-                  onChange={(e) => setIdentity(e.target.value)}
-                  rows={3}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary resize-none font-mono"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    {te("gitNameLabel")}
-                  </label>
-                  <input
-                    value={gitName}
-                    onChange={(e) => setGitName(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                    placeholder={te("gitNamePlaceholder")}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-fg-muted mb-2">
-                    {te("gitEmailLabel")}
-                  </label>
-                  <input
-                    value={gitEmail}
-                    onChange={(e) => setGitEmail(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                    placeholder={te("gitEmailPlaceholder")}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
-                  <Zap className="w-4 h-4 mr-1.5 text-accent-fg" /> {te("skillsLabel")}
-                </label>
-                <MultiSelect
-                  options={enabledSkills.map((s) => ({ id: s.id, name: s.name, enabled: true }))}
-                  selected={selectedSkills}
-                  onChange={setSelectedSkills}
-                  placeholder={te("skillsPlaceholder")}
-                  accentColor="indigo"
+                <input
+                  value={gitName}
+                  onChange={(e) => setGitName(e.target.value)}
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+                  placeholder={te("gitNamePlaceholder")}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
-                  <Database className="w-4 h-4 mr-1.5 text-success-fg" /> {te("mcpLabel")}
+                <label className="block text-sm font-medium text-fg-muted mb-2">
+                  {te("gitEmailLabel")}
                 </label>
-                <MultiSelect
-                  options={enabledMcps.map((m) => ({ id: m.id, name: m.name, enabled: true }))}
-                  selected={selectedMcps}
-                  onChange={setSelectedMcps}
-                  placeholder={te("mcpPlaceholder")}
-                  accentColor="emerald"
+                <input
+                  value={gitEmail}
+                  onChange={(e) => setGitEmail(e.target.value)}
+                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+                  placeholder={te("gitEmailPlaceholder")}
                 />
               </div>
             </div>
-            <div className="p-5 border-t border-line flex justify-end gap-3">
-              <button
-                onClick={() => setEditing(false)}
-                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-              >
-                {te("cancel")}
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-              >
-                {saving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                {te("save")}
-              </button>
+            <div>
+              <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
+                <Zap className="w-4 h-4 mr-1.5 text-accent-fg" /> {te("skillsLabel")}
+              </label>
+              <MultiSelect
+                options={enabledSkills.map((s) => ({ id: s.id, name: s.name, enabled: true }))}
+                selected={selectedSkills}
+                onChange={setSelectedSkills}
+                placeholder={te("skillsPlaceholder")}
+                accentColor="indigo"
+              />
             </div>
-          </>
-        ) : (
-          <div className="p-6 space-y-6">
-            {agent.personaKey && (
-              <div>
-                <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span>{t("personaLabel")}</span>
-                  <button
-                    onClick={() => navigator.clipboard?.writeText(agent.personaKey || "")}
-                    className="text-[11px] px-2 py-0.5 bg-surface-2 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
-                    title={t("personaCopy")}
-                  >
-                    {t("personaCopy")}
-                  </button>
-                </div>
-                <div
-                  className="bg-bg border border-line rounded-lg px-4 py-2 text-sm text-fg-muted font-mono break-all select-all cursor-text"
-                  title={t("personaBadge", { key: agent.personaKey })}
+            <div>
+              <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
+                <Database className="w-4 h-4 mr-1.5 text-success-fg" /> {te("mcpLabel")}
+              </label>
+              <MultiSelect
+                options={enabledMcps.map((m) => ({ id: m.id, name: m.name, enabled: true }))}
+                selected={selectedMcps}
+                onChange={setSelectedMcps}
+                placeholder={te("mcpPlaceholder")}
+                accentColor="emerald"
+              />
+            </div>
+          </div>
+          <div className="mt-5 pt-4 border-t border-line flex justify-end gap-3">
+            <button
+              onClick={() => setEditing(false)}
+              className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+            >
+              {te("cancel")}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {te("save")}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-6">
+          {agent.personaKey && (
+            <div>
+              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center justify-between">
+                <span>{t("personaLabel")}</span>
+                <button
+                  onClick={() => navigator.clipboard?.writeText(agent.personaKey || "")}
+                  className="text-[11px] px-2 py-0.5 bg-surface-2 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
+                  title={t("personaCopy")}
                 >
-                  {agent.personaKey}
-                </div>
+                  {t("personaCopy")}
+                </button>
               </div>
-            )}
-            <div>
-              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
-                {t("identityLabel")}
-              </div>
-              <div className="bg-bg border border-line rounded-lg p-4 text-sm text-fg-muted leading-relaxed font-mono">
-                {agent.identityInstruction}
+              <div
+                className="bg-bg border border-line rounded-lg px-4 py-2 text-sm text-fg-muted font-mono break-all select-all cursor-text"
+                title={t("personaBadge", { key: agent.personaKey })}
+              >
+                {agent.personaKey}
               </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-                <Zap className="w-3.5 h-3.5 mr-1 text-accent-fg" /> {t("skillsLabel")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(agent.skills || []).map((s) => (
-                  <span
-                    key={typeof s === "string" ? s : s.name}
-                    className="px-3 py-1.5 bg-accent/10 border border-accent/20 text-accent-fg text-xs rounded-lg"
-                  >
-                    {typeof s === "string" ? s : s.name}
-                  </span>
-                ))}
-              </div>
+          )}
+          <div>
+            <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
+              {t("identityLabel")}
             </div>
+            <div className="bg-bg border border-line rounded-lg p-4 text-sm text-fg-muted leading-relaxed font-mono">
+              {agent.identityInstruction}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
+              <Cpu className="w-3.5 h-3.5 mr-1 text-primary-fg" /> {t("tokenUsageLabel")}
+            </div>
+            <div className="text-sm text-fg-muted">
+              {t("inputToken")}：
+              <span className="font-mono">
+                {(agent.tokenUsage || { input: 0, output: 0 }).input.toLocaleString()}
+              </span>
+              <span className="mx-2 text-fg-faint">·</span>
+              {t("outputToken")}：
+              <span className="font-mono">
+                {(agent.tokenUsage || { input: 0, output: 0 }).output.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          {((agent.history as HistoryItem[]) || []).length > 0 && (
             <div>
               <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-                <Database className="w-3.5 h-3.5 mr-1 text-success-fg" />{" "}
-                {t("mcpLabel")}
+                <Clock className="w-3.5 h-3.5 mr-1 text-fg-subtle" /> {t("historyLabel")}
               </div>
               <div className="space-y-2">
-                {(agent.mcpServers || []).map((m) => (
+                {(agent.history as HistoryItem[]).map((h, i) => (
                   <div
-                    key={typeof m === "string" ? m : m.name}
-                    className="flex items-center text-sm text-fg-muted bg-bg border border-line rounded-lg p-3"
+                    key={i}
+                    className="flex items-center justify-between bg-bg border border-line rounded-lg p-3"
                   >
-                    <div className="w-2 h-2 rounded-full bg-success mr-3 status-glow animate-pulse-soft" />{" "}
-                    {typeof m === "string" ? m : m.name}
+                    <div className="flex items-center text-sm">
+                      <span className="text-fg-muted font-mono mr-2">
+                        {h.task}
+                      </span>
+                      <span className="text-fg-faint">—</span>
+                      <span className="text-fg-subtle ml-2">{h.node}</span>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        h.status === "completed"
+                          ? "bg-success/10 text-success-fg"
+                          : h.status === "manual_intervention"
+                            ? "bg-danger/10 text-danger-fg"
+                            : "bg-primary/10 text-primary-fg"
+                      }`}
+                    >
+                      {h.status === "completed"
+                        ? t("historyCompleted")
+                        : h.status === "manual_intervention"
+                          ? t("historyIntervention")
+                          : t("historyInProgress")}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-                <Cpu className="w-3.5 h-3.5 mr-1 text-primary-fg" /> {t("tokenUsageLabel")}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-bg border border-line rounded-lg p-4">
-                  <div className="text-xs text-fg-subtle mb-1">{t("inputToken")}</div>
-                  <div className="text-lg font-bold text-fg">
-                    {(agent.tokenUsage || { input: 0, output: 0 }).input.toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-bg border border-line rounded-lg p-4">
-                  <div className="text-xs text-fg-subtle mb-1">{t("outputToken")}</div>
-                  <div className="text-lg font-bold text-fg">
-                    {(agent.tokenUsage || { input: 0, output: 0 }).output.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            </div>
-            {((agent.history as HistoryItem[]) || []).length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-                  <Clock className="w-3.5 h-3.5 mr-1 text-fg-subtle" /> {t("historyLabel")}
-                </div>
-                <div className="space-y-2">
-                  {(agent.history as HistoryItem[]).map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between bg-bg border border-line rounded-lg p-3"
-                    >
-                      <div className="flex items-center text-sm">
-                        <span className="text-fg-muted font-mono mr-2">
-                          {h.task}
-                        </span>
-                        <span className="text-fg-faint">—</span>
-                        <span className="text-fg-subtle ml-2">{h.node}</span>
-                      </div>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full ${
-                          h.status === "completed"
-                            ? "bg-success/10 text-success-fg"
-                            : h.status === "manual_intervention"
-                              ? "bg-danger/10 text-danger-fg"
-                              : "bg-primary/10 text-primary-fg"
-                        }`}
-                      >
-                        {h.status === "completed"
-                          ? t("historyCompleted")
-                          : h.status === "manual_intervention"
-                            ? t("historyIntervention")
-                            : t("historyInProgress")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1230,7 +1098,8 @@ export default function AgentsPage() {
   const mcpServers = useAppStore((s) => s.mcpServers);
   const currentWorkspaceId = useAppStore((s) => s.currentWorkspaceId);
 
-  const [selectedAgent, setSelectedAgent] = useState<MappedAgent | null>(null);
+  // 实例卡可收纳:默认折叠,底部按钮展开/收起;按 id 记录,轮询刷新后展开态不丢
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState<MappedAgent | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -1239,7 +1108,7 @@ export default function AgentsPage() {
   const [showCreateDaemon, setShowCreateDaemon] = useState(false);
   const [creatingDaemon, setCreatingDaemon] = useState(false);
   const [createDaemonError, setCreateDaemonError] = useState<string | null>(null);
-  const [newDaemonToken, setNewDaemonToken] = useState<{ name: string; token: string } | null>(null);
+  const [newDaemonToken, setNewDaemonToken] = useState<{ daemonId: string; name: string; token: string } | null>(null);
   const [deletingDaemon, setDeletingDaemon] = useState<MappedDaemon | null>(null);
   const [deletingDaemonBusy, setDeletingDaemonBusy] = useState(false);
   const [deleteDaemonError, setDeleteDaemonError] = useState<string | null>(null);
@@ -1294,18 +1163,44 @@ export default function AgentsPage() {
     };
   }, [currentWorkspaceId, setAgents]);
 
-  // 支持全局搜索跳转 /agents?id=<agentId>:打开对应实例的详情弹窗后清理 URL 参数
+  // 支持全局搜索跳转 /agents?id=<agentId>:展开并滚动定位对应实例卡片,然后清理 URL 参数
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
     if (!id) return;
     const target = agents.find((a) => a.id === id);
+    // 列表已加载却未命中说明 id 无效,清掉参数停止每次轮询重试;列表未加载(空)则留待下次
+    if (!target && agents.length > 0) {
+      params.delete("id");
+      const qsInvalid = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        window.location.pathname + (qsInvalid ? `?${qsInvalid}` : "")
+      );
+      return;
+    }
     if (!target) return;
-    setSelectedAgent(target);
+    setExpandedAgentId(id);
+    // 目标实例所在机器/工具节点可能处于折叠态,一并展开后再滚动定位
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(`daemon:${target.daemonId}`);
+      next.delete(`daemon:${target.daemonId}:${target.provider}`);
+      return next;
+    });
     params.delete("id");
     const qs = params.toString();
     window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    // 双帧 rAF:等展开+解除折叠的重渲染落 DOM 后再定位
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`agent-card-${id}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      })
+    );
   }, [agents]);
 
   const handleCreateDaemon = async (name: string) => {
@@ -1324,14 +1219,22 @@ export default function AgentsPage() {
       } catch {
         /* 忽略刷新错误 */
       }
-      if (created?.daemon_token) {
-        setNewDaemonToken({ name: created.name || name, token: created.daemon_token });
+      if (created?.daemon_token && created?.id) {
+        setNewDaemonToken({ daemonId: created.id, name: created.name || name, token: created.daemon_token });
       }
     } catch (err) {
       setCreateDaemonError(err instanceof Error ? err.message : td("createFailed"));
     } finally {
       setCreatingDaemon(false);
     }
+  };
+
+  // 打开接入守护进程的内联表单;与「添加代理」表单卡互斥,同页同时只展开一处表单
+  const openCreateDaemonForm = () => {
+    setAddAgentError(null);
+    setAddAgentTarget(null);
+    setCreateDaemonError(null);
+    setShowCreateDaemon(true);
   };
 
   const confirmDeleteDaemon = async () => {
@@ -1378,7 +1281,7 @@ export default function AgentsPage() {
     }
   };
 
-  // 重置 daemon token:旧 token 立即失效,新 token 仅展示一次(复用 Token 弹窗)
+  // 重置 daemon token:旧 token 立即失效,新 token 仅展示一次(复用 token 内联提示条)
   const confirmRotateToken = async () => {
     if (!rotatingDaemon || !currentWorkspaceId) return;
     setRotatingBusy(true);
@@ -1388,7 +1291,13 @@ export default function AgentsPage() {
       const res: any = await api.rotateDaemonToken(currentWorkspaceId, rotatingDaemon.id);
       setRotatingDaemon(null);
       if (res?.daemon_token) {
-        setNewDaemonToken({ name: rotatingDaemon.name, token: res.daemon_token });
+        setNewDaemonToken({ daemonId: rotatingDaemon.id, name: rotatingDaemon.name, token: res.daemon_token });
+        // 提示条挂在分组头部下方,确保该分组处于展开态可见
+        setCollapsed((prev) => {
+          const next = new Set(prev);
+          next.delete(`daemon:${rotatingDaemon.id}`);
+          return next;
+        });
       }
     } catch (err) {
       setRotateError(err instanceof Error ? err.message : td("rotateFailed"));
@@ -1397,7 +1306,7 @@ export default function AgentsPage() {
     }
   };
 
-  // 详情弹窗内的保存:成功返回 true(弹窗退回查看态),失败返回 false(停留编辑态)
+  // 详情面板内的保存:成功返回 true(面板退回查看态),失败返回 false(停留编辑态)
   const handleEditSave = async (id: string, fields: Partial<MappedAgent>): Promise<boolean> => {
     if (!currentWorkspaceId) return false;
     setSaving(true);
@@ -1428,9 +1337,6 @@ export default function AgentsPage() {
         mcpServers: mcpServers.filter((m) => nextMcpIds.includes(m.id)),
       };
       setAgents(agents.map((a) => (a.id === id ? { ...a, ...normalizedFields } : a)));
-      setSelectedAgent((prev) =>
-        prev?.id === id ? { ...prev, ...normalizedFields } : prev
-      );
       return true;
     } catch (err) {
       console.error("Update agent failed:", err);
@@ -1452,7 +1358,7 @@ export default function AgentsPage() {
     try {
       await api.deleteAgent(currentWorkspaceId, deletingAgent.id);
       setAgents(agents.filter((a) => a.id !== deletingAgent.id));
-      setSelectedAgent(null);
+      setExpandedAgentId((prev) => (prev === deletingAgent.id ? null : prev));
       setDeletingAgent(null);
     } catch (err) {
       setDeleteError(
@@ -1480,11 +1386,12 @@ export default function AgentsPage() {
     const completedCount = ((agent.history as HistoryItem[]) || []).filter(
       (h) => h.status === "completed"
     ).length;
+    const expanded = expandedAgentId === agent.id;
     return (
       <div
         key={agent.id}
-        onClick={() => setSelectedAgent(agent)}
-        className="card-hover bg-surface-2/40 border border-line-strong/50 rounded-xl backdrop-blur-sm p-6 flex flex-col shadow-sm hover:border-line-strong transition-all cursor-pointer hover:shadow-lg hover:shadow-primary/5"
+        id={`agent-card-${agent.id}`}
+        className="card-hover bg-surface-2/40 border border-line-strong/50 rounded-xl backdrop-blur-sm p-6 flex flex-col shadow-sm hover:border-line-strong transition-all"
       >
         <div className="flex justify-between items-start mb-6">
           <div className="flex items-center">
@@ -1571,6 +1478,16 @@ export default function AgentsPage() {
           )}
         </div>
 
+        {expanded && (
+          <AgentDetailPanel
+            agent={agent}
+            onSaveEdit={handleEditSave}
+            saving={saving}
+            skills={skills}
+            mcpServers={mcpServers}
+          />
+        )}
+
         <div className="mt-auto pt-4 border-t border-line-strong/50 flex justify-between items-center bg-surface-2/20 -mx-6 -mb-6 px-6 pb-6 rounded-b-xl">
           <div className="flex items-center gap-4">
             <div className="text-xs text-fg-subtle">
@@ -1584,19 +1501,23 @@ export default function AgentsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedAgent(agent);
-              }}
-              className="text-fg-subtle hover:text-fg text-xs font-medium bg-surface-3/50 px-3 py-1.5 rounded-md border border-line-strong/50 transition-colors-fast"
+              onClick={() =>
+                setExpandedAgentId((prev) =>
+                  prev === agent.id ? null : agent.id
+                )
+              }
+              aria-expanded={expanded}
+              className="flex items-center text-fg-subtle hover:text-fg text-xs font-medium bg-surface-3/50 px-3 py-1.5 rounded-md border border-line-strong/50 transition-colors-fast"
             >
-              {t("detailButton")}
+              <ChevronDown
+                className={`w-3.5 h-3.5 mr-1 transition-transform ${
+                  expanded ? "rotate-180" : ""
+                }`}
+              />
+              {expanded ? t("collapseButton") : t("expandButton")}
             </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(agent.id);
-              }}
+              onClick={() => handleDelete(agent.id)}
               disabled={!canEdit}
               className="text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -1618,13 +1539,25 @@ export default function AgentsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateDaemon(true)}
+          onClick={openCreateDaemonForm}
           disabled={!canEdit}
           className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Monitor className="w-5 h-5 mr-2" /> {td("addButton")}
         </button>
       </div>
+
+      {showCreateDaemon && (
+        <CreateDaemonCard
+          onSave={handleCreateDaemon}
+          onClose={() => {
+            setShowCreateDaemon(false);
+            setCreateDaemonError(null);
+          }}
+          saving={creatingDaemon}
+          error={createDaemonError}
+        />
+      )}
 
       {daemons.length === 0 && agents.length === 0 ? (
         <div className="bg-gradient-to-br from-surface-2/40 to-surface/40 border border-line-strong/60 rounded-xl p-8 max-w-2xl mx-auto mt-8">
@@ -1648,7 +1581,7 @@ export default function AgentsPage() {
             ))}
           </ol>
           <button
-            onClick={() => setShowCreateDaemon(true)}
+            onClick={openCreateDaemonForm}
             disabled={!canEdit}
             className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -1663,7 +1596,7 @@ export default function AgentsPage() {
                 const daemonCollapsed = collapsed.has(`daemon:${daemon.id}`);
                 return (
                   <>
-                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-line-strong/60">
+                    <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4 pb-3 border-b border-line-strong/60">
                       <button
                         className="flex items-center text-left"
                         onClick={() => toggleCollapse(`daemon:${daemon.id}`)}
@@ -1693,28 +1626,65 @@ export default function AgentsPage() {
                           </div>
                         </div>
                       </button>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setRotateError(null);
-                            setRotatingDaemon(daemon);
-                          }}
-                          className="flex items-center text-warning-fg hover:text-warning-fg text-xs font-medium bg-warning/10 px-3 py-1.5 rounded-md border border-warning/20 transition-colors-fast"
-                        >
-                          <KeyRound className="w-3.5 h-3.5 mr-1" /> {td("rotateButton")}
-                        </button>
-                        <button
-                          onClick={() => {
+                      {deletingDaemon?.id === daemon.id ? (
+                        <DaemonDeleteConfirm
+                          daemon={deletingDaemon}
+                          onConfirm={confirmDeleteDaemon}
+                          onCancel={() => {
+                            setDeletingDaemon(null);
                             setDeleteDaemonError(null);
-                            setDeletingDaemon(daemon);
                           }}
-                          disabled={!canEdit}
-                          className="flex items-center text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 mr-1" /> {td("deleteButton")}
-                        </button>
-                      </div>
+                          deleting={deletingDaemonBusy}
+                          error={deleteDaemonError}
+                        />
+                      ) : rotatingDaemon?.id === daemon.id ? (
+                        <DaemonRotateConfirm
+                          daemon={rotatingDaemon}
+                          onConfirm={confirmRotateToken}
+                          onCancel={() => {
+                            setRotatingDaemon(null);
+                            setRotateError(null);
+                          }}
+                          rotating={rotatingBusy}
+                          error={rotateError}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              // 与删除确认互斥,同一时刻只有一个确认态
+                              setDeleteDaemonError(null);
+                              setDeletingDaemon(null);
+                              setRotateError(null);
+                              setRotatingDaemon(daemon);
+                            }}
+                            className="flex items-center text-warning-fg hover:text-warning-fg text-xs font-medium bg-warning/10 px-3 py-1.5 rounded-md border border-warning/20 transition-colors-fast"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 mr-1" /> {td("rotateButton")}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setRotateError(null);
+                              setRotatingDaemon(null);
+                              setDeleteDaemonError(null);
+                              setDeletingDaemon(daemon);
+                            }}
+                            disabled={!canEdit}
+                            className="flex items-center text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1" /> {td("deleteButton")}
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    {newDaemonToken?.daemonId === daemon.id && (
+                      <DaemonTokenBanner
+                        daemonName={newDaemonToken.name}
+                        daemonToken={newDaemonToken.token}
+                        onClose={() => setNewDaemonToken(null)}
+                      />
+                    )}
 
                     {!daemonCollapsed &&
                       (() => {
@@ -1747,6 +1717,10 @@ export default function AgentsPage() {
                           const nodeCollapsed = collapsed.has(
                             `daemon:${daemon.id}:${node.provider}`
                           );
+                          const addFormOpen =
+                            !!addAgentTarget &&
+                            addAgentTarget.daemon.id === daemon.id &&
+                            addAgentTarget.provider === node.provider;
                           return (
                             <div key={node.provider} className="mb-6 last:mb-0">
                               <div className="flex items-center justify-between mb-3">
@@ -1780,27 +1754,62 @@ export default function AgentsPage() {
                                 <button
                                   onClick={() => {
                                     setAddAgentError(null);
+                                    if (addFormOpen) {
+                                      setAddAgentTarget(null);
+                                      return;
+                                    }
+                                    // 与接入守护进程表单互斥,同页同时只展开一处表单
+                                    setCreateDaemonError(null);
+                                    setShowCreateDaemon(false);
                                     setAddAgentTarget({
                                       daemon,
                                       provider: node.provider,
                                       version: node.version,
                                     });
+                                    setCollapsed((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(`daemon:${daemon.id}:${node.provider}`);
+                                      return next;
+                                    });
                                   }}
-                                  className="flex items-center text-primary-fg hover:text-primary-fg text-xs font-medium bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20 transition-colors-fast"
+                                  className={`flex items-center text-primary-fg hover:text-primary-fg text-xs font-medium px-3 py-1.5 rounded-md border transition-colors-fast ${
+                                    addFormOpen
+                                      ? "bg-primary/25 border-primary/50"
+                                      : "bg-primary/10 border-primary/20"
+                                  }`}
                                 >
                                   <Plus className="w-3.5 h-3.5 mr-1" /> {t("addAgent")}
                                 </button>
                               </div>
                               {!nodeCollapsed &&
-                                (instances.length === 0 ? (
-                                  <p className="text-xs text-fg-faint py-2 pl-6">
-                                    {td("noInstances")}
-                                  </p>
-                                ) : (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {instances.map(renderAgentCard)}
-                                  </div>
-                                ))}
+                                (() => {
+                                  // 添加代理为内嵌表单卡:命中当前节点时插到实例网格首位
+                                  const addForm = addFormOpen ? addAgentTarget : null;
+                                  if (instances.length === 0 && !addForm) {
+                                    return (
+                                      <p className="text-xs text-fg-faint py-2 pl-6">
+                                        {td("noInstances")}
+                                      </p>
+                                    );
+                                  }
+                                  return (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                      {addForm && (
+                                        <AddAgentCard
+                                          target={addForm}
+                                          onSave={handleCreateAgent}
+                                          onClose={() => {
+                                            setAddAgentTarget(null);
+                                            setAddAgentError(null);
+                                          }}
+                                          saving={addingAgent}
+                                          error={addAgentError}
+                                        />
+                                      )}
+                                      {instances.map(renderAgentCard)}
+                                    </div>
+                                  );
+                                })()}
                             </div>
                           );
                         });
@@ -1824,18 +1833,6 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {selectedAgent && (
-        <ModalPortal>
-          <AgentDetailModal
-            agent={selectedAgent}
-            onClose={() => setSelectedAgent(null)}
-            onSaveEdit={handleEditSave}
-            saving={saving}
-            skills={skills}
-            mcpServers={mcpServers}
-          />
-        </ModalPortal>
-      )}
       {deletingAgent && (
         <ModalPortal>
           <ConfirmDeleteModal
@@ -1847,71 +1844,6 @@ export default function AgentsPage() {
             }}
             deleting={deleting}
             error={deleteError}
-          />
-        </ModalPortal>
-      )}
-      {showCreateDaemon && (
-        <ModalPortal>
-          <CreateDaemonModal
-            onSave={handleCreateDaemon}
-            onClose={() => {
-              setShowCreateDaemon(false);
-              setCreateDaemonError(null);
-            }}
-            saving={creatingDaemon}
-            error={createDaemonError}
-          />
-        </ModalPortal>
-      )}
-      {newDaemonToken && (
-        <ModalPortal>
-          <DaemonTokenRevealModal
-            daemonName={newDaemonToken.name}
-            daemonToken={newDaemonToken.token}
-            onClose={() => setNewDaemonToken(null)}
-          />
-        </ModalPortal>
-      )}
-      {deletingDaemon && (
-        <ModalPortal>
-          <ConfirmDeleteDaemonModal
-            daemon={deletingDaemon}
-            onConfirm={confirmDeleteDaemon}
-            onClose={() => {
-              setDeletingDaemon(null);
-              setDeleteDaemonError(null);
-            }}
-            deleting={deletingDaemonBusy}
-            error={deleteDaemonError}
-          />
-        </ModalPortal>
-      )}
-      {rotatingDaemon && (
-        <ModalPortal>
-          <ConfirmRotateTokenModal
-            daemon={rotatingDaemon}
-            onConfirm={confirmRotateToken}
-            onClose={() => {
-              setRotatingDaemon(null);
-              setRotateError(null);
-            }}
-            rotating={rotatingBusy}
-            error={rotateError}
-          />
-        </ModalPortal>
-      )}
-      {addAgentTarget && (
-        <ModalPortal>
-          <AddAgentModal
-            target={addAgentTarget}
-            onSave={handleCreateAgent}
-            onClose={() => {
-              setAddAgentTarget(null);
-              setAddAgentError(null);
-            }}
-            saving={addingAgent}
-            error={addAgentError}
-            existingPersonas={[...new Set(agents.map((a) => a.personaKey).filter((k): k is string => !!k))]}
           />
         </ModalPortal>
       )}

@@ -8,7 +8,9 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // standalone 产物的 trace-copy 阶段需要创建软链，Windows 无特权账户会 EPERM；
+  // 仅容器/CI 镜像构建（product/Dockerfile.web 注入 NEXT_BUILD_STANDALONE=1）需要它
+  output: process.env.NEXT_BUILD_STANDALONE === "1" ? "standalone" : undefined,
   async rewrites() {
     return [
       {

@@ -50,7 +50,16 @@ EOF
 > 注意：若 Docker daemon 已配置 `registry-mirrors`，则无需设置 `DOCKER_REGISTRY`。<br>
 > `DOCKER_REGISTRY` 值末尾必须带 `/`，如 `dockerproxy.cn/`。
 
-### 步骤
+### 启动路径
+
+两条路径共用同一份 compose 文件与同一个 `product/.env`。区别只在镜像来源：
+
+| 路径 | 适用 | 镜像来源 | 命令 |
+|------|------|----------|------|
+| A 零构建 | 只想部署使用 | 仓库拉取预构建镜像 | `pull` + `up -d` |
+| B 本地构建 | 改过源码 | 本机 Docker 构建 | `up -d --build` |
+
+#### 路径 A：零构建启动（只需要 Docker）
 
 ```bash
 # 1. 克隆项目
@@ -66,13 +75,35 @@ TEAMS_BASE_URL=https://api.your-domain.com
 TEAMS_DB_PASS=$(openssl rand -hex 16)
 EOF
 
-# 3. 启动所有服务（app 容器启动时自动执行数据库迁移，成功后才启动服务）
-docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
+# 3. 登录镜像仓库（Gitea 容器仓库为明文 HTTP，需先在 daemon.json 配 insecure-registries）
+docker login host.docker.internal:3000 -u <你的用户名>
 
-# 4. 验证服务状态
+# 4. 拉取预构建镜像并启动（app 启动时自动执行数据库迁移，成功后才启动服务）
+docker compose --env-file product/.env -f product/docker-compose.prod.yml pull
+docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d
+```
+
+#### 路径 B：本地构建启动（改过源码后）
+
+```bash
+docker compose --env-file product/.env -f product/docker-compose.prod.yml up -d --build
+```
+
+#### 验证服务状态
+
+```bash
 curl http://localhost:28080/health     # → {"status":"ok"}
 curl http://localhost:28080/ready      # → {"status":"ready"}
 ```
+
+### 镜像来源参数
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `TEAMS_REGISTRY` | `host.docker.internal:3000/zhenfeng` | 镜像仓库前缀（含 host:port 与命名空间）。换仓库只改这里 |
+| `TEAMS_IMAGE_TAG` | `latest` | 镜像 tag。生产部署建议固定为发布版本号（如 `0.1.0`），便于回滚 |
+
+仅当本地不存在对应镜像时 `up` 才会拉取；需要强制更新到远端某 tag 时，先 `docker compose ... pull`。
 
 ### 端口与 dev 环境隔离
 
@@ -96,6 +127,26 @@ docker compose --env-file product/.env -f product/docker-compose.prod.yml down
 ```bash
 docker compose --env-file product/.env -f product/docker-compose.prod.yml down --volumes   # ⚠️ 删除所有数据
 ```
+
+### 维护者：发布预构建镜像
+
+发布由 Gitea Actions 完成，workflow 为 `.gitea/workflows/release.yml`，推送 `v*` tag 触发：
+
+```bash
+git tag v0.1.0
+git push local --tags
+```
+
+产物：`<TEAMS_REGISTRY>/teammate-server:{0.1.0,latest}`、`<TEAMS_REGISTRY>/teammate-web:{0.1.0,latest}`，仅 `linux/amd64`。
+
+一次性前置：
+
+1. Gitea 创建访问令牌，作用域含 `write:package`。
+2. 仓库 Actions 设置中配置 secrets：`TEAMS_REGISTRY_USER`、`TEAMS_REGISTRY_TOKEN`；vars：`TEAMS_REGISTRY`（如 `host.docker.internal:3000/zhenfeng`）、`NEXT_PUBLIC_API_BASE_URL`（供 Web 容器内服务端 `/api` 反代使用，填容器内可达地址，如 `http://app:8080`；浏览器端不消费该值）。
+3. `daemon.json` 增加 `"insecure-registries": ["host.docker.internal:3000"]` 并重启 Docker（Gitea 容器仓库为明文 HTTP）。
+4. 拉起 runner：`docker start gitea-runner`。
+
+构建缓存写入独立的 `teammate-server-buildcache` / `teammate-web-buildcache` 镜像，与正式镜像的 tag 列表分开。
 
 ---
 

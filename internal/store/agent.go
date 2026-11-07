@@ -142,6 +142,13 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("clear execution_sessions refs: %w", err)
 	}
 
+	// git_credentials.agent_id has no foreign key (FK strategy: application
+	// layer guarantees integrity), so the agent's credentials are deleted here
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM git_credentials WHERE agent_id = $1`, id); err != nil {
+		return fmt.Errorf("cleanup git_credentials: %w", err)
+	}
+
 	// After deleting the Agent, remaining CASCADEs (cascading cleanup is preserved): memories, project_members,
 	//   project_reviewers, agent_skills, agent_mcp_servers, agent_permissions, token_usage,
 	//   node_transitions (cascaded via task_nodes -> tasks)

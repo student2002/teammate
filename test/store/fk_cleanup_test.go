@@ -122,17 +122,19 @@ func TestDeleteProject_ClearsMemorySourceTask(t *testing.T) {
 
 // TestDeleteMember_ClearsGitCredentialCreatedBy verifies that
 // git_credentials.created_by is explicitly set to NULL when a member is deleted.
+// Deleting a member must NOT delete the credential itself (only agent deletion does).
 func TestDeleteMember_ClearsGitCredentialCreatedBy(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 	member := createTestMember(t, s, ws.ID)
+	agent := createTestAgent(t, s, ws.ID)
 	proj := createTestProject(t, s, ws.ID)
 
 	cred, err := s.CreateGitCredential(ctx, types.CreateGitCredentialParams{
 		ProjectID:    proj.ID,
-		RepoURL:      "https://example.com/teammate/repo-" + uuid.New().String()[:8] + ".git",
+		AgentID:      agent.ID,
 		Username:     "git",
 		EncryptedPAT: "encrypted-pat",
 		CreatedBy:    &member.ID,
@@ -151,6 +153,59 @@ func TestDeleteMember_ClearsGitCredentialCreatedBy(t *testing.T) {
 	}
 	if cred2.CreatedBy != nil {
 		t.Fatalf("expected git_credentials.created_by to be NULL, got %q", *cred2.CreatedBy)
+	}
+}
+
+// TestDeleteAgent_DeletesGitCredentials verifies that git_credentials rows
+// bound to the deleted agent are removed with it (agent_id has no foreign key;
+// the delete transaction cleans them up explicitly), while other agents'
+// credentials are untouched.
+func TestDeleteAgent_DeletesGitCredentials(t *testing.T) {
+	s, _ := setupTestStore(t)
+	ctx := context.Background()
+
+	ws := createTestWorkspace(t, s)
+	agentA := createTestAgent(t, s, ws.ID)
+	agentB := createTestAgent(t, s, ws.ID)
+	proj := createTestProject(t, s, ws.ID)
+
+	credA, err := s.CreateGitCredential(ctx, types.CreateGitCredentialParams{
+		ProjectID:    proj.ID,
+		AgentID:      agentA.ID,
+		Username:     "git",
+		EncryptedPAT: "encrypted-pat-a",
+	})
+	if err != nil {
+		t.Fatalf("CreateGitCredential A: %v", err)
+	}
+	credB, err := s.CreateGitCredential(ctx, types.CreateGitCredentialParams{
+		ProjectID:    proj.ID,
+		AgentID:      agentB.ID,
+		Username:     "git",
+		EncryptedPAT: "encrypted-pat-b",
+	})
+	if err != nil {
+		t.Fatalf("CreateGitCredential B: %v", err)
+	}
+
+	if err := s.DeleteAgent(ctx, uuid.MustParse(agentA.ID)); err != nil {
+		t.Fatalf("DeleteAgent: %v", err)
+	}
+
+	creds, err := s.GetGitCredentialsByProjectAndAgent(ctx, uuid.MustParse(proj.ID), uuid.MustParse(credA.AgentID))
+	if err != nil {
+		t.Fatalf("GetGitCredentialsByProjectAndAgent after DeleteAgent: %v", err)
+	}
+	if len(creds) != 0 {
+		t.Fatalf("expected deleted agent's credentials to be gone, got %d", len(creds))
+	}
+
+	credB2, err := s.GetGitCredential(ctx, uuid.MustParse(credB.ID))
+	if err != nil {
+		t.Fatalf("GetGitCredential B after DeleteAgent: %v", err)
+	}
+	if credB2.AgentID != agentB.ID {
+		t.Fatalf("expected surviving credential to stay bound to agent B, got %q", credB2.AgentID)
 	}
 }
 

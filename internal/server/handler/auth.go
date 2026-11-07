@@ -6,6 +6,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"strings"
@@ -406,7 +407,7 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 //
 // Response:
 //   - 200: successfully returns user info
-//   - 401: not authenticated
+//   - 401: not authenticated, or the token references a principal that no longer exists
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	// get auth info from context
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
@@ -419,6 +420,13 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	authSvc := service.NewAuthService(h.Svc, h.JWTSecret)
 	info, err := authSvc.Whoami(r.Context(), claims.UserType, claims.UserID)
 	if err != nil {
+		// A validly-signed token whose member/agent row no longer exists
+		// (e.g. the database was reset) is an invalid session, not a server
+		// fault: answer 401 so the client drops the token and re-authenticates.
+		if errors.Is(err, sql.ErrNoRows) {
+			response.Unauthorized(w, "invalid or expired token")
+			return
+		}
 		response.InternalServerError(w, err)
 		return
 	}

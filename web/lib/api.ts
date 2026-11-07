@@ -166,6 +166,14 @@ const api = {
     request("DELETE", `/workspaces/${wsId}/skills/${id}`),
 
   // MCP 服务
+  // 自定义主题(部署级共享,workspace 域仅作鉴权)
+  listCustomThemes: (wsId: string) =>
+    request("GET", `/workspaces/${wsId}/themes/custom`),
+  createCustomTheme: (wsId: string, data: Record<string, unknown>) =>
+    request("POST", `/workspaces/${wsId}/themes/custom`, data),
+  deleteCustomTheme: (wsId: string, themeId: string) =>
+    request("DELETE", `/workspaces/${wsId}/themes/custom/${themeId}`),
+
   listMcpServers: (wsId: string) =>
     request("GET", `/workspaces/${wsId}/mcp-servers`),
   createMcpServer: (wsId: string, data: Record<string, unknown>) =>

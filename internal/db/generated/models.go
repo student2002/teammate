@@ -828,6 +828,17 @@ type CommunityWorkflow struct {
 	UpdatedAt                    time.Time             `db:"updated_at" json:"updated_at"`
 }
 
+type CustomTheme struct {
+	ID        string          `db:"id" json:"id"`
+	NameZh    string          `db:"name_zh" json:"name_zh"`
+	NameEn    string          `db:"name_en" json:"name_en"`
+	Icon      string          `db:"icon" json:"icon"`
+	Vars      json.RawMessage `db:"vars" json:"vars"`
+	CreatedBy uuid.NullUUID   `db:"created_by" json:"created_by"`
+	CreatedAt time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time       `db:"updated_at" json:"updated_at"`
+}
+
 type Daemon struct {
 	ID            uuid.UUID       `db:"id" json:"id"`
 	WorkspaceID   uuid.UUID       `db:"workspace_id" json:"workspace_id"`
@@ -863,7 +874,7 @@ type ExecutionSession struct {
 type GitCredential struct {
 	ID           uuid.UUID     `db:"id" json:"id"`
 	ProjectID    uuid.UUID     `db:"project_id" json:"project_id"`
-	RepoUrl      string        `db:"repo_url" json:"repo_url"`
+	AgentID      uuid.UUID     `db:"agent_id" json:"agent_id"`
 	Username     string        `db:"username" json:"username"`
 	EncryptedPat string        `db:"encrypted_pat" json:"encrypted_pat"`
 	CreatedBy    uuid.NullUUID `db:"created_by" json:"created_by"`

@@ -157,12 +157,9 @@
   stroke: var(--primary);
 }
 
-/* ── 发光效果（状态点/节点/终端光标） ─────────────────── */
+/* ── 发光效果（状态点/终端光标） ───────────────────── */
 .status-glow {
   box-shadow: 0 0 6px color-mix(in oklab, var(--success) 40%, transparent);
-}
-.node-glow {
-  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 25%, transparent);
 }
 .cursor-blink {
   box-shadow: 0 0 6px color-mix(in oklab, var(--success) 40%, transparent);

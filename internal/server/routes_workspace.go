@@ -77,6 +77,16 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 			r.Mount("/skills", handler.NewSkillHandler(svc).Routes())
 		})
 
+		// Custom themes — 列表全员可读;上传/删除 member 及以上(资源为部署级共享,workspace 仅作鉴权域)
+		r.Route("/themes", func(r chi.Router) {
+			r.Get("/custom", handler.ListCustomThemesHandler(svc))
+			r.Group(func(r chi.Router) {
+				r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member"}, "", reg.agentPerm))
+				r.Post("/custom", handler.CreateCustomThemeHandler(svc))
+				r.Delete("/custom/{themeId}", handler.DeleteCustomThemeHandler(svc))
+			})
+		})
+
 		// MCP servers — read/write separation
 		r.Group(func(r chi.Router) {
 			r.Use(permByMethod)

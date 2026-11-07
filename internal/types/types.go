@@ -482,10 +482,11 @@ type AuthToken struct {
 }
 
 // GitCredential stores an encrypted Git PAT used for repository access authentication.
+// One credential per (project, member agent); the agent binding is immutable after creation.
 type GitCredential struct {
 	ID           string     `json:"id" db:"id"`                     // Credential UUID
 	ProjectID    string     `json:"project_id" db:"project_id"`     // Owning project ID
-	RepoURL      string     `json:"repo_url" db:"repo_url"`         // Repository URL
+	AgentID      string     `json:"agent_id" db:"agent_id"`         // Bound agent ID
 	Username     string     `json:"username" db:"username"`         // Username
 	EncryptedPAT string     `json:"encrypted_pat" db:"encrypted_pat"` // Encrypted PAT
 	CreatedBy    *string    `json:"created_by" db:"created_by"`     // Creator ID

@@ -13,24 +13,24 @@ import (
 
 const createGitCredential = `-- name: CreateGitCredential :one
 
-INSERT INTO git_credentials (project_id, repo_url, username, encrypted_pat, created_by)
+INSERT INTO git_credentials (project_id, agent_id, username, encrypted_pat, created_by)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, project_id, repo_url, username, encrypted_pat, created_by, created_at, updated_at
+RETURNING id, project_id, agent_id, username, encrypted_pat, created_by, created_at, updated_at
 `
 
 type CreateGitCredentialParams struct {
 	ProjectID    uuid.UUID     `db:"project_id" json:"project_id"`
-	RepoUrl      string        `db:"repo_url" json:"repo_url"`
+	AgentID      uuid.UUID     `db:"agent_id" json:"agent_id"`
 	Username     string        `db:"username" json:"username"`
 	EncryptedPat string        `db:"encrypted_pat" json:"encrypted_pat"`
 	CreatedBy    uuid.NullUUID `db:"created_by" json:"created_by"`
 }
 
-// Git credential queries
+// Git credential queries (one credential per (project, member agent))
 func (q *Queries) CreateGitCredential(ctx context.Context, arg CreateGitCredentialParams) (GitCredential, error) {
 	row := q.db.QueryRowContext(ctx, createGitCredential,
 		arg.ProjectID,
-		arg.RepoUrl,
+		arg.AgentID,
 		arg.Username,
 		arg.EncryptedPat,
 		arg.CreatedBy,
@@ -39,7 +39,7 @@ func (q *Queries) CreateGitCredential(ctx context.Context, arg CreateGitCredenti
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
-		&i.RepoUrl,
+		&i.AgentID,
 		&i.Username,
 		&i.EncryptedPat,
 		&i.CreatedBy,
@@ -50,7 +50,7 @@ func (q *Queries) CreateGitCredential(ctx context.Context, arg CreateGitCredenti
 }
 
 const getGitCredential = `-- name: GetGitCredential :one
-SELECT id, project_id, repo_url, username, encrypted_pat, created_by, created_at, updated_at FROM git_credentials
+SELECT id, project_id, agent_id, username, encrypted_pat, created_by, created_at, updated_at FROM git_credentials
 WHERE id = $1
 `
 
@@ -60,7 +60,7 @@ func (q *Queries) GetGitCredential(ctx context.Context, id uuid.UUID) (GitCreden
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
-		&i.RepoUrl,
+		&i.AgentID,
 		&i.Username,
 		&i.EncryptedPat,
 		&i.CreatedBy,
@@ -71,7 +71,7 @@ func (q *Queries) GetGitCredential(ctx context.Context, id uuid.UUID) (GitCreden
 }
 
 const listGitCredentialsByProject = `-- name: ListGitCredentialsByProject :many
-SELECT id, project_id, repo_url, username, encrypted_pat, created_by, created_at, updated_at FROM git_credentials
+SELECT id, project_id, agent_id, username, encrypted_pat, created_by, created_at, updated_at FROM git_credentials
 WHERE project_id = $1
 ORDER BY created_at DESC
 `
@@ -88,7 +88,49 @@ func (q *Queries) ListGitCredentialsByProject(ctx context.Context, projectID uui
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
-			&i.RepoUrl,
+			&i.AgentID,
+			&i.Username,
+			&i.EncryptedPat,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGitCredentialsByProjectAndAgent = `-- name: ListGitCredentialsByProjectAndAgent :many
+SELECT id, project_id, agent_id, username, encrypted_pat, created_by, created_at, updated_at FROM git_credentials
+WHERE project_id = $1 AND agent_id = $2
+`
+
+type ListGitCredentialsByProjectAndAgentParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	AgentID   uuid.UUID `db:"agent_id" json:"agent_id"`
+}
+
+func (q *Queries) ListGitCredentialsByProjectAndAgent(ctx context.Context, arg ListGitCredentialsByProjectAndAgentParams) ([]GitCredential, error) {
+	rows, err := q.db.QueryContext(ctx, listGitCredentialsByProjectAndAgent, arg.ProjectID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GitCredential{}
+	for rows.Next() {
+		var i GitCredential
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.AgentID,
 			&i.Username,
 			&i.EncryptedPat,
 			&i.CreatedBy,
@@ -110,30 +152,24 @@ func (q *Queries) ListGitCredentialsByProject(ctx context.Context, projectID uui
 
 const updateGitCredential = `-- name: UpdateGitCredential :one
 UPDATE git_credentials
-SET repo_url = $2, username = $3, encrypted_pat = $4, updated_at = now()
+SET username = $2, encrypted_pat = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, project_id, repo_url, username, encrypted_pat, created_by, created_at, updated_at
+RETURNING id, project_id, agent_id, username, encrypted_pat, created_by, created_at, updated_at
 `
 
 type UpdateGitCredentialParams struct {
 	ID           uuid.UUID `db:"id" json:"id"`
-	RepoUrl      string    `db:"repo_url" json:"repo_url"`
 	Username     string    `db:"username" json:"username"`
 	EncryptedPat string    `db:"encrypted_pat" json:"encrypted_pat"`
 }
 
 func (q *Queries) UpdateGitCredential(ctx context.Context, arg UpdateGitCredentialParams) (GitCredential, error) {
-	row := q.db.QueryRowContext(ctx, updateGitCredential,
-		arg.ID,
-		arg.RepoUrl,
-		arg.Username,
-		arg.EncryptedPat,
-	)
+	row := q.db.QueryRowContext(ctx, updateGitCredential, arg.ID, arg.Username, arg.EncryptedPat)
 	var i GitCredential
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
-		&i.RepoUrl,
+		&i.AgentID,
 		&i.Username,
 		&i.EncryptedPat,
 		&i.CreatedBy,

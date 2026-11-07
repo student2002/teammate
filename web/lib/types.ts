@@ -160,7 +160,8 @@ export interface Project {
 export interface GitCredential {
   id: string;
   project_id: string;
-  repo_url: string;
+  agent_id: string;
+  agent_name?: string;
   username: string;
   pat_masked: string;
   created_at: string;
