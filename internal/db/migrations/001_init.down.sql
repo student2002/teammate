@@ -1,6 +1,9 @@
 -- 001_init.down.sql
 -- Drop all objects in reverse dependency order
 
+DROP TABLE IF EXISTS workflow_event_waiters;
+DROP TABLE IF EXISTS workflow_events;
+DROP TABLE IF EXISTS integrations;
 DROP TABLE IF EXISTS invitations;
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS agent_permissions;
@@ -13,7 +16,8 @@ DROP TABLE IF EXISTS agent_mcp_servers;
 DROP TABLE IF EXISTS agent_skills;
 DROP TABLE IF EXISTS mcp_servers;
 DROP TABLE IF EXISTS skills;
-DROP TABLE IF EXISTS workflow_trigger_runs;
+DROP TABLE IF EXISTS task_node_attempts;
+DROP TABLE IF EXISTS task_edges;
 DROP TABLE IF EXISTS git_credentials;
 DROP TABLE IF EXISTS auth_tokens;
 DROP TABLE IF EXISTS memories;
@@ -25,6 +29,8 @@ DROP TABLE IF EXISTS task_nodes;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS project_members;
 DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS workflow_template_schedules;
+DROP TABLE IF EXISTS workflow_template_edges;
 DROP TABLE IF EXISTS workflow_template_nodes;
 DROP TABLE IF EXISTS workflow_templates;
 DROP TABLE IF EXISTS agents;
@@ -38,14 +44,15 @@ DROP TYPE IF EXISTS mcp_auth_type;
 DROP TYPE IF EXISTS token_type;
 DROP TYPE IF EXISTS memory_type;
 DROP TYPE IF EXISTS daemon_status;
+DROP TYPE IF EXISTS runtime_status;
+DROP TYPE IF EXISTS executor_kind;
+DROP TYPE IF EXISTS attempt_status;
+DROP TYPE IF EXISTS edge_resolution;
 DROP TYPE IF EXISTS transition_action;
 DROP TYPE IF EXISTS task_node_status;
 DROP TYPE IF EXISTS task_status;
 DROP TYPE IF EXISTS task_priority;
 DROP TYPE IF EXISTS task_type;
-DROP TYPE IF EXISTS assignee_type;
-DROP TYPE IF EXISTS node_type;
-DROP TYPE IF EXISTS workflow_trigger_type;
 DROP TYPE IF EXISTS project_status;
 DROP TYPE IF EXISTS agent_status;
 DROP TYPE IF EXISTS agent_provider;

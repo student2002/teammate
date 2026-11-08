@@ -93,6 +93,7 @@ func (h *ProjectHandler) Routes() chi.Router {
 		r.Post("/reviewers", h.AddProjectReviewer)
 		r.Get("/reviewers", h.ListProjectReviewers)
 		r.Delete("/reviewers/{reviewerId}", h.RemoveProjectReviewer)
+		r.Mount("/integrations", NewIntegrationHandler(h.Svc).Routes())
 	})
 
 	return r
@@ -777,13 +778,6 @@ func GitCredentialsHandler(svc *service.Service) http.HandlerFunc {
 			projSvc := service.NewProjectService(svc)
 			if err := projSvc.CheckAgentProjectAccess(r.Context(), claims.UserID, projectID); err != nil {
 				response.Forbidden(w, err.Error())
-				return
-			}
-			// the Agent must have the git:push permission to read credentials
-			permSvc := service.NewAgentPermissionService(svc)
-			has, err := permSvc.HasPermission(r.Context(), claims.UserID, types.PermGitPush)
-			if err != nil || !has {
-				response.Forbidden(w, "agent lacks git:push permission")
 				return
 			}
 

@@ -1,4 +1,5 @@
--- Task queries
+-- Task queries (V2: task_nodes are run snapshots keyed by template_node_id,
+-- activation is driven by task_edges resolution — the engine owns node lifecycles)
 
 -- name: CreateTask :one
 INSERT INTO tasks (
@@ -57,139 +58,35 @@ WHERE project_id = $1;
 
 -- name: CreateTaskNode :one
 INSERT INTO task_nodes (
-    task_id, name, description, sort_order,
-    node_type, status, assignee_type, assignee_id, reserved_for_agent_id,
-    max_reject_cycles, timeout_minutes, readonly_dirs, full_control_dirs, depends_on
+    task_id, template_node_id, name, sort_order, type_key, config,
+    status, activation_mode, max_attempts, readonly_dirs, full_control_dirs
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 ) RETURNING *;
 
 -- name: GetTaskNode :one
 SELECT * FROM task_nodes
 WHERE id = $1;
 
--- name: ListTaskNodes :many
+-- name: ListTaskNodesByTask :many
 SELECT * FROM task_nodes
 WHERE task_id = $1
 ORDER BY sort_order;
 
--- name: UpdateTaskNodeStatus :one
-UPDATE task_nodes
-SET status = $2,
-    assignee_type = $3,
-    assignee_id = $4,
-    reserved_for_agent_id = $5,
-    reject_count = $6,
-    version = version + 1,
-    completed_at = $7,
-    completed_by = $8,
-    reservation_expires_at = $9,
-    updated_at = now()
-WHERE id = $1 AND version = $10 AND status = $11
-RETURNING *;
+-- name: ListTaskNodesByProject :many
+SELECT tn.* FROM task_nodes tn
+WHERE tn.task_id IN (SELECT id FROM tasks WHERE project_id = $1)
+ORDER BY tn.sort_order;
 
--- name: ClaimTaskNode :one
-UPDATE task_nodes
-SET status = 'in_progress',
-    assignee_type = 'specific_agent',
-    assignee_id = $2,
-    reserved_for_agent_id = $2,
-    version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'pending'
-  AND (reserved_for_agent_id IS NULL OR reserved_for_agent_id = $2)
-  AND task_nodes.version = $3
-  AND (
-    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
-    (SELECT sort_order FROM task_nodes WHERE id = $1) =
-      (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
-    OR EXISTS (
-      SELECT 1
-      FROM task_nodes prev
-      JOIN task_nodes cur ON cur.id = $1
-      WHERE prev.task_id = cur.task_id
-        AND prev.sort_order = (
-          SELECT MAX(p2.sort_order) FROM task_nodes p2
-          WHERE p2.task_id = cur.task_id AND p2.sort_order < cur.sort_order
-        )
-        AND prev.status = 'completed'
-    )
-  )
-  AND (
-    -- DAG dependency check: all depends_on nodes must have completed
-    depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep
-        WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-RETURNING *;
+-- name: ListTaskNodesByStatus :many
+SELECT * FROM task_nodes
+WHERE status = $1
+ORDER BY updated_at;
 
--- name: ClaimTaskNodeByHuman :one
-UPDATE task_nodes
-SET status = 'in_progress',
-    assignee_type = 'human',
-    assignee_id = $2,
-    version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'pending'
-  AND assignee_type = 'human'
-  AND task_nodes.version = $3
-  AND (
-    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
-    (SELECT sort_order FROM task_nodes WHERE id = $1) =
-      (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
-    OR EXISTS (
-      SELECT 1
-      FROM task_nodes prev
-      JOIN task_nodes cur ON cur.id = $1
-      WHERE prev.task_id = cur.task_id
-        AND prev.sort_order = (
-          SELECT MAX(p2.sort_order) FROM task_nodes p2
-          WHERE p2.task_id = cur.task_id AND p2.sort_order < cur.sort_order
-        )
-        AND prev.status = 'completed'
-    )
-  )
-  AND (
-    depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-RETURNING *;
-
--- name: ReclaimTaskNode :one
-UPDATE task_nodes
-SET version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'in_progress'
-  AND reserved_for_agent_id = $2
-  AND version = $3
-RETURNING *;
-
--- name: GetTimedOutNodes :many
-SELECT tn.*
-FROM task_nodes tn
-WHERE tn.status = 'in_progress'
-  AND tn.node_type != 'manual'
-  AND tn.assignee_type != 'human'
-  AND tn.timeout_minutes > 0
-  AND ($1 - tn.updated_at) > (tn.timeout_minutes * interval '1 minute');
-
--- name: DeleteTaskNodes :exec
-DELETE FROM task_nodes
-WHERE task_id = $1;
+-- name: ListTaskEdgesByTask :many
+SELECT * FROM task_edges
+WHERE task_id = $1
+ORDER BY created_at;
 
 -- name: CreateNodeTransition :one
 INSERT INTO node_transitions (
@@ -252,52 +149,17 @@ INSERT INTO token_usage (
     $1, $2, $3, $4, $5, $6
 ) RETURNING *;
 
--- name: GetPrevStandardNodeAssignee :one
-SELECT tn.assignee_id FROM task_nodes tn
-WHERE tn.task_id = $1
-  AND tn.sort_order < (SELECT sort_order FROM task_nodes sub WHERE sub.id = $2)
-  AND tn.node_type = 'standard'
-  AND tn.assignee_id IS NOT NULL
-ORDER BY tn.sort_order DESC LIMIT 1;
-
 -- name: IsAgentProjectMember :one
 SELECT EXISTS(
   SELECT 1 FROM project_members
   WHERE project_id = $1 AND agent_id = $2 AND member_type = 'agent'
 );
 
--- name: GetNextTaskNode :one
-SELECT * FROM task_nodes tn
-WHERE tn.task_id = $1 AND tn.sort_order > (SELECT sub.sort_order FROM task_nodes sub WHERE sub.id = $2)
-ORDER BY tn.sort_order ASC LIMIT 1;
-
--- name: GetPrevTaskNode :one
-SELECT * FROM task_nodes tn
-WHERE tn.task_id = $1 AND tn.sort_order < (SELECT sub.sort_order FROM task_nodes sub WHERE sub.id = $2)
-ORDER BY tn.sort_order DESC LIMIT 1;
-
 -- name: UpdateTaskStatus :one
 UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING *;
 
 -- name: UpdateTaskGitBranch :exec
 UPDATE tasks SET git_branch = $2, updated_at = now() WHERE id = $1;
-
--- name: IncrementRejectCount :one
-UPDATE task_nodes SET reject_count = reject_count + 1, version = version + 1, updated_at = now()
-WHERE id = $1 RETURNING *;
-
--- name: ResetRejectCount :one
-UPDATE task_nodes SET reject_count = 0, version = version + 1, status = 'in_progress', updated_at = now()
-WHERE id = $1 AND version = $2 RETURNING *;
-
--- name: GetTaskNodeBySortOrder :one
-SELECT * FROM task_nodes WHERE task_id = $1 AND sort_order = $2;
-
--- name: GetTaskNodeCount :one
-SELECT COUNT(*) FROM task_nodes WHERE task_id = $1;
-
--- name: GetCompletedNodeCount :one
-SELECT COUNT(*) FROM task_nodes WHERE task_id = $1 AND status = 'completed';
 
 -- name: GetTokenUsageByTask :one
 SELECT
@@ -309,31 +171,6 @@ FROM token_usage tu
 JOIN task_nodes tn ON tu.task_node_id = tn.id
 WHERE tn.task_id = $1;
 
--- name: ClearExpiredReservations :many
-UPDATE task_nodes SET reserved_for_agent_id = NULL, reservation_expires_at = NULL, updated_at = now()
-WHERE reserved_for_agent_id IS NOT NULL
-  AND status = 'pending'
-  AND reservation_expires_at IS NOT NULL
-  AND reservation_expires_at < $1
-RETURNING *;
-
--- name: UpdateNodeSummary :one
-UPDATE task_nodes SET summary = $2, updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: ReleaseClaimTimeoutNodes :many
-UPDATE task_nodes SET
-  status = 'manual_intervention',
-  assignee_type = 'human',
-  version = version + 1,
-  updated_at = now()
-WHERE status = 'in_progress'
-  AND node_type != 'manual'
-  AND assignee_type != 'human'
-  AND updated_at < $1
-RETURNING *;
-
 -- name: GetCompletedTasksOlderThan :many
 SELECT DISTINCT t.id, t.project_id, p.workspace_id
 FROM tasks t
@@ -343,22 +180,6 @@ WHERE t.status IN ('completed', 'cancelled')
   AND t.id > $2
 ORDER BY t.id
 LIMIT $3;
-
--- name: GetReadyNodes :many
-SELECT * FROM task_nodes
-WHERE task_nodes.task_id = $1
-  AND task_nodes.status = 'pending'
-  AND (
-    task_nodes.depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(task_nodes.depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep
-        WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-ORDER BY task_nodes.sort_order;
 
 -- name: GetTokenUsageByAgent :one
 SELECT COALESCE(SUM(tu.input_tokens), 0)  AS input_tokens,
@@ -384,17 +205,6 @@ SELECT tu.task_node_id,
 FROM token_usage tu
 WHERE tu.task_node_id = ANY($1::uuid[])
 GROUP BY tu.task_node_id;
-
--- name: GetInProgressNodesByAgent :many
--- Queries the in_progress nodes claimed but not yet completed by a given Agent in a given workspace,
--- used to resume unfinished execution after an Agent restart.
-SELECT tn.*, t.project_id FROM task_nodes tn
-JOIN tasks t ON tn.task_id = t.id
-JOIN projects p ON t.project_id = p.id
-WHERE tn.status = 'in_progress'
-  AND tn.assignee_id = $1
-  AND p.workspace_id = $2
-ORDER BY tn.sort_order;
 
 -- name: ListTasksPaginated :many
 -- Paginated query for tasks within a given project (supports status filtering and search); does not filter out historical tasks, for use by the historical-tasks page.

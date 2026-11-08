@@ -11,50 +11,81 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
-	"github.com/sqlc-dev/pqtype"
 )
 
+const createTemplateEdge = `-- name: CreateTemplateEdge :one
+INSERT INTO workflow_template_edges (id, template_id, source_node_id, source_port, target_node_id, target_port, label, sort_order, config)
+VALUES (COALESCE($9::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, template_id, source_node_id, source_port, target_node_id, target_port, label, sort_order, config, created_at
+`
+
+type CreateTemplateEdgeParams struct {
+	TemplateID   uuid.UUID       `db:"template_id" json:"template_id"`
+	SourceNodeID uuid.UUID       `db:"source_node_id" json:"source_node_id"`
+	SourcePort   string          `db:"source_port" json:"source_port"`
+	TargetNodeID uuid.UUID       `db:"target_node_id" json:"target_node_id"`
+	TargetPort   string          `db:"target_port" json:"target_port"`
+	Label        string          `db:"label" json:"label"`
+	SortOrder    int32           `db:"sort_order" json:"sort_order"`
+	Config       json.RawMessage `db:"config" json:"config"`
+	EdgeID       uuid.NullUUID   `db:"edge_id" json:"edge_id"`
+}
+
+// id comes from the caller so edge identity is stable across full graph replacement.
+func (q *Queries) CreateTemplateEdge(ctx context.Context, arg CreateTemplateEdgeParams) (WorkflowTemplateEdge, error) {
+	row := q.db.QueryRowContext(ctx, createTemplateEdge,
+		arg.TemplateID,
+		arg.SourceNodeID,
+		arg.SourcePort,
+		arg.TargetNodeID,
+		arg.TargetPort,
+		arg.Label,
+		arg.SortOrder,
+		arg.Config,
+		arg.EdgeID,
+	)
+	var i WorkflowTemplateEdge
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.SourceNodeID,
+		&i.SourcePort,
+		&i.TargetNodeID,
+		&i.TargetPort,
+		&i.Label,
+		&i.SortOrder,
+		&i.Config,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createTemplateNode = `-- name: CreateTemplateNode :one
-INSERT INTO workflow_template_nodes (id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
-VALUES (COALESCE($14::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, max_reject_cycles, readonly_dirs, full_control_dirs, artifact, depends_on, created_at
+INSERT INTO workflow_template_nodes (id, template_id, name, sort_order, type_key, config, ui_config)
+VALUES (COALESCE($7::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6)
+RETURNING id, template_id, name, sort_order, type_key, config, ui_config, created_at, updated_at
 `
 
 type CreateTemplateNodeParams struct {
-	TemplateID      uuid.UUID             `db:"template_id" json:"template_id"`
-	Name            string                `db:"name" json:"name"`
-	Description     sql.NullString        `db:"description" json:"description"`
-	SortOrder       int32                 `db:"sort_order" json:"sort_order"`
-	NodeType        NodeType              `db:"node_type" json:"node_type"`
-	AssigneeType    AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID      uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	TimeoutMinutes  int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	ReadonlyDirs    pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	Artifact        pqtype.NullRawMessage `db:"artifact" json:"artifact"`
-	MaxRejectCycles int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	DependsOn       []uuid.UUID           `db:"depends_on" json:"depends_on"`
-	NodeID          uuid.NullUUID         `db:"node_id" json:"node_id"`
+	TemplateID uuid.UUID       `db:"template_id" json:"template_id"`
+	Name       string          `db:"name" json:"name"`
+	SortOrder  int32           `db:"sort_order" json:"sort_order"`
+	TypeKey    string          `db:"type_key" json:"type_key"`
+	Config     json.RawMessage `db:"config" json:"config"`
+	UiConfig   json.RawMessage `db:"ui_config" json:"ui_config"`
+	NodeID     uuid.NullUUID   `db:"node_id" json:"node_id"`
 }
 
 // id comes from the caller so template node identity is stable across full
-// node-list replacement (depends_on references survive template updates).
+// graph replacement (edges reference node ids).
 func (q *Queries) CreateTemplateNode(ctx context.Context, arg CreateTemplateNodeParams) (WorkflowTemplateNode, error) {
 	row := q.db.QueryRowContext(ctx, createTemplateNode,
 		arg.TemplateID,
 		arg.Name,
-		arg.Description,
 		arg.SortOrder,
-		arg.NodeType,
-		arg.AssigneeType,
-		arg.AssigneeID,
-		arg.TimeoutMinutes,
-		arg.ReadonlyDirs,
-		arg.FullControlDirs,
-		arg.Artifact,
-		arg.MaxRejectCycles,
-		pq.Array(arg.DependsOn),
+		arg.TypeKey,
+		arg.Config,
+		arg.UiConfig,
 		arg.NodeID,
 	)
 	var i WorkflowTemplateNode
@@ -62,18 +93,12 @@ func (q *Queries) CreateTemplateNode(ctx context.Context, arg CreateTemplateNode
 		&i.ID,
 		&i.TemplateID,
 		&i.Name,
-		&i.Description,
 		&i.SortOrder,
-		&i.NodeType,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.TimeoutMinutes,
-		&i.MaxRejectCycles,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		&i.Artifact,
-		pq.Array(&i.DependsOn),
+		&i.TypeKey,
+		&i.Config,
+		&i.UiConfig,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -81,37 +106,30 @@ func (q *Queries) CreateTemplateNode(ctx context.Context, arg CreateTemplateNode
 const createWorkflowTemplate = `-- name: CreateWorkflowTemplate :one
 
 INSERT INTO workflow_templates (
-  workspace_id, name, description, is_builtin,
-  trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at
+  workspace_id, name, description, is_builtin, version, enabled
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, workspace_id, name, description, is_builtin, trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, workspace_id, name, description, is_builtin, version, enabled, created_at, updated_at
 `
 
 type CreateWorkflowTemplateParams struct {
-	WorkspaceID     uuid.UUID           `db:"workspace_id" json:"workspace_id"`
-	Name            string              `db:"name" json:"name"`
-	Description     sql.NullString      `db:"description" json:"description"`
-	IsBuiltin       bool                `db:"is_builtin" json:"is_builtin"`
-	TriggerType     WorkflowTriggerType `db:"trigger_type" json:"trigger_type"`
-	TriggerConfig   json.RawMessage     `db:"trigger_config" json:"trigger_config"`
-	TriggerEnabled  bool                `db:"trigger_enabled" json:"trigger_enabled"`
-	NextRunAt       sql.NullTime        `db:"next_run_at" json:"next_run_at"`
-	LastTriggeredAt sql.NullTime        `db:"last_triggered_at" json:"last_triggered_at"`
+	WorkspaceID uuid.UUID      `db:"workspace_id" json:"workspace_id"`
+	Name        string         `db:"name" json:"name"`
+	Description sql.NullString `db:"description" json:"description"`
+	IsBuiltin   bool           `db:"is_builtin" json:"is_builtin"`
+	Version     int32          `db:"version" json:"version"`
+	Enabled     bool           `db:"enabled" json:"enabled"`
 }
 
-// Workflow template queries
+// Workflow template queries (V2 event-driven graph: nodes by type_key, edges by ports)
 func (q *Queries) CreateWorkflowTemplate(ctx context.Context, arg CreateWorkflowTemplateParams) (WorkflowTemplate, error) {
 	row := q.db.QueryRowContext(ctx, createWorkflowTemplate,
 		arg.WorkspaceID,
 		arg.Name,
 		arg.Description,
 		arg.IsBuiltin,
-		arg.TriggerType,
-		arg.TriggerConfig,
-		arg.TriggerEnabled,
-		arg.NextRunAt,
-		arg.LastTriggeredAt,
+		arg.Version,
+		arg.Enabled,
 	)
 	var i WorkflowTemplate
 	err := row.Scan(
@@ -120,24 +138,21 @@ func (q *Queries) CreateWorkflowTemplate(ctx context.Context, arg CreateWorkflow
 		&i.Name,
 		&i.Description,
 		&i.IsBuiltin,
-		&i.TriggerType,
-		&i.TriggerConfig,
-		&i.TriggerEnabled,
-		&i.NextRunAt,
-		&i.LastTriggeredAt,
+		&i.Version,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const deleteTemplateNode = `-- name: DeleteTemplateNode :exec
-DELETE FROM workflow_template_nodes
-WHERE id = $1
+const deleteTemplateEdgesByTemplate = `-- name: DeleteTemplateEdgesByTemplate :exec
+DELETE FROM workflow_template_edges
+WHERE template_id = $1
 `
 
-func (q *Queries) DeleteTemplateNode(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteTemplateNode, id)
+func (q *Queries) DeleteTemplateEdgesByTemplate(ctx context.Context, templateID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteTemplateEdgesByTemplate, templateID)
 	return err
 }
 
@@ -161,19 +176,31 @@ func (q *Queries) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) erro
 	return err
 }
 
-const getMaxRejectCyclesByNodeID = `-- name: GetMaxRejectCyclesByNodeID :one
-SELECT max_reject_cycles FROM workflow_template_nodes WHERE id = $1
+const getTemplateEdge = `-- name: GetTemplateEdge :one
+SELECT id, template_id, source_node_id, source_port, target_node_id, target_port, label, sort_order, config, created_at FROM workflow_template_edges
+WHERE id = $1
 `
 
-func (q *Queries) GetMaxRejectCyclesByNodeID(ctx context.Context, id uuid.UUID) (int32, error) {
-	row := q.db.QueryRowContext(ctx, getMaxRejectCyclesByNodeID, id)
-	var max_reject_cycles int32
-	err := row.Scan(&max_reject_cycles)
-	return max_reject_cycles, err
+func (q *Queries) GetTemplateEdge(ctx context.Context, id uuid.UUID) (WorkflowTemplateEdge, error) {
+	row := q.db.QueryRowContext(ctx, getTemplateEdge, id)
+	var i WorkflowTemplateEdge
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.SourceNodeID,
+		&i.SourcePort,
+		&i.TargetNodeID,
+		&i.TargetPort,
+		&i.Label,
+		&i.SortOrder,
+		&i.Config,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getTemplateNode = `-- name: GetTemplateNode :one
-SELECT id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, max_reject_cycles, readonly_dirs, full_control_dirs, artifact, depends_on, created_at FROM workflow_template_nodes
+SELECT id, template_id, name, sort_order, type_key, config, ui_config, created_at, updated_at FROM workflow_template_nodes
 WHERE id = $1
 `
 
@@ -184,24 +211,18 @@ func (q *Queries) GetTemplateNode(ctx context.Context, id uuid.UUID) (WorkflowTe
 		&i.ID,
 		&i.TemplateID,
 		&i.Name,
-		&i.Description,
 		&i.SortOrder,
-		&i.NodeType,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.TimeoutMinutes,
-		&i.MaxRejectCycles,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		&i.Artifact,
-		pq.Array(&i.DependsOn),
+		&i.TypeKey,
+		&i.Config,
+		&i.UiConfig,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getWorkflowTemplate = `-- name: GetWorkflowTemplate :one
-SELECT id, workspace_id, name, description, is_builtin, trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at, created_at, updated_at FROM workflow_templates
+SELECT id, workspace_id, name, description, is_builtin, version, enabled, created_at, updated_at FROM workflow_templates
 WHERE id = $1
 `
 
@@ -214,19 +235,56 @@ func (q *Queries) GetWorkflowTemplate(ctx context.Context, id uuid.UUID) (Workfl
 		&i.Name,
 		&i.Description,
 		&i.IsBuiltin,
-		&i.TriggerType,
-		&i.TriggerConfig,
-		&i.TriggerEnabled,
-		&i.NextRunAt,
-		&i.LastTriggeredAt,
+		&i.Version,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const listTemplateEdges = `-- name: ListTemplateEdges :many
+SELECT id, template_id, source_node_id, source_port, target_node_id, target_port, label, sort_order, config, created_at FROM workflow_template_edges
+WHERE template_id = $1
+ORDER BY sort_order, created_at
+`
+
+func (q *Queries) ListTemplateEdges(ctx context.Context, templateID uuid.UUID) ([]WorkflowTemplateEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listTemplateEdges, templateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkflowTemplateEdge{}
+	for rows.Next() {
+		var i WorkflowTemplateEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.TemplateID,
+			&i.SourceNodeID,
+			&i.SourcePort,
+			&i.TargetNodeID,
+			&i.TargetPort,
+			&i.Label,
+			&i.SortOrder,
+			&i.Config,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTemplateNodes = `-- name: ListTemplateNodes :many
-SELECT id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, max_reject_cycles, readonly_dirs, full_control_dirs, artifact, depends_on, created_at FROM workflow_template_nodes
+SELECT id, template_id, name, sort_order, type_key, config, ui_config, created_at, updated_at FROM workflow_template_nodes
 WHERE template_id = $1
 ORDER BY sort_order
 `
@@ -244,18 +302,12 @@ func (q *Queries) ListTemplateNodes(ctx context.Context, templateID uuid.UUID) (
 			&i.ID,
 			&i.TemplateID,
 			&i.Name,
-			&i.Description,
 			&i.SortOrder,
-			&i.NodeType,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.TimeoutMinutes,
-			&i.MaxRejectCycles,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			&i.Artifact,
-			pq.Array(&i.DependsOn),
+			&i.TypeKey,
+			&i.Config,
+			&i.UiConfig,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -271,7 +323,7 @@ func (q *Queries) ListTemplateNodes(ctx context.Context, templateID uuid.UUID) (
 }
 
 const listWorkflowTemplates = `-- name: ListWorkflowTemplates :many
-SELECT id, workspace_id, name, description, is_builtin, trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at, created_at, updated_at FROM workflow_templates
+SELECT id, workspace_id, name, description, is_builtin, version, enabled, created_at, updated_at FROM workflow_templates
 WHERE workspace_id = $1
 ORDER BY created_at DESC
 `
@@ -291,11 +343,8 @@ func (q *Queries) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UU
 			&i.Name,
 			&i.Description,
 			&i.IsBuiltin,
-			&i.TriggerType,
-			&i.TriggerConfig,
-			&i.TriggerEnabled,
-			&i.NextRunAt,
-			&i.LastTriggeredAt,
+			&i.Version,
+			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -312,98 +361,32 @@ func (q *Queries) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UU
 	return items, nil
 }
 
-const updateTemplateNode = `-- name: UpdateTemplateNode :one
-UPDATE workflow_template_nodes
-SET name = $2, description = $3, sort_order = $4, node_type = $5, assignee_type = $6, assignee_id = $7, timeout_minutes = $8, readonly_dirs = $9, full_control_dirs = $10, artifact = $11, max_reject_cycles = $12, depends_on = $13
-WHERE id = $1
-RETURNING id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, max_reject_cycles, readonly_dirs, full_control_dirs, artifact, depends_on, created_at
-`
-
-type UpdateTemplateNodeParams struct {
-	ID              uuid.UUID             `db:"id" json:"id"`
-	Name            string                `db:"name" json:"name"`
-	Description     sql.NullString        `db:"description" json:"description"`
-	SortOrder       int32                 `db:"sort_order" json:"sort_order"`
-	NodeType        NodeType              `db:"node_type" json:"node_type"`
-	AssigneeType    AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID      uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	TimeoutMinutes  int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	ReadonlyDirs    pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	Artifact        pqtype.NullRawMessage `db:"artifact" json:"artifact"`
-	MaxRejectCycles int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	DependsOn       []uuid.UUID           `db:"depends_on" json:"depends_on"`
-}
-
-func (q *Queries) UpdateTemplateNode(ctx context.Context, arg UpdateTemplateNodeParams) (WorkflowTemplateNode, error) {
-	row := q.db.QueryRowContext(ctx, updateTemplateNode,
-		arg.ID,
-		arg.Name,
-		arg.Description,
-		arg.SortOrder,
-		arg.NodeType,
-		arg.AssigneeType,
-		arg.AssigneeID,
-		arg.TimeoutMinutes,
-		arg.ReadonlyDirs,
-		arg.FullControlDirs,
-		arg.Artifact,
-		arg.MaxRejectCycles,
-		pq.Array(arg.DependsOn),
-	)
-	var i WorkflowTemplateNode
-	err := row.Scan(
-		&i.ID,
-		&i.TemplateID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.TimeoutMinutes,
-		&i.MaxRejectCycles,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		&i.Artifact,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const updateWorkflowTemplate = `-- name: UpdateWorkflowTemplate :one
+const updateWorkflowTemplateGraph = `-- name: UpdateWorkflowTemplateGraph :one
 UPDATE workflow_templates
 SET name = $2,
     description = $3,
-    trigger_type = $4,
-    trigger_config = $5,
-    trigger_enabled = $6,
-    next_run_at = $7,
+    enabled = $4,
+    version = version + 1,
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, name, description, is_builtin, trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at, created_at, updated_at
+RETURNING id, workspace_id, name, description, is_builtin, version, enabled, created_at, updated_at
 `
 
-type UpdateWorkflowTemplateParams struct {
-	ID             uuid.UUID           `db:"id" json:"id"`
-	Name           string              `db:"name" json:"name"`
-	Description    sql.NullString      `db:"description" json:"description"`
-	TriggerType    WorkflowTriggerType `db:"trigger_type" json:"trigger_type"`
-	TriggerConfig  json.RawMessage     `db:"trigger_config" json:"trigger_config"`
-	TriggerEnabled bool                `db:"trigger_enabled" json:"trigger_enabled"`
-	NextRunAt      sql.NullTime        `db:"next_run_at" json:"next_run_at"`
+type UpdateWorkflowTemplateGraphParams struct {
+	ID          uuid.UUID      `db:"id" json:"id"`
+	Name        string         `db:"name" json:"name"`
+	Description sql.NullString `db:"description" json:"description"`
+	Enabled     bool           `db:"enabled" json:"enabled"`
 }
 
-func (q *Queries) UpdateWorkflowTemplate(ctx context.Context, arg UpdateWorkflowTemplateParams) (WorkflowTemplate, error) {
-	row := q.db.QueryRowContext(ctx, updateWorkflowTemplate,
+// Full-graph save: bumps version in the same transaction as the metadata
+// write so in-flight task snapshots can pin the version they started from.
+func (q *Queries) UpdateWorkflowTemplateGraph(ctx context.Context, arg UpdateWorkflowTemplateGraphParams) (WorkflowTemplate, error) {
+	row := q.db.QueryRowContext(ctx, updateWorkflowTemplateGraph,
 		arg.ID,
 		arg.Name,
 		arg.Description,
-		arg.TriggerType,
-		arg.TriggerConfig,
-		arg.TriggerEnabled,
-		arg.NextRunAt,
+		arg.Enabled,
 	)
 	var i WorkflowTemplate
 	err := row.Scan(
@@ -412,11 +395,8 @@ func (q *Queries) UpdateWorkflowTemplate(ctx context.Context, arg UpdateWorkflow
 		&i.Name,
 		&i.Description,
 		&i.IsBuiltin,
-		&i.TriggerType,
-		&i.TriggerConfig,
-		&i.TriggerEnabled,
-		&i.NextRunAt,
-		&i.LastTriggeredAt,
+		&i.Version,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

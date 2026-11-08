@@ -56,5 +56,6 @@ func NewRouter(deps RouterDeps) chi.Router {
 	} else {
 		svc = service.New(s.DB, s.Hub, s.Redis)
 	}
+	svc.GitHubAPIURL = cfg.GitHubAPIURL
 	return s.buildRouter(svc)
 }

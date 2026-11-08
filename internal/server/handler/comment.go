@@ -202,7 +202,7 @@ func isAllowedCommentType(commentType string) bool {
 }
 
 func (h *CommentHandler) validateCommentNode(w http.ResponseWriter, r *http.Request, taskID int32, nodeID uuid.UUID) bool {
-	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
+	node, err := service.NewTaskService(h.Svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		response.BadRequest(w, "invalid node id")
 		return false

@@ -185,48 +185,6 @@ type UpdateTaskReq struct {
 	Constraints string     `json:"constraints"` // Constraints
 }
 
-// CreateWorkflowTemplateReq is the request body for creating a workflow template.
-type CreateWorkflowTemplateReq struct {
-	Name        string           `json:"name"`        // Template name
-	Description string           `json:"description"` // Description
-	Nodes       []TemplateNodeDef `json:"nodes"`      // Template node list
-}
-
-// TemplateNodeDef defines a single node in a workflow template creation request.
-type TemplateNodeDef struct {
-	Name            string          `json:"name"`             // Node name
-	Description     string          `json:"description"`      // Description
-	SortOrder       int             `json:"sort_order"`       // Sort order
-	NodeType        string          `json:"node_type"`        // Node type
-	AssigneeType    string          `json:"assignee_type"`    // Assignee type
-	AssigneeID      *string         `json:"assignee_id"`      // Specified assignee ID
-	TimeoutMinutes  int             `json:"timeout_minutes"`  // Timeout duration
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`    // Read-only directories
-	FullControlDirs json.RawMessage `json:"full_control_dirs"` // Full control directories
-	Artifact        json.RawMessage `json:"artifact"`         // Artifact definition
-}
-
-// ClaimNodeReq is the request body for claiming a workflow node.
-type ClaimNodeReq struct {
-	AgentID string `json:"agent_id"` // Agent ID
-}
-
-// ApproveNodeReq is the request body for approving a workflow node.
-type ApproveNodeReq struct {
-	Comment string `json:"comment"` // Approval comment
-}
-
-// RejectNodeReq is the request body for rejecting a workflow node.
-type RejectNodeReq struct {
-	TargetNodeID string `json:"target_node_id"` // Rollback target node ID
-	Comment      string `json:"comment"`        // Rejection comment
-}
-
-// ManualInterventionReq is the request body for manual intervention on a workflow node.
-type ManualInterventionReq struct {
-	Comment string `json:"comment"` // Intervention description
-}
-
 // CreateCommentReq is the request body for creating a comment.
 type CreateCommentReq struct {
 	Content  string   `json:"content"`  // Comment content

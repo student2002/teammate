@@ -135,15 +135,15 @@ WHERE agent_id = ANY($1::uuid[])
 GROUP BY agent_id;
 
 -- name: CountCompletedNodesByAgents :many
-SELECT assignee_id AS agent_id, COUNT(*)::int AS completed_nodes
+SELECT reserved_for_agent_id AS agent_id, COUNT(*)::int AS completed_nodes
 FROM task_nodes
-WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[]) AND status = 'completed'
-GROUP BY assignee_id;
+WHERE reserved_for_agent_id = ANY($1::uuid[]) AND status = 'succeeded'
+GROUP BY reserved_for_agent_id;
 
 -- name: GetCurrentTasksByAgents :many
-SELECT DISTINCT ON (assignee_id)
-       assignee_id AS agent_id, task_id, title AS task_title, name AS node_name
+SELECT DISTINCT ON (reserved_for_agent_id)
+       reserved_for_agent_id AS agent_id, task_id, title AS task_title, name AS node_name
 FROM task_nodes tn JOIN tasks t ON t.id = tn.task_id
-WHERE assignee_type = 'agent' AND assignee_id = ANY($1::uuid[])
-  AND status IN ('pending', 'in_progress', 'manual_intervention')
-ORDER BY assignee_id, tn.updated_at DESC;
+WHERE reserved_for_agent_id = ANY($1::uuid[])
+  AND status IN ('ready', 'running', 'manual_intervention')
+ORDER BY reserved_for_agent_id, tn.updated_at DESC;

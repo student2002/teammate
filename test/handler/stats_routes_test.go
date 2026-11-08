@@ -20,7 +20,7 @@ func TestStatsAndDetailRoutes(t *testing.T) {
 	client := server.Client()
 	token, wsID := registerTestUser(t, client, server.URL)
 	projID := createProject(t, client, server.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, server.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, server.URL, wsID, token)
 	agentID, _ := createAgent(t, client, server.URL, wsID, token)
 
 	// GET single workflow template
@@ -33,8 +33,8 @@ func TestStatsAndDetailRoutes(t *testing.T) {
 	if err := json.Unmarshal(respBody, &tpl); err != nil {
 		t.Fatalf("decode template: %v", err)
 	}
-	if nodes, _ := tpl["nodes"].([]interface{}); len(nodes) != 2 {
-		t.Errorf("template detail node count = %d, want 2", len(nodes))
+	if nodes, _ := tpl["nodes"].([]interface{}); len(nodes) != 7 {
+		t.Errorf("template detail node count = %d, want 7", len(nodes))
 	}
 
 	// GET workflow template stats
@@ -80,7 +80,7 @@ func TestStatsAndDetailRoutes(t *testing.T) {
 	}
 
 	// GET per-task token usage summary (aggregate row even without reported usage)
-	taskID, _ := createTask(t, client, server.URL, projID, tplID, token)
+	taskID := createTask(t, client, server.URL, projID, tplID, token)
 	tokenUsageURL := fmt.Sprintf("%s/api/tasks/%d/token-usage", server.URL, taskID)
 	_, status, respBody = doRequestWithToken(t, client, http.MethodGet, tokenUsageURL, token, nil)
 	if status != http.StatusOK {

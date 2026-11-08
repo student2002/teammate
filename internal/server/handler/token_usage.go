@@ -111,7 +111,7 @@ func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Requ
 	agentID := claims.UserID
 
 	// verify that this Agent is the assignee of the node
-	node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), req.TaskNodeID)
+	node, err := service.NewTaskService(h.Svc).GetTaskNode(r.Context(), req.TaskNodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.NotFound(w, "node not found")
@@ -120,7 +120,7 @@ func (h *TokenUsageHandler) ReportTokenUsage(w http.ResponseWriter, r *http.Requ
 		response.InternalServerError(w, err)
 		return
 	}
-	if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
+	if node.ReservedForAgentID == nil || *node.ReservedForAgentID != claims.UserID.String() {
 		response.Forbidden(w, "only the assigned agent can report token usage for this node")
 		return
 	}

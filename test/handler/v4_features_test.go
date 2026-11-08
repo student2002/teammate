@@ -98,45 +98,6 @@ func TestProjectList_AgentSeesOnlyMemberProjects(t *testing.T) {
 	}
 }
 
-// TestReservationWindow_ClaimWithinWindow verifies that an agent can re-claim a node within the reservation window (reservation_expires_at has not expired). Tests the V4 continuation window feature.
-func TestReservationWindow_ClaimWithinWindow(t *testing.T) {
-	router, db, q := setupTestRouter(t)
-	defer db.Close()
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-	client := srv.Client()
-
-	token, wsID := registerTestUser(t, client, srv.URL)
-	projID := createProject(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
-
-	agentID, apiToken := createAgent(t, client, srv.URL, wsID, token)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
-	addAgentToProject(t, q, projID, agentID)
-
-	// Create task
-	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
-	if len(nodes) == 0 {
-		t.Fatal("expected at least 1 node")
-	}
-	nodeID := nodes[0]["id"].(string)
-
-	// Agent claims the first node
-	claimed := claimNode(t, client, srv.URL, taskID, nodeID, agentID, apiToken)
-	if claimed["status"] != "in_progress" {
-		t.Fatalf("expected in_progress after claim, got %v", claimed["status"])
-	}
-
-	// Same Agent re-claims (within reservation window) - should succeed
-	// This simulates an agent daemon reconnecting and re-claiming
-	reclaimed := claimNode(t, client, srv.URL, taskID, nodeID, agentID, apiToken)
-	if reclaimed["status"] != "in_progress" {
-		t.Fatalf("expected in_progress after re-claim within window, got %v", reclaimed["status"])
-	}
-}
-
 // TestPermissionChangedEvent_GrantAndList verifies that after granting permissions to an agent, it can access workspace resources.
 func TestPermissionChangedEvent_GrantAndList(t *testing.T) {
 	router, db, _ := setupTestRouter(t)

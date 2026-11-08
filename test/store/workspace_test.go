@@ -10,31 +10,39 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// TestSeedBuiltinTemplates verifies that a created workspace automatically includes 5 built-in templates, each with nodes.
+// TestSeedBuiltinTemplates verifies that a created workspace automatically
+// includes the V2 built-in template (trigger.manual → agent.task → flow.end)
+// with its full node/edge graph.
 func TestSeedBuiltinTemplates(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 
-	// Verify 5 built-in templates have been created
+	// Verify the built-in template has been created
 	templates, err := s.ListWorkflowTemplates(ctx, uuid.MustParse(ws.ID))
 	if err != nil {
 		t.Fatalf("ListWorkflowTemplates: %v", err)
 	}
-	if len(templates) != 5 {
-		t.Fatalf("expected 5 built-in templates, got %d", len(templates))
+	if len(templates) != 1 {
+		t.Fatalf("expected 1 built-in template, got %d", len(templates))
 	}
 
-	// Verify each template has nodes
-	for _, tpl := range templates {
-		nodes, err := s.ListTemplateNodes(ctx, uuid.MustParse(tpl.ID))
-		if err != nil {
-			t.Fatalf("ListTemplateNodes for %s: %v", tpl.Name, err)
-		}
-		if len(nodes) == 0 {
-			t.Fatalf("template %s has no nodes", tpl.Name)
-		}
+	// Verify the template graph: 3 nodes chained by 3 edges
+	tpl := templates[0]
+	nodes, err := s.ListTemplateNodes(ctx, uuid.MustParse(tpl.ID))
+	if err != nil {
+		t.Fatalf("ListTemplateNodes for %s: %v", tpl.Name, err)
+	}
+	if len(nodes) != 3 {
+		t.Fatalf("expected 3 built-in template nodes, got %d", len(nodes))
+	}
+	edges, err := s.ListTemplateEdges(ctx, uuid.MustParse(tpl.ID))
+	if err != nil {
+		t.Fatalf("ListTemplateEdges for %s: %v", tpl.Name, err)
+	}
+	if len(edges) != 3 {
+		t.Fatalf("expected 3 built-in template edges, got %d", len(edges))
 	}
 }
 

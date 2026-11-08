@@ -35,12 +35,12 @@ func NewNotificationService(svc *Service) *NotificationService {
 // NotificationItem represents a notification, including the notification type (manual_intervention or mention),
 // title, description, creation time, and the associated task ID.
 type NotificationItem struct {
-	ID          string    `json:"id"`           // notification unique identifier
-	Type        string    `json:"type"`         // notification type: manual_intervention or mention
-	Title       string    `json:"title"`        // notification title (usually the task title)
-	Description string    `json:"description"`  // notification description (node name or comment content)
-	CreatedAt   time.Time `json:"created_at"`   // notification creation time
-	TaskID      int32     `json:"task_id"`      // associated task ID
+	ID          string    `json:"id"`          // notification unique identifier
+	Type        string    `json:"type"`        // notification type: manual_intervention or mention
+	Title       string    `json:"title"`       // notification title (usually the task title)
+	Description string    `json:"description"` // notification description (node name or comment content)
+	CreatedAt   time.Time `json:"created_at"`  // notification creation time
+	TaskID      int32     `json:"task_id"`     // associated task ID
 }
 
 // ListNotifications lists notifications for the specified workspace and member, including manual-intervention nodes and mention comments.

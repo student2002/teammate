@@ -575,3 +575,19 @@ func (h *WorkspaceHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Reque
 	response.JSON(w, r, wmResult)
 }
 
+// ListIntegrations handles GET /workspaces/{workspaceId}/integrations: every
+// integration in the workspace with its project name, for the workflow
+// editor's integration pickers.
+func (h *WorkspaceHandler) ListIntegrations(w http.ResponseWriter, r *http.Request) {
+	workspaceID, err := uuid.Parse(chi.URLParam(r, "workspaceId"))
+	if err != nil {
+		response.BadRequest(w, "invalid workspace id")
+		return
+	}
+	views, err := service.NewIntegrationService(h.Svc).ListForWorkspace(r.Context(), workspaceID)
+	if err != nil {
+		response.InternalServerError(w, err)
+		return
+	}
+	response.JSON(w, r, map[string]interface{}{"integrations": views})
+}

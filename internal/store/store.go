@@ -5,7 +5,7 @@
 //
 // Design principles:
 //   - Simple CRUD operations are delegated to sqlc Queries
-//   - Operations that require transactions are implemented within Store methods (e.g. ApproveNodeInTx, CreateTask)
+//   - Operations that require transactions are implemented within Store methods (e.g. CreateWorkflowTemplate, CreateTask)
 //   - All methods accept a context.Context parameter to support timeout and cancellation
 //   - Errors are wrapped with fmt.Errorf to preserve the original error chain
 package store

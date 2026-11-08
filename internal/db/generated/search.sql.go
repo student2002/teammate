@@ -67,7 +67,7 @@ func (q *Queries) SearchAgentsByWorkspace(ctx context.Context, arg SearchAgentsB
 
 const searchTasksByWorkspace = `-- name: SearchTasksByWorkspace :many
 
-SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
+SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.workflow_version, t.source_event_id, t.trigger_payload, t.context, t.failure, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
 FROM tasks t
 JOIN projects p ON p.id = t.project_id
 WHERE p.workspace_id = $1
@@ -95,6 +95,11 @@ func (q *Queries) SearchTasksByWorkspace(ctx context.Context, arg SearchTasksByW
 			&i.ProjectID,
 			&i.WorkflowName,
 			&i.WorkflowTemplateID,
+			&i.WorkflowVersion,
+			&i.SourceEventID,
+			&i.TriggerPayload,
+			&i.Context,
+			&i.Failure,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -125,7 +130,7 @@ func (q *Queries) SearchTasksByWorkspace(ctx context.Context, arg SearchTasksByW
 }
 
 const searchTasksByWorkspaceAndProject = `-- name: SearchTasksByWorkspaceAndProject :many
-SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
+SELECT t.id, t.project_id, t.workflow_name, t.workflow_template_id, t.workflow_version, t.source_event_id, t.trigger_payload, t.context, t.failure, t.title, t.description, t.constraints, t.type, t.priority, t.status, t.author_type, t.author_id, t.due_date, t.labels, t.sequence, t.parent_task_id, t.git_branch, t.created_at, t.updated_at
 FROM tasks t
 JOIN projects p ON p.id = t.project_id
 WHERE p.workspace_id = $1
@@ -154,6 +159,11 @@ func (q *Queries) SearchTasksByWorkspaceAndProject(ctx context.Context, arg Sear
 			&i.ProjectID,
 			&i.WorkflowName,
 			&i.WorkflowTemplateID,
+			&i.WorkflowVersion,
+			&i.SourceEventID,
+			&i.TriggerPayload,
+			&i.Context,
+			&i.Failure,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,

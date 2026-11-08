@@ -1,0 +1,24 @@
+{
+  "doc": "V2 node catalog contract (plan §2.1). output_ports_kind marks types whose output ports are derived from node config instead of being fixed.",
+  "node_types": [
+    { "type_key": "trigger.manual", "category": "trigger", "executor_kind": "server", "input_ports": [], "output_ports": ["success"] },
+    { "type_key": "trigger.schedule", "category": "trigger", "executor_kind": "server", "input_ports": [], "output_ports": ["success"] },
+    { "type_key": "trigger.github", "category": "trigger", "executor_kind": "server", "input_ports": [], "output_ports": ["success"] },
+    { "type_key": "trigger.webhook", "category": "trigger", "executor_kind": "server", "input_ports": [], "output_ports": ["success"] },
+    { "type_key": "agent.task", "category": "agent", "executor_kind": "agentd", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "action.github", "category": "integration", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "action.http", "category": "integration", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "action.command", "category": "action", "executor_kind": "agentd", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "action.create_task", "category": "task", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "workflow.call", "category": "reuse", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "data.set", "category": "data", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "data.map", "category": "data", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success", "failed"] },
+    { "type_key": "flow.condition", "category": "logic", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["true", "false"] },
+    { "type_key": "flow.switch", "category": "logic", "executor_kind": "server", "input_ports": ["input"], "output_ports": [], "output_ports_kind": "switch_branches" },
+    { "type_key": "flow.parallel", "category": "logic", "executor_kind": "server", "input_ports": ["input"], "output_ports": [], "output_ports_kind": "parallel_branches" },
+    { "type_key": "flow.join", "category": "logic", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["success"] },
+    { "type_key": "flow.wait", "category": "wait", "executor_kind": "server", "input_ports": ["input"], "output_ports": ["resumed", "timeout"] },
+    { "type_key": "human.input", "category": "human", "executor_kind": "human", "input_ports": ["input"], "output_ports": ["submitted", "cancelled", "timeout"] },
+    { "type_key": "flow.end", "category": "end", "executor_kind": "server", "input_ports": ["completed", "failed"], "output_ports": [] }
+  ]
+}

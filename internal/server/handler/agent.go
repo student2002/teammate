@@ -49,7 +49,6 @@ func (h *AgentHandler) Routes() chi.Router {
 		r.Delete("/skills/{skillId}", h.RemoveSkill)
 		r.Post("/mcp-servers", h.AddMcpServer)
 		r.Delete("/mcp-servers/{serverId}", h.RemoveMcpServer)
-		r.Get("/in-progress-nodes", h.GetInProgressNodes)
 		r.Get("/executions", h.ListExecutions)
 		r.Post("/grant-role", h.GrantRole)
 		r.Get("/permissions", h.ListPermissions)
@@ -58,6 +57,9 @@ func (h *AgentHandler) Routes() chi.Router {
 
 		// daemon-only MCP execution endpoint: returns decrypted env_vars, only accessible by the Agent itself
 		r.Get("/execution/mcp-servers", h.GetExecutionMcpServers)
+
+		// daemon recovery view (S4 agentd protocol): the agent's claimed-but-unfinished executions
+		r.Get("/in-progress-nodes", NewInProgressNodesHandler(h.Svc))
 	})
 
 	return r
@@ -702,44 +704,6 @@ func (h *AgentHandler) RemoveMcpServer(w http.ResponseWriter, r *http.Request) {
 
 
 // --- Agent permission management ---
-
-// GetInProgressNodes handles the GET /agents/{id}/in-progress-nodes endpoint,
-// querying nodes claimed by the specified Agent but not yet completed (in_progress), used to resume execution after an Agent restart.
-//
-// Authentication: only the Agent itself can query (user_type=agent and user_id matches the path {id}),
-// human users are not allowed to query this endpoint.
-func (h *AgentHandler) GetInProgressNodes(w http.ResponseWriter, r *http.Request) {
-	claims, ok := svcmw.GetAuthFromContext(r.Context())
-	if !ok {
-		response.Unauthorized(w, "authentication required")
-		return
-	}
-
-	agentIDStr := chi.URLParam(r, "id")
-	if agentIDStr == "" {
-		response.BadRequest(w, "missing agent id")
-		return
-	}
-	agentID, err := uuid.Parse(agentIDStr)
-	if err != nil {
-		response.BadRequest(w, "invalid agent id")
-		return
-	}
-
-	// authentication: only the Agent itself can query
-	if claims.UserType != "agent" || claims.UserID != agentID {
-		response.Forbidden(w, "only the agent itself can query its in-progress nodes")
-		return
-	}
-
-	nodes, err := service.NewAgentService(h.Svc).GetInProgressNodesByAgent(r.Context(), agentID, claims.WorkspaceID)
-	if err != nil {
-		response.InternalServerError(w, fmt.Errorf("get in-progress nodes: %w", err))
-		return
-	}
-
-	response.JSON(w, r, nodes)
-}
 
 // ListExecutions handles GET /workspaces/{workspaceId}/agents/{id}/executions?limit=10,
 // returning the agent's recent execution sessions with task context.

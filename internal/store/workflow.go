@@ -1,15 +1,13 @@
 // workflow.go provides data access operations for workflow templates.
 //
-// A Workflow Template defines the ordered node steps for task execution,
-// e.g.: requirements analysis → technical design → coding → review → deployment.
-//
-// A template contains metadata and a list of template nodes; each template node defines the
-// name, type, assignee type, timeout, etc. for each step.
+// A Workflow Template is an event-driven graph: typed nodes (type_key) are
+// connected by port-based edges. Create and update persist the whole graph
+// inside one transaction; updates bump the template version atomically so
+// in-flight task snapshots can pin the version they started from.
 package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -18,19 +16,15 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateWorkflowTemplate creates a workflow template and its template nodes within a transaction.
+// CreateWorkflowTemplate creates a workflow template with its full graph
+// (nodes and edges) within a transaction.
 //
-// Note: the nodes parameter uses db.CreateTemplateNodeParams (within the transaction, n.TemplateID = template.ID must be assigned).
-// If this is changed to types.CreateTemplateNodeParams in the future, type conversion must be done inside the loop.
-//
-// Returns:
-//   - types.WorkflowTemplate: the created template record
-//   - []types.WorkflowTemplateNode: list of created template nodes
-//   - error: error if creation fails
-func (s *Store) CreateWorkflowTemplate(ctx context.Context, params types.CreateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, error) {
+// The nodes/edges parameters carry optional stable IDs; TemplateID is
+// backfilled with the created template's ID inside the transaction.
+func (s *Store) CreateWorkflowTemplate(ctx context.Context, params types.CreateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams, edges []types.CreateTemplateEdgeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, []types.WorkflowTemplateEdge, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("begin tx: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -38,41 +32,131 @@ func (s *Store) CreateWorkflowTemplate(ctx context.Context, params types.CreateW
 
 	dbParams, err := FromDomainCreateWorkflowTemplateParams(params)
 	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert create workflow template params: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert create workflow template params: %w", err)
 	}
-	dbParams = normalizeCreateWorkflowTemplateParams(dbParams)
 	template, err := qtx.CreateWorkflowTemplate(ctx, dbParams)
 	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("create workflow template: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("create workflow template: %w", err)
 	}
 
-	createdNodes := make([]db.WorkflowTemplateNode, 0, len(nodes))
-	for _, n := range nodes {
-		dbNode, err := FromDomainCreateTemplateNodeParams(n)
-		if err != nil {
-			return types.WorkflowTemplate{}, nil, fmt.Errorf("convert create template node params: %w", err)
-		}
-		dbNode.TemplateID = template.ID
-		node, err := qtx.CreateTemplateNode(ctx, dbNode)
-		if err != nil {
-			return types.WorkflowTemplate{}, nil, fmt.Errorf("create template node: %w", err)
-		}
-		createdNodes = append(createdNodes, node)
+	createdNodes, err := insertTemplateNodes(ctx, qtx, template.ID, nodes)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, err
+	}
+	createdEdges, err := insertTemplateEdges(ctx, qtx, template.ID, edges)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("commit tx: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("commit tx: %w", err)
 	}
 
 	domainTpl, err := ToDomainWorkflowTemplate(template)
 	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert template to domain: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template to domain: %w", err)
 	}
 	domainNodes, err := ToDomainWorkflowTemplateNodeSlice(createdNodes)
 	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert template nodes to domain: %w", err)
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template nodes to domain: %w", err)
 	}
-	return domainTpl, domainNodes, nil
+	domainEdges, err := ToDomainWorkflowTemplateEdgeSlice(createdEdges)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template edges to domain: %w", err)
+	}
+	return domainTpl, domainNodes, domainEdges, nil
+}
+
+// UpdateTemplateGraph atomically replaces a template's whole graph: metadata
+// write with version bump, then delete-and-reinsert of nodes and edges. Node
+// and edge IDs come from the caller so references stay stable across saves.
+func (s *Store) UpdateTemplateGraph(ctx context.Context, id uuid.UUID, params types.UpdateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams, edges []types.CreateTemplateEdgeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, []types.WorkflowTemplateEdge, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := s.q.WithTx(tx)
+
+	dbParams, err := FromDomainUpdateWorkflowTemplateParams(params)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert update workflow template params: %w", err)
+	}
+	template, err := qtx.UpdateWorkflowTemplateGraph(ctx, dbParams)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("update workflow template graph: %w", err)
+	}
+	if err := qtx.DeleteTemplateEdgesByTemplate(ctx, id); err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("delete template edges: %w", err)
+	}
+	if err := qtx.DeleteTemplateNodesByTemplate(ctx, id); err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("delete template nodes: %w", err)
+	}
+	createdNodes, err := insertTemplateNodes(ctx, qtx, id, nodes)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, err
+	}
+	createdEdges, err := insertTemplateEdges(ctx, qtx, id, edges)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	domainTpl, err := ToDomainWorkflowTemplate(template)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template to domain: %w", err)
+	}
+	domainNodes, err := ToDomainWorkflowTemplateNodeSlice(createdNodes)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template nodes to domain: %w", err)
+	}
+	domainEdges, err := ToDomainWorkflowTemplateEdgeSlice(createdEdges)
+	if err != nil {
+		return types.WorkflowTemplate{}, nil, nil, fmt.Errorf("convert template edges to domain: %w", err)
+	}
+	return domainTpl, domainNodes, domainEdges, nil
+}
+
+// insertTemplateNodes persists template nodes inside an open transaction,
+// backfilling the template ID on every row.
+func insertTemplateNodes(ctx context.Context, qtx *db.Queries, templateID uuid.UUID, nodes []types.CreateTemplateNodeParams) ([]db.WorkflowTemplateNode, error) {
+	createdNodes := make([]db.WorkflowTemplateNode, 0, len(nodes))
+	for _, n := range nodes {
+		dbNode, err := FromDomainCreateTemplateNodeParams(n)
+		if err != nil {
+			return nil, fmt.Errorf("convert create template node params: %w", err)
+		}
+		dbNode.TemplateID = templateID
+		node, err := qtx.CreateTemplateNode(ctx, dbNode)
+		if err != nil {
+			return nil, fmt.Errorf("create template node: %w", err)
+		}
+		createdNodes = append(createdNodes, node)
+	}
+	return createdNodes, nil
+}
+
+// insertTemplateEdges persists template edges inside an open transaction,
+// backfilling the template ID on every row.
+func insertTemplateEdges(ctx context.Context, qtx *db.Queries, templateID uuid.UUID, edges []types.CreateTemplateEdgeParams) ([]db.WorkflowTemplateEdge, error) {
+	createdEdges := make([]db.WorkflowTemplateEdge, 0, len(edges))
+	for _, e := range edges {
+		dbEdge, err := FromDomainCreateTemplateEdgeParams(e)
+		if err != nil {
+			return nil, fmt.Errorf("convert create template edge params: %w", err)
+		}
+		dbEdge.TemplateID = templateID
+		edge, err := qtx.CreateTemplateEdge(ctx, dbEdge)
+		if err != nil {
+			return nil, fmt.Errorf("create template edge: %w", err)
+		}
+		createdEdges = append(createdEdges, edge)
+	}
+	return createdEdges, nil
 }
 
 // GetWorkflowTemplate queries a single workflow template record by ID.
@@ -93,123 +177,12 @@ func (s *Store) ListWorkflowTemplates(ctx context.Context, workspaceID uuid.UUID
 	return ToDomainWorkflowTemplateSlice(templates)
 }
 
-// UpdateWorkflowTemplate updates a template row with the given full-column
-// params. Callers supply complete values (partial merges happen at the handler
-// layer over the current record); empty trigger fields are not defaulted here.
-//
-// Parameters:
-//   - ctx: request context
-//   - params: update parameters
-//
-// Returns:
-//   - types.WorkflowTemplate: the updated template record
-//   - error: error if the update fails
-func (s *Store) UpdateWorkflowTemplate(ctx context.Context, params types.UpdateWorkflowTemplateParams) (types.WorkflowTemplate, error) {
-	dbParams, err := FromDomainUpdateWorkflowTemplateParams(params)
-	if err != nil {
-		return types.WorkflowTemplate{}, fmt.Errorf("convert update workflow template params: %w", err)
-	}
-	tpl, err := s.q.UpdateWorkflowTemplate(ctx, dbParams)
-	if err != nil {
-		return types.WorkflowTemplate{}, fmt.Errorf("update workflow template: %w", err)
-	}
-	return ToDomainWorkflowTemplate(tpl)
-}
-
-// UpdateWorkflowTemplateWithNodes updates a workflow template and replaces all nodes within a transaction.
-// Nodes carrying an explicit ID keep that identity, so depends_on references
-// between them stay valid; nodes without an ID get a generated one.
-//
-// Note: the nodes parameter uses types.CreateTemplateNodeParams; within the transaction it is converted to db and then assigned TemplateID.
-func (s *Store) UpdateWorkflowTemplateWithNodes(ctx context.Context, params types.UpdateWorkflowTemplateParams, nodes []types.CreateTemplateNodeParams) (types.WorkflowTemplate, []types.WorkflowTemplateNode, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	qtx := s.q.WithTx(tx)
-
-	dbParams, err := FromDomainUpdateWorkflowTemplateParams(params)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert update workflow template params: %w", err)
-	}
-	// Update template metadata
-	template, err := qtx.UpdateWorkflowTemplate(ctx, dbParams)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("update workflow template: %w", err)
-	}
-
-	// Delete all old nodes (no foreign key constraint prevents this operation)
-	if err := qtx.DeleteTemplateNodesByTemplate(ctx, dbParams.ID); err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("delete old template nodes: %w", err)
-	}
-
-	// Create new nodes
-	createdNodes := make([]db.WorkflowTemplateNode, 0, len(nodes))
-	for _, n := range nodes {
-		dbNode, err := FromDomainCreateTemplateNodeParams(n)
-		if err != nil {
-			return types.WorkflowTemplate{}, nil, fmt.Errorf("convert create template node params: %w", err)
-		}
-		dbNode.TemplateID = template.ID
-		node, err := qtx.CreateTemplateNode(ctx, dbNode)
-		if err != nil {
-			return types.WorkflowTemplate{}, nil, fmt.Errorf("create template node: %w", err)
-		}
-		createdNodes = append(createdNodes, node)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("commit tx: %w", err)
-	}
-
-	domainTpl, err := ToDomainWorkflowTemplate(template)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert template to domain: %w", err)
-	}
-	domainNodes, err := ToDomainWorkflowTemplateNodeSlice(createdNodes)
-	if err != nil {
-		return types.WorkflowTemplate{}, nil, fmt.Errorf("convert template nodes to domain: %w", err)
-	}
-	return domainTpl, domainNodes, nil
-}
-
-func normalizeCreateWorkflowTemplateParams(params db.CreateWorkflowTemplateParams) db.CreateWorkflowTemplateParams {
-	if params.TriggerType == "" {
-		params.TriggerType = db.WorkflowTriggerTypeManual
-	}
-	if len(params.TriggerConfig) == 0 {
-		params.TriggerConfig = json.RawMessage(`{}`)
-	}
-	if !params.TriggerEnabled && params.TriggerType == db.WorkflowTriggerTypeManual {
-		params.TriggerEnabled = true
-	}
-	return params
-}
-
-// DeleteWorkflowTemplate deletes a workflow template and all its nodes within a transaction.
+// DeleteWorkflowTemplate deletes a workflow template; its nodes and edges are
+// removed by the database cascade.
 func (s *Store) DeleteWorkflowTemplate(ctx context.Context, id uuid.UUID) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	qtx := s.q.WithTx(tx)
-
-	if err := qtx.DeleteTemplateNodesByTemplate(ctx, id); err != nil {
-		return fmt.Errorf("delete template nodes: %w", err)
-	}
-
-	if err := qtx.DeleteWorkflowTemplate(ctx, id); err != nil {
+	if err := s.q.DeleteWorkflowTemplate(ctx, id); err != nil {
 		return fmt.Errorf("delete workflow template: %w", err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
 	return nil
 }
 
@@ -220,4 +193,13 @@ func (s *Store) ListTemplateNodes(ctx context.Context, templateID uuid.UUID) ([]
 		return nil, fmt.Errorf("list template nodes: %w", err)
 	}
 	return ToDomainWorkflowTemplateNodeSlice(nodes)
+}
+
+// ListTemplateEdges queries all template edges of the specified template.
+func (s *Store) ListTemplateEdges(ctx context.Context, templateID uuid.UUID) ([]types.WorkflowTemplateEdge, error) {
+	edges, err := s.q.ListTemplateEdges(ctx, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("list template edges: %w", err)
+	}
+	return ToDomainWorkflowTemplateEdgeSlice(edges)
 }

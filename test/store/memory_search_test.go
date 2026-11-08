@@ -104,10 +104,9 @@ func TestMarkMemoriesStaleByTask(t *testing.T) {
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
 	agent := createTestAgent(t, s, ws.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
 	// Create a task
-	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	task, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Task with memory",
 		Type:       "task",
@@ -115,7 +114,7 @@ func TestMarkMemoriesStaleByTask(t *testing.T) {
 		Status:     "active",
 		AuthorType: "agent",
 		AuthorID:   agent.ID,
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

@@ -26,25 +26,34 @@ func newUUIDString() string { return fixedUUID.String() }
 
 // TestToDomainTask_RoundTrip verifies field fidelity for db.Task → types.Task → db.CreateTaskParams.
 func TestToDomainTask_RoundTrip(t *testing.T) {
+	triggerPayload := json.RawMessage(`{"event":"issues"}`)
+	runContext := json.RawMessage(`{"vars":{}}`)
+	failure := json.RawMessage(`{}`)
 	dbTask := db.Task{
-		ID:           42,
-		ProjectID:    fixedUUID,
-		WorkflowName: "default",
-		Title:        "Build feature X",
-		Description:  sql.NullString{String: "Detailed task description", Valid: true},
-		Constraints:  sql.NullString{String: "No external deps", Valid: true},
-		Type:         db.TaskTypeStory,
-		Priority:     db.TaskPriorityHigh,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     fixedUUID,
-		DueDate:      sql.NullTime{Time: fixedTime, Valid: true},
-		Labels:       []string{"backend", "urgent"},
-		Sequence:     7,
-		ParentTaskID: sql.NullInt32{Int32: 5, Valid: true},
-		GitBranch:    sql.NullString{String: "feature/x", Valid: true},
-		CreatedAt:    fixedTime,
-		UpdatedAt:    fixedTime,
+		ID:                 42,
+		ProjectID:          fixedUUID,
+		WorkflowName:       "default",
+		WorkflowTemplateID: uuid.NullUUID{UUID: fixedUUID, Valid: true},
+		WorkflowVersion:    3,
+		SourceEventID:      uuid.NullUUID{UUID: fixedUUID, Valid: true},
+		TriggerPayload:     triggerPayload,
+		Context:            runContext,
+		Failure:            failure,
+		Title:              "Build feature X",
+		Description:        sql.NullString{String: "Detailed task description", Valid: true},
+		Constraints:        sql.NullString{String: "No external deps", Valid: true},
+		Type:               db.TaskTypeStory,
+		Priority:           db.TaskPriorityHigh,
+		Status:             db.TaskStatusActive,
+		AuthorType:         "agent",
+		AuthorID:           fixedUUID,
+		DueDate:            sql.NullTime{Time: fixedTime, Valid: true},
+		Labels:             []string{"backend", "urgent"},
+		Sequence:           7,
+		ParentTaskID:       sql.NullInt32{Int32: 5, Valid: true},
+		GitBranch:          sql.NullString{String: "feature/x", Valid: true},
+		CreatedAt:          fixedTime,
+		UpdatedAt:          fixedTime,
 	}
 
 	domainTask, err := store.ToDomainTask(dbTask)
@@ -57,6 +66,9 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 		{"ID", numToStr(domainTask.ID), "42"},
 		{"ProjectID", domainTask.ProjectID, newUUIDString()},
 		{"WorkflowName", domainTask.WorkflowName, "default"},
+		{"WorkflowTemplateID", *domainTask.WorkflowTemplateID, newUUIDString()},
+		{"WorkflowVersion", numToStr(domainTask.WorkflowVersion), "3"},
+		{"SourceEventID", *domainTask.SourceEventID, newUUIDString()},
 		{"Title", domainTask.Title, "Build feature X"},
 		{"Type", domainTask.Type, types.TaskTypeStory},
 		{"Priority", domainTask.Priority, types.TaskPriorityHigh},
@@ -71,6 +83,15 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 		}
 	}
 
+	if string(domainTask.TriggerPayload) != string(triggerPayload) {
+		t.Errorf("TriggerPayload = %s, want %s", domainTask.TriggerPayload, triggerPayload)
+	}
+	if string(domainTask.Context) != string(runContext) {
+		t.Errorf("Context = %s, want %s", domainTask.Context, runContext)
+	}
+	if string(domainTask.Failure) != string(failure) {
+		t.Errorf("Failure = %s, want %s", domainTask.Failure, failure)
+	}
 	if domainTask.Description != dbTask.Description.String {
 		t.Errorf("Description = %q, want %q", domainTask.Description, dbTask.Description.String)
 	}
@@ -123,34 +144,38 @@ func TestToDomainTask_RoundTrip(t *testing.T) {
 // TestToDomainTaskNode_RoundTrip verifies field fidelity for db.TaskNode → types.TaskNode.
 func TestToDomainTaskNode_RoundTrip(t *testing.T) {
 	completedAt := fixedTime
-	completedBy := uuid.NullUUID{UUID: fixedUUID, Valid: true}
-	assigneeID := uuid.NullUUID{UUID: fixedUUID, Valid: true}
 	reserved := uuid.NullUUID{UUID: fixedUUID, Valid: true}
+	config := json.RawMessage(`{"instruction":"build it"}`)
+	input := json.RawMessage(`{"title":"x"}`)
+	output := json.RawMessage(`{"exit_code":0}`)
+	errRaw := json.RawMessage(`{}`)
 
 	dbNode := db.TaskNode{
-		ID:                   fixedUUID,
-		TaskID:               42,
-		Name:                 "Implement API",
-		Description:          sql.NullString{String: "Build REST endpoint", Valid: true},
-		SortOrder:            3,
-		NodeType:             db.NodeTypeStandard,
-		Status:               db.TaskNodeStatusInProgress,
-		AssigneeType:         db.AssigneeTypeSpecificAgent,
-		AssigneeID:           assigneeID,
-		ReservedForAgentID:   reserved,
-		RejectCount:          2,
-		MaxRejectCycles:      5,
-		TimeoutMinutes:       30,
-		Version:              4,
-		CompletedAt:          sql.NullTime{Time: completedAt, Valid: true},
-		CompletedBy:          completedBy,
-		Summary:              "Done implementing",
-		PreviousSummary:      "Was in progress",
-		ReservationExpiresAt: sql.NullTime{Time: completedAt.Add(5 * time.Minute), Valid: true},
-		ReadonlyDirs:         pqtype.NullRawMessage{RawMessage: json.RawMessage(`["/docs","/README.md"]`), Valid: true},
-		FullControlDirs:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`["/src"]`), Valid: true},
-		CreatedAt:            fixedTime,
-		UpdatedAt:            fixedTime,
+		ID:                 fixedUUID,
+		TaskID:             42,
+		TemplateNodeID:     fixedUUID,
+		Name:               "Implement API",
+		SortOrder:          3,
+		TypeKey:            "agent.task",
+		Config:             config,
+		Status:             db.TaskNodeStatusRunning,
+		ActivationMode:     "all",
+		Input:              input,
+		Output:             output,
+		Error:              errRaw,
+		AttemptCount:       2,
+		MaxAttempts:        5,
+		NextRetryAt:        sql.NullTime{Time: fixedTime.Add(2 * time.Minute), Valid: true},
+		WaitKey:            "github:123",
+		WaitExpiresAt:      sql.NullTime{Time: fixedTime.Add(5 * time.Minute), Valid: true},
+		Version:            4,
+		ReservedForAgentID: reserved,
+		Summary:            "Done implementing",
+		ReadonlyDirs:       pqtype.NullRawMessage{RawMessage: json.RawMessage(`["/docs","/README.md"]`), Valid: true},
+		FullControlDirs:    pqtype.NullRawMessage{RawMessage: json.RawMessage(`["/src"]`), Valid: true},
+		CompletedAt:        sql.NullTime{Time: completedAt, Valid: true},
+		CreatedAt:          fixedTime,
+		UpdatedAt:          fixedTime,
 	}
 
 	domainNode, err := store.ToDomainTaskNode(dbNode)
@@ -164,18 +189,44 @@ func TestToDomainTaskNode_RoundTrip(t *testing.T) {
 	if domainNode.TaskID != 42 {
 		t.Errorf("TaskID = %d, want 42", domainNode.TaskID)
 	}
+	if domainNode.TemplateNodeID != newUUIDString() {
+		t.Errorf("TemplateNodeID = %q, want %q", domainNode.TemplateNodeID, newUUIDString())
+	}
 	if domainNode.Name != "Implement API" {
 		t.Errorf("Name = %q", domainNode.Name)
-	}
-	if domainNode.Description != dbNode.Description.String {
-		t.Errorf("Description = %q, want %q",
-			domainNode.Description, dbNode.Description.String)
 	}
 	if domainNode.SortOrder != 3 {
 		t.Errorf("SortOrder = %d, want 3", domainNode.SortOrder)
 	}
-	if domainNode.Status != types.TaskNodeStatusInProgress {
+	if domainNode.TypeKey != "agent.task" {
+		t.Errorf("TypeKey = %q", domainNode.TypeKey)
+	}
+	if string(domainNode.Config) != string(config) {
+		t.Errorf("Config = %s, want %s", domainNode.Config, config)
+	}
+	if domainNode.Status != types.TaskNodeStatusRunning {
 		t.Errorf("Status = %q", domainNode.Status)
+	}
+	if domainNode.ActivationMode != "all" {
+		t.Errorf("ActivationMode = %q", domainNode.ActivationMode)
+	}
+	if string(domainNode.Input) != string(input) {
+		t.Errorf("Input = %s, want %s", domainNode.Input, input)
+	}
+	if string(domainNode.Output) != string(output) {
+		t.Errorf("Output = %s, want %s", domainNode.Output, output)
+	}
+	if domainNode.AttemptCount != 2 {
+		t.Errorf("AttemptCount = %d, want 2", domainNode.AttemptCount)
+	}
+	if domainNode.MaxAttempts != 5 {
+		t.Errorf("MaxAttempts = %d, want 5", domainNode.MaxAttempts)
+	}
+	if domainNode.WaitKey != "github:123" {
+		t.Errorf("WaitKey = %q", domainNode.WaitKey)
+	}
+	if domainNode.ReservedForAgentID == nil || *domainNode.ReservedForAgentID != newUUIDString() {
+		t.Errorf("ReservedForAgentID = %v, want %q", domainNode.ReservedForAgentID, newUUIDString())
 	}
 	if domainNode.Version != 4 {
 		t.Errorf("Version = %d, want 4", domainNode.Version)

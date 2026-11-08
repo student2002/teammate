@@ -34,8 +34,6 @@ func NewAgentService(svc *Service) *AgentService {
 	return &AgentService{svc: svc}
 }
 
-
-
 // Get retrieves the info of a single agent by ID.
 //
 // Parameters:
@@ -206,24 +204,3 @@ func (s *AgentService) ListExecutionMcpServers(ctx context.Context, agentID uuid
 func (s *AgentService) RemoveMcpServer(ctx context.Context, params types.RemoveAgentMcpServerParams) error {
 	return s.svc.Store.RemoveAgentMcpServer(ctx, params)
 }
-
-// GetInProgressNodesByAgent queries the nodes claimed but not yet completed by the specified agent in the specified workspace.
-// Used to resume unfinished executions after an agent restart.
-//
-// Parameters:
-//   - ctx: request context
-//   - agentID: agent ID
-//   - workspaceID: workspace ID
-//
-// Returns:
-//   - []types.GetInProgressNodesByAgentRow: list of in_progress nodes (including project_id)
-//   - error: possible errors (database query failure)
-func (s *AgentService) GetInProgressNodesByAgent(ctx context.Context, agentID uuid.UUID, workspaceID uuid.UUID) ([]types.GetInProgressNodesByAgentRow, error) {
-	rows, err := s.svc.Store.GetInProgressNodesByAgent(ctx, agentID, workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("get in-progress nodes by agent: %w", err)
-	}
-	return rows, nil
-}
-
-

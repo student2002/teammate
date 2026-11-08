@@ -15,13 +15,7 @@ const getTemplateStats = `-- name: GetTemplateStats :one
 
 SELECT
     COUNT(*) AS usage_count,
-    COALESCE(AVG(EXTRACT(EPOCH FROM (t.updated_at - t.created_at))), 0) AS avg_completion_seconds,
-    COALESCE(
-        SUM(CASE WHEN EXISTS (
-            SELECT 1 FROM task_nodes tn WHERE tn.task_id = t.id AND tn.reject_count > 0
-        ) THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0),
-        0
-    ) AS reject_rate
+    COALESCE(AVG(EXTRACT(EPOCH FROM (t.updated_at - t.created_at))), 0) AS avg_completion_seconds
 FROM tasks t
 WHERE t.workflow_template_id = $1
 `
@@ -29,16 +23,14 @@ WHERE t.workflow_template_id = $1
 type GetTemplateStatsRow struct {
 	UsageCount           int64       `db:"usage_count" json:"usage_count"`
 	AvgCompletionSeconds interface{} `db:"avg_completion_seconds" json:"avg_completion_seconds"`
-	RejectRate           interface{} `db:"reject_rate" json:"reject_rate"`
 }
 
 // Template statistics queries
 // Aggregated per template id (tasks carry the id at creation), so renaming a
-// template never drifts its statistics. reject_rate is the share of tasks
-// that had at least one node rejection.
+// template never drifts its statistics.
 func (q *Queries) GetTemplateStats(ctx context.Context, workflowTemplateID uuid.NullUUID) (GetTemplateStatsRow, error) {
 	row := q.db.QueryRowContext(ctx, getTemplateStats, workflowTemplateID)
 	var i GetTemplateStatsRow
-	err := row.Scan(&i.UsageCount, &i.AvgCompletionSeconds, &i.RejectRate)
+	err := row.Scan(&i.UsageCount, &i.AvgCompletionSeconds)
 	return i, err
 }

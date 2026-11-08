@@ -171,6 +171,11 @@ func TestCustomThemePermissions(t *testing.T) {
 	token, wsID := registerTestUser(t, client, srv.URL)
 	base := fmt.Sprintf("%s/api/workspaces/%s/themes/custom", srv.URL, wsID)
 
+	// custom_themes 是部署级共享表且测试库跨运行持久，固定 ID 会留下残留，先清掉再上传
+	if _, err := db.Exec("DELETE FROM custom_themes WHERE id = 'perm-theme'"); err != nil {
+		t.Fatal(err)
+	}
+
 	body := map[string]interface{}{
 		"id": "perm-theme", "name_zh": "名", "name_en": "Name",
 		"icon": "sparkles", "vars": validThemeVars(),

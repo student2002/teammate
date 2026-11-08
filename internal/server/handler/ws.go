@@ -28,6 +28,7 @@ import (
 
 	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/server/response"
+	"github.com/teammate/server/internal/types"
 	"github.com/teammate/server/internal/server/ws"
 	"github.com/teammate/server/internal/service"
 )
@@ -131,8 +132,8 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			isAssignee := false
 			for _, node := range nodes {
-				if node.AssigneeID != nil {
-					if assigneeID, err := uuid.Parse(*node.AssigneeID); err == nil && assigneeID == claims.UserID {
+				if node.ReservedForAgentID != nil {
+					if assigneeID, err := uuid.Parse(*node.ReservedForAgentID); err == nil && assigneeID == claims.UserID {
 						isAssignee = true
 						break
 					}
@@ -362,7 +363,7 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	if h.Svc != nil {
-		node, err := service.NewNodeService(h.Svc).GetTaskNode(r.Context(), nodeID)
+		node, err := service.NewTaskService(h.Svc).GetTaskNode(r.Context(), nodeID)
 		if err != nil {
 			response.NotFound(w, "node not found")
 			return
@@ -374,15 +375,15 @@ func (h *PostLogMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// verify the node is in the in_progress status
-		if node.Status != TaskNodeStatusInProgress {
-			response.Conflict(w, "node is not in progress")
+		// verify the node is in the running status
+		if node.Status != types.TaskNodeStatusRunning {
+			response.Conflict(w, "node is not running")
 			return
 		}
 
 		if claims.UserType == "agent" {
 			// the Agent must be the assignee of this node
-			if node.AssigneeID == nil || *node.AssigneeID != claims.UserID.String() {
+			if node.ReservedForAgentID == nil || *node.ReservedForAgentID != claims.UserID.String() {
 				response.Forbidden(w, "agent is not the assignee of this node")
 				return
 			}

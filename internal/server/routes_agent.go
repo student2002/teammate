@@ -15,6 +15,9 @@ import (
 func (reg *routeRegistrar) registerMiscRoutes(r chi.Router) {
 	svc := reg.svc
 
+	// Workflow node catalog (V2 registry contract, plan §12.1)
+	r.Get("/workflow-node-types", handler.WorkflowNodeTypesHandler(svc))
+
 	// Shared memories
 	memoryHandler := handler.NewMemoryHandler(svc, reg.wsChk)
 	r.Route("/memories", func(r chi.Router) {

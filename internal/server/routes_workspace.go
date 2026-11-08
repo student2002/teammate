@@ -109,6 +109,12 @@ func (reg *routeRegistrar) registerWorkspaceRoutes(r chi.Router) {
 			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member"}, "", reg.agentPerm))
 			r.Mount("/notifications", handler.NewNotificationHandler(svc).Routes())
 		})
+
+		// Workspace integrations — read-only listing (workflow editor pickers)
+		r.Group(func(r chi.Router) {
+			r.Use(readPerm)
+			r.Get("/integrations", wsHandler.ListIntegrations)
+		})
 	})
 }
 

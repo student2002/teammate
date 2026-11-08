@@ -1,34 +1,35 @@
-// workflow.go provides HTTP API endpoints for creating, listing, updating, and deleting workflow templates.
+// workflow.go provides HTTP API endpoints for workflow template management.
 //
 // This file provides the following HTTP API endpoints:
-//   - POST /workspaces/{workspaceId}/workflows: create a new workflow template and its ordered node definitions
+//   - POST /workspaces/{workspaceId}/workflows: create a workflow template with its full graph
 //   - GET /workspaces/{workspaceId}/workflows: list all workflow templates under the workspace
 //   - GET /workspaces/{workspaceId}/workflows/{id}: query the details of the specified workflow template
+//   - PUT /workspaces/{workspaceId}/workflows/{id}: replace the template's whole graph (version bumps)
 //   - GET /workspaces/{workspaceId}/workflows/{id}/stats: query usage statistics of the specified workflow template
-//   - PUT /workspaces/{workspaceId}/workflows/{id}: update the workflow template and its node definitions
 //   - DELETE /workspaces/{workspaceId}/workflows/{id}: delete the specified workflow template
 //
-// Workflow templates define the ordered node flow of task execution (e.g. implement -> self-test -> review -> deploy).
-// Node types include standard (AI execution), review (review), and manual (human execution).
+// A workflow template is an event-driven graph of typed nodes (type_key) and
+// port-based edges; create/update validate the whole graph against the node
+// registry before any write.
 // All write operations require write permission, and template ownership is verified through workspace isolation.
 
 package handler
 
 import (
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/render"
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 
 	svcmw "github.com/teammate/server/internal/server/middleware"
 	"github.com/teammate/server/internal/server/response"
 	"github.com/teammate/server/internal/service"
 )
 
-// WorkflowHandler handles HTTP requests for workflow template management, including creating, querying, updating, and deleting templates.
+// WorkflowHandler handles HTTP requests for workflow template management, including querying and deleting templates.
 type WorkflowHandler struct {
 	Svc *service.Service
 }
@@ -47,7 +48,7 @@ func NewWorkflowHandler(svc *service.Service) *WorkflowHandler {
 // Routes returns the complete route table for workflow templates (including read and write operations).
 //
 // Returns:
-//   - chi.Router: routes containing workflow template CRUD endpoints
+//   - chi.Router: routes containing workflow template endpoints
 func (h *WorkflowHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
@@ -55,8 +56,8 @@ func (h *WorkflowHandler) Routes() chi.Router {
 	r.Get("/", h.ListWorkflowTemplates)
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", h.GetWorkflowTemplate)
-		r.Get("/stats", h.GetWorkflowTemplateStats)
 		r.Put("/", h.UpdateWorkflowTemplate)
+		r.Get("/stats", h.GetWorkflowTemplateStats)
 		r.Delete("/", h.DeleteWorkflowTemplate)
 	})
 
@@ -78,7 +79,7 @@ func (h *WorkflowHandler) ReadRoutes() chi.Router {
 // WriteRoutes returns the write route table for workflow templates.
 //
 // Returns:
-//   - chi.Router: routes containing only create, update, and delete endpoints
+//   - chi.Router: routes containing the create/update/delete endpoints
 func (h *WorkflowHandler) WriteRoutes() chi.Router {
 	r := chi.NewRouter()
 
@@ -91,14 +92,15 @@ func (h *WorkflowHandler) WriteRoutes() chi.Router {
 	return r
 }
 
-// CreateWorkflowTemplate handles the POST /workspaces/{workspaceId}/templates endpoint, creating a new workflow template and its ordered node definitions.
+// CreateWorkflowTemplate handles the POST /workspaces/{workspaceId}/workflows
+// endpoint, validating and creating a workflow template with its full graph.
 //
 // Parameters:
 //   - w: HTTP response writer
-//   - r: HTTP request, path parameter workspaceId is the workspace UUID, request body contains the template and node definitions
+//   - r: HTTP request, path parameter workspaceId is the workspace UUID; body is the full graph
 //
 // Returns:
-//   - no return value, writes a JSON response via w (201 Created), containing the created template and node data or an error message
+//   - no return value, writes 201 with {template, nodes, edges} or an error message
 func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
 	if !ok {
@@ -116,106 +118,80 @@ func (h *WorkflowHandler) CreateWorkflowTemplate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var req createWorkflowTemplateRequest
-	if err := render.Decode(r, &req); err != nil {
-		response.BadRequest(w, err.Error())
+	var req templateGraphRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body")
 		return
 	}
 
-	// build node parameters
-	// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
-	normalizeTemplateSortOrder(req.Nodes)
-	if err := validateTemplateNodeLimits(req.Nodes); err != nil {
-		response.BadRequest(w, err.Error())
-		return
-	}
-	nodeParams := make([]CreateTemplateNodeParams, 0, len(req.Nodes))
-	for _, n := range req.Nodes {
-		var assigneeID uuid.NullUUID
-		if n.AssigneeID != nil {
-			// verify the assignee belongs to the current workspace
-			if n.AssigneeType == AssigneeTypeSpecificAgent {
-				agent := checkAgentWorkspace(h.Svc, w, r, *n.AssigneeID)
-				if agent == nil {
-					return
-				}
-			} else if n.AssigneeType == AssigneeTypeHuman {
-				// verify the member belongs to the current workspace
-				wsSvc := service.NewWorkspaceService(h.Svc)
-				member, err := wsSvc.GetMember(r.Context(), *n.AssigneeID)
-				if err != nil {
-					response.BadRequest(w, "assignee not found in this workspace")
-					return
-				}
-				memberUUID, _ := uuid.Parse(member.ID)
-				_, err = wsSvc.GetMembership(r.Context(), workspaceID, memberUUID)
-				if err != nil {
-					response.BadRequest(w, "assignee not found in this workspace")
-					return
-				}
-			}
-			assigneeID = uuid.NullUUID{UUID: *n.AssigneeID, Valid: true}
-		}
-
-		var readonlyDirs pqtype.NullRawMessage
-		if n.ReadonlyDirs != nil {
-			readonlyDirs = pqtype.NullRawMessage{RawMessage: n.ReadonlyDirs, Valid: true}
-		}
-		var fullControlDirs pqtype.NullRawMessage
-		if n.FullControlDirs != nil {
-			fullControlDirs = pqtype.NullRawMessage{RawMessage: n.FullControlDirs, Valid: true}
-		}
-		var artifact pqtype.NullRawMessage
-		if n.Artifact != nil {
-			artifact = pqtype.NullRawMessage{RawMessage: n.Artifact, Valid: true}
-		}
-
-		maxRejectCycles := n.MaxRejectCycles
-		if maxRejectCycles <= 0 {
-			maxRejectCycles = 5
-		}
-
-		nodeParams = append(nodeParams, buildCreateTemplateNodeParams(
-			n.ID,
-			n.Name,
-			n.Description,
-			n.SortOrder,
-			n.NodeType,
-			n.AssigneeType,
-			assigneeID,
-			n.TimeoutMinutes,
-			readonlyDirs,
-			fullControlDirs,
-			artifact,
-			maxRejectCycles,
-			n.DependsOn,
-		))
-	}
-
-	wfSvc := service.NewWorkflowService(h.Svc)
-	result, err := wfSvc.Create(r.Context(), buildCreateWorkflowTemplateParams(
-		workspaceID,
-		req.Name,
-		req.Description,
-		req.IsBuiltin,
-		req.TriggerType,
-		req.TriggerConfig,
-		req.TriggerEnabled,
-		req.NextRunAt,
-	), nodeParams)
+	detail, err := service.NewWorkflowService(h.Svc).Create(r.Context(), workspaceID, toTemplateGraphInput(req))
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidGraph) {
+			response.BadRequest(w, err.Error())
+			return
+		}
 		response.InternalServerError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	response.JSON(w, r, map[string]interface{}{
-		"template": toTemplateResponse(result.Template),
-		"nodes":    result.Nodes,
-	})
+	response.JSON(w, r, toTemplateGraphResponse(*detail))
 }
 
-// ListWorkflowTemplates handles the GET /workspaces/{workspaceId}/templates endpoint, listing all workflow templates and their nodes under the workspace.
+// UpdateWorkflowTemplate handles the PUT /workspaces/{workspaceId}/workflows/{id}
+// endpoint, atomically replacing the template's whole graph; the template
+// version bumps on every save.
+//
+// Parameters:
+//   - w: HTTP response writer
+//   - r: HTTP request, path parameters workspaceId/id; body is the full graph
+//
+// Returns:
+//   - no return value, writes 200 with {template, nodes, edges} or an error message
+func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
+	claims, ok := svcmw.GetAuthFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if err := requireWriteAccess(claims); err != nil {
+		response.Forbidden(w, err.Error())
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid template id")
+		return
+	}
+	if checkWorkflowTemplateWorkspace(h.Svc, w, r, id) == nil {
+		return
+	}
+
+	var req templateGraphRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body")
+		return
+	}
+
+	detail, err := service.NewWorkflowService(h.Svc).Update(r.Context(), id, toTemplateGraphInput(req))
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidGraph) {
+			response.BadRequest(w, err.Error())
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(w, "workflow template not found")
+			return
+		}
+		response.InternalServerError(w, err)
+		return
+	}
+
+	response.JSON(w, r, toTemplateGraphResponse(*detail))
+}
+
+// ListWorkflowTemplates handles the GET /workspaces/{workspaceId}/workflows endpoint, listing all workflow templates with their nodes and edges under the workspace.
 //
 // Parameters:
 //   - w: HTTP response writer
@@ -238,25 +214,26 @@ func (h *WorkflowHandler) ListWorkflowTemplates(w http.ResponseWriter, r *http.R
 	}
 
 	// convert to the response format
-	resp := make([]templateWithNodes, 0, len(results))
-	for _, r := range results {
-		resp = append(resp, templateWithNodes{
-			templateResponse: toTemplateResponse(r.Template),
-			Nodes:            r.Nodes,
+	resp := make([]templateGraphResponse, 0, len(results))
+	for _, result := range results {
+		resp = append(resp, templateGraphResponse{
+			Template: toTemplateResponse(result.Template),
+			Nodes:    result.Nodes,
+			Edges:    result.Edges,
 		})
 	}
 
 	response.JSON(w, r, resp)
 }
 
-// GetWorkflowTemplate handles the GET /workspaces/{workspaceId}/workflows/{id} endpoint, querying the specified workflow template and its nodes.
+// GetWorkflowTemplate handles the GET /workspaces/{workspaceId}/workflows/{id} endpoint, querying the specified workflow template with its nodes and edges.
 //
 // Parameters:
 //   - w: HTTP response writer
 //   - r: HTTP request, path parameter id is the template UUID
 //
 // Returns:
-//   - no return value, writes a JSON response via w, containing the template and its nodes or an error message
+//   - no return value, writes a JSON response via w, containing the template, nodes and edges or an error message
 func (h *WorkflowHandler) GetWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -277,14 +254,26 @@ func (h *WorkflowHandler) GetWorkflowTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	response.JSON(w, r, templateWithNodes{
-		templateResponse: toTemplateResponse(result.Template),
-		Nodes:            result.Nodes,
+	response.JSON(w, r, templateGraphResponse{
+		Template: toTemplateResponse(result.Template),
+		Nodes:    result.Nodes,
+		Edges:    result.Edges,
 	})
 }
 
+// toTemplateGraphInput maps the API request to the service input payload.
+func toTemplateGraphInput(req templateGraphRequest) service.TemplateGraphInput {
+	return service.TemplateGraphInput{
+		Name:        req.Name,
+		Description: req.Description,
+		Enabled:     req.Enabled,
+		Nodes:       req.Nodes,
+		Edges:       req.Edges,
+	}
+}
+
 // GetWorkflowTemplateStats handles the GET /workspaces/{workspaceId}/workflows/{id}/stats endpoint,
-// returning usage count, average completion time, and reject rate for the template.
+// returning usage count and average completion time for the template.
 //
 // Parameters:
 //   - w: HTTP response writer
@@ -304,7 +293,7 @@ func (h *WorkflowHandler) GetWorkflowTemplateStats(w http.ResponseWriter, r *htt
 
 	stats, err := service.NewTemplateStatsService(h.Svc).GetStats(r.Context(), id)
 	if err != nil {
-		if err.Error() == "template not found" {
+		if errors.Is(err, service.ErrTemplateNotFound) {
 			response.NotFound(w, "workflow template not found")
 			return
 		}
@@ -315,149 +304,7 @@ func (h *WorkflowHandler) GetWorkflowTemplateStats(w http.ResponseWriter, r *htt
 	response.JSON(w, r, stats)
 }
 
-// UpdateWorkflowTemplate handles the PUT /workspaces/{workspaceId}/workflows/{id} endpoint, updating the workflow template and its node definitions.
-//
-// Parameters:
-//   - w: HTTP response writer
-//   - r: HTTP request, path parameter id is the template UUID, request body contains the updated template and node definitions
-//
-// Returns:
-//   - no return value, writes a JSON response via w, containing the updated template and node data or an error message
-func (h *WorkflowHandler) UpdateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
-	claims, ok := svcmw.GetAuthFromContext(r.Context())
-	if !ok {
-		response.Unauthorized(w, "authentication required")
-		return
-	}
-	if err := requireWriteAccess(claims); err != nil {
-		response.Forbidden(w, err.Error())
-		return
-	}
-
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		response.BadRequest(w, "invalid template id")
-		return
-	}
-
-	// verify the workflow template belongs to the authenticated user's workspace
-	current := checkWorkflowTemplateWorkspace(h.Svc, w, r, id)
-	if current == nil {
-		return
-	}
-
-	var req updateWorkflowTemplateRequest
-	if err := render.Decode(r, &req); err != nil {
-		response.BadRequest(w, err.Error())
-		return
-	}
-
-	if req.Name != nil && *req.Name == "" {
-		response.BadRequest(w, "name cannot be empty")
-		return
-	}
-
-	// if nodes are provided, build the node parameters
-	var nodeParams []CreateTemplateNodeParams
-	if req.Nodes != nil {
-		if err := validateTemplateNodeDeps(req.Nodes); err != nil {
-			response.BadRequest(w, err.Error())
-			return
-		}
-		if err := validateTemplateNodeLimits(req.Nodes); err != nil {
-			response.BadRequest(w, err.Error())
-			return
-		}
-		// fallback-fix missing/duplicate sort_order to avoid hitting UNIQUE(template_id, sort_order) (deviation #8)
-		normalizeTemplateSortOrder(req.Nodes)
-		nodeParams = make([]CreateTemplateNodeParams, 0, len(req.Nodes))
-		for _, n := range req.Nodes {
-			var assigneeID uuid.NullUUID
-			if n.AssigneeID != nil {
-				// verify the assignee belongs to the current workspace
-				claims, _ := svcmw.GetAuthFromContext(r.Context())
-				if claims.WorkspaceID != uuid.Nil {
-					if n.AssigneeType == AssigneeTypeSpecificAgent {
-						agent := checkAgentWorkspace(h.Svc, w, r, *n.AssigneeID)
-						if agent == nil {
-							return
-						}
-					} else if n.AssigneeType == AssigneeTypeHuman {
-						wsSvc := service.NewWorkspaceService(h.Svc)
-						member, err := wsSvc.GetMember(r.Context(), *n.AssigneeID)
-						if err != nil {
-							response.BadRequest(w, "assignee not found in this workspace")
-							return
-						}
-						memberUUID, _ := uuid.Parse(member.ID)
-					_, err = wsSvc.GetMembership(r.Context(), claims.WorkspaceID, memberUUID)
-						if err != nil {
-							response.BadRequest(w, "assignee not found in this workspace")
-							return
-						}
-					}
-				}
-				assigneeID = uuid.NullUUID{UUID: *n.AssigneeID, Valid: true}
-			}
-
-			var readonlyDirs pqtype.NullRawMessage
-			if n.ReadonlyDirs != nil {
-				readonlyDirs = pqtype.NullRawMessage{RawMessage: n.ReadonlyDirs, Valid: true}
-			}
-			var fullControlDirs pqtype.NullRawMessage
-			if n.FullControlDirs != nil {
-				fullControlDirs = pqtype.NullRawMessage{RawMessage: n.FullControlDirs, Valid: true}
-			}
-			var artifact pqtype.NullRawMessage
-			if n.Artifact != nil {
-				artifact = pqtype.NullRawMessage{RawMessage: n.Artifact, Valid: true}
-			}
-
-			maxRejectCycles := n.MaxRejectCycles
-			if maxRejectCycles <= 0 {
-				maxRejectCycles = 5
-			}
-
-			nodeParams = append(nodeParams, buildCreateTemplateNodeParams(
-				n.ID,
-				n.Name,
-				n.Description,
-				n.SortOrder,
-				n.NodeType,
-				n.AssigneeType,
-				assigneeID,
-				n.TimeoutMinutes,
-				readonlyDirs,
-				fullControlDirs,
-				artifact,
-				maxRejectCycles,
-				n.DependsOn,
-			))
-		}
-	}
-
-	wfSvc := service.NewWorkflowService(h.Svc)
-	result, err := wfSvc.UpdateWithNodes(r.Context(), buildUpdateWorkflowTemplateParams(
-		id,
-		*current,
-		req,
-	), nodeParams)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			response.NotFound(w, "workflow template not found")
-			return
-		}
-		response.InternalServerError(w, err)
-		return
-	}
-
-	response.JSON(w, r, map[string]interface{}{
-		"template": toTemplateResponse(result.Template),
-		"nodes":    result.Nodes,
-	})
-}
-
-// DeleteWorkflowTemplate handles the DELETE /workspaces/{workspaceId}/templates/{id} endpoint, deleting the specified workflow template.
+// DeleteWorkflowTemplate handles the DELETE /workspaces/{workspaceId}/workflows/{id} endpoint, deleting the specified workflow template.
 //
 // Parameters:
 //   - w: HTTP response writer

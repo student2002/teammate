@@ -131,51 +131,6 @@ func TestDeleteAgent(t *testing.T) {
 	}
 }
 
-func TestDeleteAgentWithAssignedNodes(t *testing.T) {
-	router, db, q := setupTestRouter(t)
-	defer db.Close()
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-	client := srv.Client()
-	token, wsID := registerTestUser(t, client, srv.URL)
-
-	// Setup: project -> workflow -> task -> claim node -> delete agent
-	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate3Nodes(t, client, srv.URL, wsID, token)
-	projID := createProject(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
-	addAgentToProject(t, q, projID, agentID)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
-
-	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
-	nodeID := nodes[0]["id"].(string)
-
-	// Claim the first node with agent
-	claimedNode := claimNode(t, client, srv.URL, taskID, nodeID, agentID, agentAPIToken)
-	if claimedNode["status"] != "in_progress" {
-		t.Fatalf("expected in_progress after claim, got %v", claimedNode["status"])
-	}
-
-	// Now delete the agent — should succeed despite foreign key references
-	_, status, respBody := doRequestWithToken(t, client, http.MethodDelete,
-		srv.URL+"/api/workspaces/"+wsID+"/agents/"+agentID, token, nil)
-
-	if status != http.StatusNoContent {
-		t.Fatalf("expected 204 when deleting agent with assigned nodes, got %d, body: %s", status, respBody)
-	}
-
-	// Verify task node assignee_id was cleared
-	updatedNodes := listTaskNodes(t, client, srv.URL, taskID, token)
-	for _, n := range updatedNodes {
-		if n["id"] == nodeID {
-			if n["assignee_id"] != nil {
-				t.Fatalf("expected assignee_id to be nil after agent deletion, got %v", n["assignee_id"])
-			}
-		}
-	}
-}
-
 func TestDeleteNonexistentAgent(t *testing.T) {
 	ts, client := setupAgentTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)

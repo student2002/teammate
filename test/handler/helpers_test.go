@@ -69,7 +69,7 @@ func getTestDSN() string {
 	return testdb.GetTestDSN()
 }
 
-func configureWorkspaceAuthForTest(svc *service.Service) (svcmw.WorkspaceAccessCheckerFunc, svcmw.ProjectAccessCheckerFunc, svcmw.TaskWorkspaceCheckerFunc, svcmw.NodeWorkspaceCheckerFunc) {
+func configureWorkspaceAuthForTest(svc *service.Service) (svcmw.WorkspaceAccessCheckerFunc, svcmw.ProjectAccessCheckerFunc, svcmw.TaskWorkspaceCheckerFunc) {
 	workspaceAccessChecker := func(ctx context.Context, userID uuid.UUID, userType string, workspaceID uuid.UUID) (string, error) {
 		switch userType {
 		case "member":
@@ -126,24 +126,7 @@ func configureWorkspaceAuthForTest(svc *service.Service) (svcmw.WorkspaceAccessC
 		return task, uuid.MustParse(project.WorkspaceID), nil
 	}
 
-	nodeWorkspaceChecker := func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error) {
-		node, err := svc.Store.GetTaskNode(ctx, nodeID)
-		if err != nil {
-			return nil, uuid.Nil, err
-		}
-		taskSvc := service.NewTaskService(svc)
-		task, err := taskSvc.Get(ctx, node.TaskID)
-		if err != nil {
-			return nil, uuid.Nil, err
-		}
-		project, err := svc.Store.GetProject(ctx, uuid.MustParse(task.ProjectID))
-		if err != nil {
-			return nil, uuid.Nil, err
-		}
-		return node, uuid.MustParse(project.WorkspaceID), nil
-	}
-
-	return workspaceAccessChecker, projectAccessChecker, taskWorkspaceChecker, nodeWorkspaceChecker
+	return workspaceAccessChecker, projectAccessChecker, taskWorkspaceChecker
 }
 
 // setupTestRouter creates a test router with all handler routes and auth middleware. // Uses production router configuration (server.NewRouter) to ensure test routes match production.
@@ -487,92 +470,180 @@ func createProject(t *testing.T, client *http.Client, baseURL, wsID, token strin
 	return result["id"].(string)
 }
 
-// createWorkflowTemplate3Nodes creates a workflow template with 3 nodes (code → review → deploy).
-func createWorkflowTemplate3Nodes(t *testing.T, client *http.Client, baseURL, wsID, token string) string {
-	t.Helper()
-
-	body := map[string]interface{}{
-		"name":        "flow-" + uuid.New().String()[:8],
-		"description": "3-node workflow: code -> review -> deploy",
+// workflowContractGraph builds the V2 contract sample graph (the same shape as
+// test/workflow/testdata/template-save-request.json): a GitHub issue
+// auto-fix flow with 7 typed nodes and 11 port-based edges. Node/edge ids are
+// fixed so failures map 1:1 to the contract sample.
+func workflowContractGraph() map[string]interface{} {
+	nodeID := func(n int) string {
+		return fmt.Sprintf("a1000000-0000-4000-8000-%012d", n)
+	}
+	edgeID := func(n int) string {
+		return fmt.Sprintf("e1000000-0000-4000-8000-%012d", n)
+	}
+	edge := func(id, src int, srcPort string, dst int, dstPort string) map[string]interface{} {
+		return map[string]interface{}{
+			"id":             edgeID(id),
+			"source_node_id": nodeID(src),
+			"source_port":    srcPort,
+			"target_node_id": nodeID(dst),
+			"target_port":    dstPort,
+		}
+	}
+	return map[string]interface{}{
+		"name":        "GitHub Issue 自动修复",
+		"description": "Issue 带 bug 标签时自动分析修复，跑测试后创建 PR",
+		"enabled":     true,
 		"nodes": []map[string]interface{}{
 			{
-				"name":            "code",
-				"description":     "write code",
-				"sort_order":      1,
-				"node_type":       "standard",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 60,
+				"id":         nodeID(1),
+				"type_key":   "trigger.github",
+				"name":       "开始",
+				"sort_order": 0,
+				"config": map[string]interface{}{
+					"integration_id": "b1000000-0000-4000-8000-000000000001",
+					"event":          "issues",
+					"actions":        []string{"opened"},
+				},
+				"ui_config": map[string]interface{}{"x": 80, "y": 240},
 			},
 			{
-				"name":            "review",
-				"description":     "review code",
-				"sort_order":      2,
-				"node_type":       "review",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 30,
+				"id":         nodeID(2),
+				"type_key":   "flow.condition",
+				"name":       "Issue 是否带 bug 标签",
+				"sort_order": 1,
+				"config": map[string]interface{}{
+					"condition": map[string]interface{}{
+						"all": []map[string]interface{}{
+							{"path": "trigger.issue.labels", "op": "contains", "value": "bug"},
+						},
+					},
+				},
+				"ui_config": map[string]interface{}{"x": 360, "y": 240},
 			},
 			{
-				"name":            "deploy",
-				"description":     "deploy code",
-				"sort_order":      3,
-				"node_type":       "standard",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 60,
+				"id":         nodeID(3),
+				"type_key":   "agent.task",
+				"name":       "分析并修复",
+				"sort_order": 2,
+				"config": map[string]interface{}{
+					"instruction": "分析 Issue 并完成修复",
+					"assignee":    map[string]interface{}{"mode": "any_agent", "agent_id": nil},
+					"input_map": map[string]interface{}{
+						"title":      "{{ trigger.issue.title }}",
+						"body":       "{{ trigger.issue.body }}",
+						"repository": "{{ trigger.repository.full_name }}",
+					},
+					"timeout_minutes":   60,
+					"retry":             map[string]interface{}{"max_attempts": 2, "backoff_seconds": 30},
+					"readonly_dirs":     []string{},
+					"full_control_dirs": []string{"."},
+				},
+				"ui_config": map[string]interface{}{"x": 640, "y": 120},
+			},
+			{
+				"id":         nodeID(4),
+				"type_key":   "action.command",
+				"name":       "运行测试",
+				"sort_order": 3,
+				"config": map[string]interface{}{
+					"command":         map[string]interface{}{"program": "go", "args": []string{"test", "./..."}, "workdir": "."},
+					"timeout_minutes": 30,
+					"retry":           map[string]interface{}{"max_attempts": 1},
+				},
+				"ui_config": map[string]interface{}{"x": 920, "y": 120},
+			},
+			{
+				"id":         nodeID(5),
+				"type_key":   "flow.condition",
+				"name":       "测试是否通过",
+				"sort_order": 4,
+				"config": map[string]interface{}{
+					"condition": map[string]interface{}{
+						"all": []map[string]interface{}{
+							{
+								"path": "nodes.a1000000-0000-4000-8000-000000000004.output.exit_code",
+								"op":   "eq",
+								"value": "0",
+							},
+						},
+					},
+				},
+				"ui_config": map[string]interface{}{"x": 1200, "y": 120},
+			},
+			{
+				"id":         nodeID(6),
+				"type_key":   "action.github",
+				"name":       "创建 PR 并评论 Issue",
+				"sort_order": 5,
+				"config": map[string]interface{}{
+					"operation":     "create_pull_request",
+					"title":         "Fix Issue #{{ trigger.issue.number }}",
+					"head":          "teammate/task-{{ task.id }}",
+					"base":          "{{ trigger.repository.default_branch }}",
+					"body":          "由工作流自动创建",
+					"comment_issue": "{{ trigger.issue.number }}",
+				},
+				"ui_config": map[string]interface{}{"x": 1480, "y": 40},
+			},
+			{
+				"id":         nodeID(7),
+				"type_key":   "flow.end",
+				"name":       "完成",
+				"sort_order": 6,
+				"config":     map[string]interface{}{},
+				"ui_config":  map[string]interface{}{"x": 1760, "y": 240},
 			},
 		},
+		"edges": []map[string]interface{}{
+			edge(1, 1, "success", 2, "input"),
+			edge(2, 2, "true", 3, "input"),
+			edge(3, 2, "false", 7, "failed"),
+			edge(4, 3, "success", 4, "input"),
+			edge(5, 3, "failed", 7, "failed"),
+			edge(6, 4, "success", 5, "input"),
+			edge(7, 4, "failed", 7, "failed"),
+			edge(8, 5, "true", 6, "input"),
+			edge(9, 5, "false", 7, "failed"),
+			edge(10, 6, "success", 7, "completed"),
+			edge(11, 6, "failed", 7, "failed"),
+		},
 	}
-	url := fmt.Sprintf("%s/api/workspaces/%s/workflows", baseURL, wsID)
-	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
-	if status != http.StatusCreated {
-		t.Fatalf("createWorkflowTemplate3Nodes: expected 201, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode workflow template: %v", err)
-	}
-	tplMap := result["template"].(map[string]interface{})
-	return tplMap["id"].(string)
 }
 
-// createWorkflowTemplate2Nodes creates a workflow template with 2 nodes (code + review).
-func createWorkflowTemplate2Nodes(t *testing.T, client *http.Client, baseURL, wsID, token string) string {
+// createV2WorkflowTemplate creates a workflow template from the V2 contract
+// sample graph via the full-graph create endpoint. It returns the created
+// template id together with the persisted node ids in sort order.
+func createV2WorkflowTemplate(t *testing.T, client *http.Client, baseURL, wsID, token string) (string, []string) {
 	t.Helper()
 
-	body := map[string]interface{}{
-		"name":        "flow-" + uuid.New().String()[:8],
-		"description": "2-node workflow: code + review",
-		"nodes": []map[string]interface{}{
-			{
-				"name":            "code",
-				"description":     "write code",
-				"sort_order":      1,
-				"node_type":       "standard",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 60,
-			},
-			{
-				"name":            "review",
-				"description":     "review code",
-				"sort_order":      2,
-				"node_type":       "review",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 30,
-			},
-		},
-	}
+	body := workflowContractGraph()
+	body["name"] = "flow-" + uuid.New().String()[:8]
 	url := fmt.Sprintf("%s/api/workspaces/%s/workflows", baseURL, wsID)
 	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
 	if status != http.StatusCreated {
-		t.Fatalf("createWorkflowTemplate2Nodes: expected 201, got %d, body: %s", status, respBody)
+		t.Fatalf("createV2WorkflowTemplate: expected 201, got %d, body: %s", status, respBody)
 	}
 
-	var result map[string]interface{}
+	var result struct {
+		Template map[string]interface{}   `json:"template"`
+		Nodes    []map[string]interface{} `json:"nodes"`
+		Edges    []map[string]interface{} `json:"edges"`
+	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		t.Fatalf("decode workflow template: %v", err)
 	}
-	tplMap := result["template"].(map[string]interface{})
-	return tplMap["id"].(string)
+	tplID, _ := result.Template["id"].(string)
+	if tplID == "" {
+		t.Fatalf("createV2WorkflowTemplate: missing template id in response: %s", respBody)
+	}
+	nodeIDs := make([]string, 0, len(result.Nodes))
+	for _, n := range result.Nodes {
+		if id, ok := n["id"].(string); ok {
+			nodeIDs = append(nodeIDs, id)
+		}
+	}
+	return tplID, nodeIDs
 }
 
 // testDaemonCache holds one registered daemon per workspace so agent setup
@@ -682,18 +753,18 @@ func setProjectDefaultWorkflow(t *testing.T, env testEnv, wsID, projID string) {
 		fmt.Sprintf("%s/api/workspaces/%s/projects/%s", env.BaseURL, wsID, projID), env.Token, body)
 }
 
-func createTask(t *testing.T, client *http.Client, baseURL, projID, tplID, token string) (int32, []map[string]interface{}) {
+// createTask creates the task main record against a workflow template via the
+// API. V2 task creation only writes the main record; node instantiation is the
+// workflow engine's responsibility (S3).
+func createTask(t *testing.T, client *http.Client, baseURL, projID, tplID, token string) int32 {
 	t.Helper()
 
 	taskBaseURL := fmt.Sprintf("%s/api/projects/%s/tasks", baseURL, projID)
-	authorID := uuid.New().String()
 	body := map[string]interface{}{
 		"title":                "Test task",
 		"description":          "Integration test task",
 		"type":                 "task",
 		"priority":             "medium",
-		"author_type":          "agent",
-		"author_id":            authorID,
 		"workflow_template_id": tplID,
 	}
 	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, taskBaseURL, token, body)
@@ -706,93 +777,7 @@ func createTask(t *testing.T, client *http.Client, baseURL, projID, tplID, token
 		t.Fatalf("decode task: %v", err)
 	}
 	taskMap := result["task"].(map[string]interface{})
-	taskID := int32(taskMap["id"].(float64))
-
-	nodesRaw := result["nodes"].([]interface{})
-	nodes := make([]map[string]interface{}, 0, len(nodesRaw))
-	for _, n := range nodesRaw {
-		nodes = append(nodes, n.(map[string]interface{}))
-	}
-	return taskID, nodes
-}
-
-func claimNode(t *testing.T, client *http.Client, baseURL string, taskID int32, nodeID, agentID, agentAPIToken string) map[string]interface{} {
-	t.Helper()
-
-	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID)
-	body := map[string]interface{}{
-		"agent_id": agentID,
-	}
-	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, agentID, body)
-	if status != http.StatusOK {
-		t.Fatalf("claimNode: expected 200, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode claimed node: %v", err)
-	}
-	return result
-}
-
-func approveNode(t *testing.T, client *http.Client, baseURL string, taskID int32, nodeID, operatorID, agentAPIToken string) map[string]interface{} {
-	t.Helper()
-
-	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID)
-	body := map[string]interface{}{
-		"operator_id":   operatorID,
-		"operator_type": "agent",
-		"comment":       "approved",
-	}
-	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/approve", agentAPIToken, operatorID, body)
-	if status != http.StatusOK {
-		t.Fatalf("approveNode: expected 200, got %d, body: %s", status, respBody)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode approved node: %v", err)
-	}
-	return result
-}
-
-func rejectNode(t *testing.T, client *http.Client, baseURL string, taskID int32, nodeID, operatorID, agentAPIToken string, targetNodeID *string) (int, map[string]interface{}) {
-	t.Helper()
-
-	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID)
-	body := map[string]interface{}{
-		"operator_id":   operatorID,
-		"operator_type": "agent",
-		"comment":       "rejected",
-	}
-	if targetNodeID != nil {
-		body["target_node_id"] = *targetNodeID
-	}
-	_, status, respBody := doRequestWithAgentKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/reject", agentAPIToken, operatorID, body)
-
-	var result map[string]interface{}
-	if status == http.StatusOK {
-		if err := json.Unmarshal(respBody, &result); err != nil {
-			t.Fatalf("decode rejected node: %v", err)
-		}
-	}
-	return status, result
-}
-
-func listTaskNodes(t *testing.T, client *http.Client, baseURL string, taskID int32, token string) []map[string]interface{} {
-	t.Helper()
-
-	nodesURL := fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID)
-	_, status, respBody := doRequestWithToken(t, client, http.MethodGet, nodesURL, token, nil)
-	if status != http.StatusOK {
-		t.Fatalf("listTaskNodes: expected 200, got %d, body: %s", status, respBody)
-	}
-
-	var result []map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		t.Fatalf("decode task nodes: %v", err)
-	}
-	return result
+	return int32(taskMap["id"].(float64))
 }
 
 func deleteTask(t *testing.T, client *http.Client, baseURL, projID string, taskID int32, token string) {
@@ -885,30 +870,6 @@ func daemonHeartbeat(t *testing.T, client *http.Client, baseURL, daemonToken str
 	if status != http.StatusOK {
 		t.Fatalf("daemonHeartbeat: expected 200, got %d, body: %s", status, respBody)
 	}
-}
-
-// pendingNodesForTasks collects the pending nodes of the given tasks
-// (member view), replacing the old runtime sync discovery in tests.
-func pendingNodesForTasks(t *testing.T, client *http.Client, baseURL, memberToken string, taskIDs ...int32) []map[string]interface{} {
-	t.Helper()
-	var pending []map[string]interface{}
-	for _, taskID := range taskIDs {
-		_, status, respBody := doRequestWithToken(t, client, http.MethodGet,
-			fmt.Sprintf("%s/api/tasks/%d/nodes", baseURL, taskID), memberToken, nil)
-		if status != http.StatusOK {
-			t.Fatalf("pendingNodesForTasks: list nodes of task %d: %d, body: %s", taskID, status, respBody)
-		}
-		var nodes []map[string]interface{}
-		if err := json.Unmarshal(respBody, &nodes); err != nil {
-			t.Fatalf("pendingNodesForTasks: decode nodes: %v", err)
-		}
-		for _, n := range nodes {
-			if n["status"] == "pending" {
-				pending = append(pending, n)
-			}
-		}
-	}
-	return pending
 }
 
 func dbQueries(t *testing.T, db *sql.DB) *dbgen.Queries {

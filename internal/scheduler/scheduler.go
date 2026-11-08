@@ -2,13 +2,13 @@
 // The scheduler uses Redis distributed locks to ensure tasks are not executed redundantly across multiple instances.
 //
 // Scheduled tasks:
-//   - Heartbeat-timeout detection (15s): marks offline runtimes and updates agent status
-//   - Continuation-reservation cleanup (30s): clears expired node continuation reservations
-//   - Claim-timeout release (60s): releases in_progress nodes with no progress for 30 minutes
-//   - Node-timeout handling (5min): handles nodes that exceed the template timeout
-//   - Offline fallback (5min): moves nodes held by offline agents to manual intervention
-//   - Agent auto-recover (60s): recovers busy agents with no tasks back to online
-//   - Pending-node renotify (30s): re-notifies pending nodes that have gone unclaimed for a long time
+//   - Heartbeat-timeout detection (15s): marks offline daemons and updates agent status
+//   - Agent auto-recover (60s): recovers busy agents with no running nodes back to online
+//   - Ready-node renotify (30s): re-notifies ready nodes that have gone unclaimed for a long time
+//   - Workflow retry-due scan (10s): wakes workflow V2 nodes whose retry time has passed
+//   - Workflow wait-due scan (10s): wakes workflow V2 duration waits that expired
+//   - Workflow async-node scan (5s): executes ready action.http / action.create_task /
+//     workflow.call nodes and wakes sub-workflow parents of terminal child runs
 //   - Low-confidence memory GC (daily at 3:00): deletes low-confidence memories older than 30 days
 //   - Old-workspace cleanup (daily at 4:00): identifies completed tasks older than 7 days for later cleanup
 package scheduler
@@ -24,7 +24,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/teammate/server/internal/clock"
-	"github.com/teammate/server/internal/service"
 	"github.com/teammate/server/internal/store"
 	"github.com/teammate/server/internal/types"
 )
@@ -35,6 +34,44 @@ type EventPublisher interface {
 	BufferEvent(ctx context.Context, subscriberID string, event types.SSEEvent) error
 }
 
+// dueNodeScanLimit bounds one scan of due workflow nodes.
+const dueNodeScanLimit int32 = 100
+
+// WorkflowRunAdvancer wakes due workflow V2 nodes; implemented by the service
+// layer (WorkflowRunService.WakeDueNode), which performs the waiting→ready
+// transition, the graph advance and the node:ready notifications.
+type WorkflowRunAdvancer interface {
+	WakeDueNode(ctx context.Context, nodeID uuid.UUID) error
+}
+
+// EventProcessor consumes pending external workflow events; implemented by
+// the service layer (WorkflowEventService.ProcessPendingEvents).
+type EventProcessor interface {
+	ProcessPendingEvents(ctx context.Context) error
+}
+
+// NodeActionRunner executes ready server-side action nodes; implemented by
+// the service layer (WorkflowNodeActionService.ProcessGitHubActionNodes).
+// ScheduleRunner fires due trigger.schedule templates; implemented by the
+// service layer (WorkflowScheduleService.ProcessDueSchedules).
+type ScheduleRunner interface {
+	ProcessDueSchedules(ctx context.Context) error
+}
+
+type NodeActionRunner interface {
+	ProcessGitHubActionNodes(ctx context.Context) error
+	// ReclaimLeasedNodes fails server-executed nodes whose claim lease
+	// expired (the executor died before reaching a terminal state).
+	ReclaimLeasedNodes(ctx context.Context) error
+}
+
+// AsyncNodeRunner executes ready async action nodes (HTTP, task creation,
+// sub-workflow calls) and drives the sub-workflow parent wake-ups; implemented
+// by the service layer (WorkflowAsyncNodeService.ProcessWorkflowAsyncNodes).
+type AsyncNodeRunner interface {
+	ProcessWorkflowAsyncNodes(ctx context.Context) error
+}
+
 // Scheduler is the server-side scheduler, responsible for managing various periodic maintenance tasks.
 // It uses Redis distributed locks to ensure the same task is not executed concurrently across instances.
 type Scheduler struct {
@@ -42,13 +79,24 @@ type Scheduler struct {
 	Hub   EventPublisher
 	Redis *redis.Client
 	Clock clock.Clock
+	// WorkflowRuns advances due workflow V2 nodes; optional, jobs are no-ops
+	// when unset (nil in tests that do not exercise the run engine).
+	WorkflowRuns WorkflowRunAdvancer
+	// WorkflowEvents consumes pending external events (S5); optional no-op.
+	WorkflowEvents EventProcessor
+	// WorkflowNodeActions executes ready action.github nodes (S5); optional no-op.
+	WorkflowNodeActions NodeActionRunner
+	// WorkflowSchedules fires due trigger.schedule templates; optional no-op.
+	WorkflowSchedules ScheduleRunner
+	// WorkflowAsyncNodes executes ready action.http / action.create_task /
+	// workflow.call nodes and wakes sub-workflow parents (S6); optional no-op.
+	WorkflowAsyncNodes AsyncNodeRunner
 }
 
 // NewScheduler creates a new scheduler instance.
 //
 // Parameters:
-//   - q: the sqlc-generated database query instance
-//   - db: the database connection pool, used for operations that require a transaction
+//   - st: the store instance wrapping the sqlc-generated queries
 //   - hub: the SSE event publisher (ws.Hub satisfies this interface)
 //   - rdb: the Redis client, used for distributed locks
 //
@@ -64,13 +112,15 @@ func (s *Scheduler) Start(ctx context.Context) {
 	slog.Info("scheduler started")
 
 	go s.runPeriodic(ctx, 15*time.Second, "heartbeat_timeout", s.CheckHeartbeatTimeout)
-	go s.runPeriodic(ctx, 30*time.Second, "reservation_cleanup", s.ClearExpiredReservations)
-	go s.runPeriodic(ctx, 60*time.Second, "claim_timeout", s.ReleaseClaimTimeoutNodes)
-	go s.runPeriodic(ctx, 300*time.Second, "node_timeout", s.CheckNodeTimeout)
-	go s.runPeriodic(ctx, 300*time.Second, "offline_fallback", s.OfflineAgentFallback)
 	go s.runPeriodic(ctx, 60*time.Second, "agent_auto_recover", s.AgentAutoRecoverOnline)
-	go s.runPeriodic(ctx, 30*time.Second, "pending_node_renotify", s.RenotifyPendingNodes)
-	go s.runPeriodic(ctx, 30*time.Second, "workflow_triggers", s.ProcessWorkflowTriggers)
+	go s.runPeriodic(ctx, 30*time.Second, "ready_node_renotify", s.RenotifyReadyNodes)
+	go s.runPeriodic(ctx, 10*time.Second, "workflow_retry_due", s.ProcessRetryDueNodes)
+	go s.runPeriodic(ctx, 10*time.Second, "workflow_wait_due", s.ProcessWaitDueNodes)
+	go s.runPeriodic(ctx, 5*time.Second, "workflow_events", s.ProcessWorkflowEvents)
+	go s.runPeriodic(ctx, 30*time.Second, "workflow_schedule_triggers", s.ProcessWorkflowSchedules)
+	go s.runPeriodic(ctx, 5*time.Second, "workflow_node_actions", s.ProcessWorkflowNodeActions)
+	go s.runPeriodic(ctx, time.Minute, "workflow_node_lease", s.ProcessNodeLeaseReclaim)
+	go s.runPeriodic(ctx, 5*time.Second, "workflow_async_nodes", s.ProcessWorkflowAsyncNodes)
 	go s.runDaily(ctx, 3, 0, "memory_gc", s.lowConfidenceMemoryGC)
 	go s.runDaily(ctx, 4, 0, "workspace_cleanup", s.CleanupOldWorkspaces)
 
@@ -129,7 +179,9 @@ func (s *Scheduler) runDaily(ctx context.Context, hour, minute int, name string,
 }
 
 // WithLock executes a task under a Redis distributed lock, preventing concurrent execution of the same task across instances.
-// The lock TTL is slightly longer than the task interval (+5s) to ensure the lock does not expire before the task completes.
+// The lock TTL is the interval +5s: it only thins out duplicate scans across
+// instances; long tasks stay correct through the node/event-level CAS guards
+// even when a lock expires mid-run.
 //
 // Parameters:
 //   - ctx: context
@@ -186,97 +238,7 @@ func (s *Scheduler) CheckHeartbeatTimeout(ctx context.Context) error {
 	return nil
 }
 
-// ClearExpiredReservations clears expired reservations on continuation nodes.
-// It runs every 30 seconds, releasing continuation reservations unclaimed for over 30 seconds so other agents can claim them.
-func (s *Scheduler) ClearExpiredReservations(ctx context.Context) error {
-	clearedReservations, err := s.Store.ClearExpiredReservations(ctx, s.Clock.Now().Add(-30*time.Second))
-	if err != nil {
-		slog.Error("clear expired reservations", "err", err)
-		return nil
-	}
-	if len(clearedReservations) > 0 {
-		slog.Info("cleared expired reservations", "count", len(clearedReservations))
-	}
-	return nil
-}
-
-// ReleaseClaimTimeoutNodes releases nodes that have exceeded the claim timeout (in_progress with no progress for 30 minutes),
-// setting them to manual_intervention and sending an interrupt event to the original agent.
-// It runs every 60 seconds.
-func (s *Scheduler) ReleaseClaimTimeoutNodes(ctx context.Context) error {
-	releasedNodes, err := s.Store.ReleaseClaimTimeoutNodes(ctx, s.Clock.Now().Add(-30*time.Minute))
-	if err != nil {
-		slog.Error("release claim timeout nodes", "err", err)
-		return nil
-	}
-	if len(releasedNodes) > 0 {
-		slog.Info("claim timeout nodes detected", "count", len(releasedNodes))
-		for _, node := range releasedNodes {
-			// Send an interrupt event to the original agent (the SQL retains the assignee_id)
-			if node.AssigneeID != nil {
-				assigneeUUID, _ := uuid.Parse(*node.AssigneeID)
-				nodeUUID, _ := uuid.Parse(node.ID)
-				s.publishNodeTimeout(ctx, node.TaskID, nodeUUID, assigneeUUID)
-			}
-
-			// Create a state-transition record
-			_, _ = s.Store.CreateNodeTransition(ctx, types.CreateNodeTransitionParams{
-				TaskNodeID:   node.ID,
-				FromStatus:   types.TaskNodeStatusInProgress,
-				ToStatus:     types.TaskNodeStatusManualIntervention,
-				Action:       types.TransitionActionTimeout,
-				OperatorType: "system",
-			})
-		}
-	}
-	return nil
-}
-
-// CheckNodeTimeout handles nodes that exceed the template timeout_minutes, setting them to manual_intervention.
-// It runs every 5 minutes; each node uses a transaction to ensure the atomicity of the status change and the transition record.
-func (s *Scheduler) CheckNodeTimeout(ctx context.Context) error {
-	timedOutNodes, err := s.Store.GetTimedOutNodes(ctx, s.Clock.Now())
-	if err != nil {
-		return err
-	}
-
-	if len(timedOutNodes) > 0 {
-		slog.Info("found timed-out nodes", "count", len(timedOutNodes))
-	}
-
-	for _, node := range timedOutNodes {
-		if err := s.Store.MoveTimedOutNodeToManual(ctx, node); err != nil {
-			slog.Error("move timed-out node to manual_intervention", "node_id", node.ID, "err", err)
-			continue
-		}
-		if node.AssigneeID != nil {
-			assigneeUUID, _ := uuid.Parse(*node.AssigneeID)
-			nodeUUID, _ := uuid.Parse(node.ID)
-			s.publishNodeTimeout(ctx, node.TaskID, nodeUUID, assigneeUUID)
-		}
-	}
-
-	slog.Info("node_timeout complete", "timed_out_nodes", len(timedOutNodes))
-	return nil
-}
-
-// OfflineAgentFallback moves in_progress nodes held by agents that have been offline for over 1 hour
-// to manual_intervention, ensuring offline agents do not permanently block task flow.
-// It runs every 5 minutes.
-func (s *Scheduler) OfflineAgentFallback(ctx context.Context) error {
-	cutoff := s.Clock.Now().Add(-1 * time.Hour)
-	affectedNodes, err := s.Store.OfflineAgentFallback(ctx, cutoff)
-	if err != nil {
-		slog.Error("offline agent fallback", "err", err)
-		return nil
-	}
-	if len(affectedNodes) > 0 {
-		slog.Info("offline agent fallback moved nodes to manual_intervention", "count", len(affectedNodes))
-	}
-	return nil
-}
-
-// AgentAutoRecoverOnline recovers agents with no in_progress nodes and a "busy" status
+// AgentAutoRecoverOnline recovers agents with no running nodes and a "busy" status
 // back to "online", preventing agents from being stuck in "busy" after all nodes complete.
 // It runs every 60 seconds.
 func (s *Scheduler) AgentAutoRecoverOnline(ctx context.Context) error {
@@ -306,15 +268,15 @@ func (s *Scheduler) lowConfidenceMemoryGC(ctx context.Context) error {
 	return nil
 }
 
-// RenotifyPendingNodes scans pending nodes that have gone unclaimed for a long time and re-publishes node:pending events to their project-member agents.
+// RenotifyReadyNodes scans ready nodes that have gone unclaimed for a long time and re-publishes node:pending events to their project-member agents.
 // It runs every 30 seconds, compensating for SSE events lost while daemons were offline.
 // Delivery is at the project granularity: only project-member agents are notified,
 // published on each agent's daemon stream with an agent_id envelope.
-func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
+func (s *Scheduler) RenotifyReadyNodes(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-30 * time.Second)
 	projectIDs, err := s.Store.ListPendingRenotifyProjectIDs(ctx, cutoff)
 	if err != nil {
-		slog.Error("renotify pending nodes query", "err", err)
+		slog.Error("renotify ready nodes query", "err", err)
 		return nil
 	}
 
@@ -334,7 +296,7 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 				continue
 			}
 			if err := s.publishToAgentDaemon(ctx, agentUUID, types.EventNodePending, map[string]string{
-				"reason": "renotify_pending",
+				"reason": "renotify_ready",
 			}); err != nil {
 				continue
 			}
@@ -342,7 +304,96 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 	}
 
 	if len(projectIDs) > 0 {
-		slog.Info("renotify pending nodes", "projects", len(projectIDs))
+		slog.Info("renotify ready nodes", "projects", len(projectIDs))
+	}
+	return nil
+}
+
+// ProcessRetryDueNodes wakes the workflow V2 nodes whose scheduled retry time
+// has passed: each node returns to ready and its task advances. It runs every
+// 10 seconds.
+func (s *Scheduler) ProcessRetryDueNodes(ctx context.Context) error {
+	return s.wakeDueNodes(ctx, "retry", func(now time.Time) ([]types.TaskNode, error) {
+		return s.Store.ListRetryDueNodes(ctx, now, dueNodeScanLimit)
+	})
+}
+
+// ProcessWaitDueNodes wakes the workflow V2 duration-wait nodes whose wake
+// time has passed, emitting the resumed port downstream. It runs every 10
+// seconds.
+func (s *Scheduler) ProcessWaitDueNodes(ctx context.Context) error {
+	return s.wakeDueNodes(ctx, "wait", func(now time.Time) ([]types.TaskNode, error) {
+		return s.Store.ListWaitDueNodes(ctx, now, dueNodeScanLimit)
+	})
+}
+
+// ProcessWorkflowEvents consumes pending external workflow events (webhook
+// deliveries): trigger matching and waiter wake-up. It runs every 5 seconds.
+func (s *Scheduler) ProcessWorkflowEvents(ctx context.Context) error {
+	if s.WorkflowEvents == nil {
+		return nil
+	}
+	return s.WorkflowEvents.ProcessPendingEvents(ctx)
+}
+
+// ProcessWorkflowSchedules fires due trigger.schedule templates. It runs
+// every 30 seconds.
+func (s *Scheduler) ProcessWorkflowSchedules(ctx context.Context) error {
+	if s.WorkflowSchedules == nil {
+		return nil
+	}
+	return s.WorkflowSchedules.ProcessDueSchedules(ctx)
+}
+
+// ProcessWorkflowNodeActions executes ready action.github nodes. It runs
+// every 5 seconds.
+func (s *Scheduler) ProcessWorkflowNodeActions(ctx context.Context) error {
+	if s.WorkflowNodeActions == nil {
+		return nil
+	}
+	return s.WorkflowNodeActions.ProcessGitHubActionNodes(ctx)
+}
+
+// ProcessNodeLeaseReclaim fails nodes whose server executor died mid-flight.
+// It runs every minute.
+func (s *Scheduler) ProcessNodeLeaseReclaim(ctx context.Context) error {
+	if s.WorkflowNodeActions == nil {
+		return nil
+	}
+	return s.WorkflowNodeActions.ReclaimLeasedNodes(ctx)
+}
+
+// ProcessWorkflowAsyncNodes executes ready async action nodes (HTTP, task
+// creation, sub-workflow calls) and wakes parents of terminal child runs.
+// It runs every 5 seconds.
+func (s *Scheduler) ProcessWorkflowAsyncNodes(ctx context.Context) error {
+	if s.WorkflowAsyncNodes == nil {
+		return nil
+	}
+	return s.WorkflowAsyncNodes.ProcessWorkflowAsyncNodes(ctx)
+}
+
+// wakeDueNodes scans due nodes and wakes each one through the run service;
+// WakeDueNode is idempotent, so nodes already woken by another instance no-op.
+func (s *Scheduler) wakeDueNodes(ctx context.Context, kind string, scan func(time.Time) ([]types.TaskNode, error)) error {
+	if s.WorkflowRuns == nil {
+		return nil
+	}
+	due, err := scan(s.Clock.Now())
+	if err != nil {
+		return fmt.Errorf("scan %s-due nodes: %w", kind, err)
+	}
+	for _, node := range due {
+		nodeID, err := uuid.Parse(node.ID)
+		if err != nil {
+			continue
+		}
+		if err := s.WorkflowRuns.WakeDueNode(ctx, nodeID); err != nil {
+			slog.Error("wake due workflow node", "kind", kind, "node_id", node.ID, "err", err)
+		}
+	}
+	if len(due) > 0 {
+		slog.Info("woke due workflow nodes", "kind", kind, "count", len(due))
 	}
 	return nil
 }
@@ -350,15 +401,6 @@ func (s *Scheduler) RenotifyPendingNodes(ctx context.Context) error {
 // CleanupOldWorkspaces identifies completed/cancelled tasks older than 7 days
 // and records them as cleanup candidates. The actual file cleanup is performed by the CLI command or by the agent upon receiving a cleanup event.
 // It runs daily at 4:00 AM, querying in batches (500 per batch) to keep memory usage low.
-func (s *Scheduler) ProcessWorkflowTriggers(ctx context.Context) error {
-	svc := &service.Service{
-		Store: s.Store,
-		Hub:   s.Hub,
-		Redis: s.Redis,
-	}
-	return service.NewWorkflowTriggerService(svc).ProcessDueSchedules(ctx, s.Clock.Now())
-}
-
 func (s *Scheduler) CleanupOldWorkspaces(ctx context.Context) error {
 	cutoff := s.Clock.Now().Add(-7 * 24 * time.Hour)
 	const batchSize int32 = 500
@@ -458,22 +500,4 @@ func (s *Scheduler) publishToAgentDaemon(ctx context.Context, agentID uuid.UUID,
 		slog.Error("publish event to daemon", "daemon_id", daemonID, "err", err)
 	}
 	return nil
-}
-
-// publishNodeTimeout sends a node-timeout SSE event to the specified agent's daemon stream.
-//
-// Parameters:
-//   - ctx: context
-//   - taskID: the ID of the task that owns the timed-out node
-//   - nodeID: the ID of the timed-out node
-//   - agentID: the ID of the node's agent
-func (s *Scheduler) publishNodeTimeout(ctx context.Context, taskID int32, nodeID, agentID uuid.UUID) {
-	if err := s.publishToAgentDaemon(ctx, agentID, types.EventNodeTimeout, map[string]interface{}{
-		"task_id": taskID,
-		"node_id": nodeID.String(),
-		"action":  "timeout",
-		"status":  "manual_intervention",
-	}); err != nil {
-		slog.Error("publish node timeout", "agent_id", agentID, "err", err)
-	}
 }

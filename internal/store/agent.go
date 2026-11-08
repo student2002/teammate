@@ -124,16 +124,11 @@ func (s *Store) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("cleanup auth_tokens: %w", err)
 	}
 
-	// After 002_remove_fks the following columns no longer have foreign keys and must be explicitly set to NULL (FK strategy: application layer guarantees integrity):
-	//   workflow_template_nodes.assignee_id, task_nodes.assignee_id/reserved_for_agent_id/completed_by,
-	//   execution_sessions.runtime_id/agent_id
+	// The following columns no longer have foreign keys and must be explicitly cleared (FK strategy: application layer guarantees integrity):
+	//   task_nodes.reserved_for_agent_id, execution_sessions.agent_id
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE workflow_template_nodes SET assignee_id = NULL WHERE assignee_id = $1`, id); err != nil {
-		return fmt.Errorf("clear workflow_template_nodes.assignee_id: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE task_nodes SET assignee_id = NULL, reserved_for_agent_id = NULL, completed_by = NULL
-		 WHERE assignee_id = $1 OR reserved_for_agent_id = $1 OR completed_by = $1`, id); err != nil {
+		`UPDATE task_nodes SET reserved_for_agent_id = NULL
+		 WHERE reserved_for_agent_id = $1`, id); err != nil {
 		return fmt.Errorf("clear task_nodes agent refs: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,

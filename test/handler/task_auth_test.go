@@ -36,37 +36,44 @@ func setupTaskTestRouter(t *testing.T) (*httptest.Server, *http.Client) {
 func TestCreateTask(t *testing.T) {
 	ts, client := setupTaskTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
-	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
-	taskID, nodes := createTask(t, client, ts.URL, projID, tplID, token)
+	taskID := createTask(t, client, ts.URL, projID, tplID, token)
 
 	if taskID == 0 {
 		t.Fatal("expected non-empty task ID")
 	}
-	if len(nodes) != 3 {
-		t.Fatalf("expected 3 nodes, got %d", len(nodes))
-	}
 
-	// First node should be in_progress (auto-started)
-	if nodes[0]["status"] != "in_progress" && nodes[0]["status"] != "pending" {
-		t.Fatalf("expected first node to be in_progress or pending, got %v", nodes[0]["status"])
+	// V2 task creation only writes the main record; the detail response carries
+	// the template-derived workflow_name. Node instantiation is the engine's
+	// job (S3).
+	_, _, respBody := doRequestWithToken(t, client, http.MethodGet,
+		fmt.Sprintf("%s/api/projects/%s/tasks/%d", ts.URL, projID, taskID), token, nil)
+	if respBody == nil {
+		t.Fatal("expected task detail response")
 	}
-	// Remaining nodes should be pending
-	if nodes[1]["status"] != "pending" {
-		t.Fatalf("expected second node to be pending, got %v", nodes[1]["status"])
+	var task map[string]interface{}
+	if err := json.Unmarshal(respBody, &task); err != nil {
+		t.Fatalf("decode task: %v", err)
+	}
+	if task["workflow_name"] == "" || task["workflow_name"] == nil {
+		t.Fatalf("expected non-empty workflow_name derived from the template, got %v", task["workflow_name"])
+	}
+	if task["status"] != "active" {
+		t.Fatalf("expected status active, got %v", task["status"])
 	}
 }
 
 func TestUpdateTask(t *testing.T) {
 	ts, client := setupTaskTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
-	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
-	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
+	taskID := createTask(t, client, ts.URL, projID, tplID, token)
 
 	// Update task
 	body := map[string]interface{}{
@@ -96,11 +103,11 @@ func TestUpdateTask(t *testing.T) {
 func TestUpdateTaskTitleTooLong(t *testing.T) {
 	ts, client := setupTaskTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
-	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
-	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
+	taskID := createTask(t, client, ts.URL, projID, tplID, token)
 
 	// Title too long (exceeds 200 characters)
 	longTitle := ""
@@ -122,11 +129,11 @@ func TestUpdateTaskTitleTooLong(t *testing.T) {
 func TestDeleteTask(t *testing.T) {
 	ts, client := setupTaskTestRouter(t)
 	token, wsID := registerTestUser(t, client, ts.URL)
-	tplID := createWorkflowTemplate3Nodes(t, client, ts.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, ts.URL, wsID, token)
 	projID := createProject(t, client, ts.URL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, ts.URL, token}, wsID, projID)
 
-	taskID, _ := createTask(t, client, ts.URL, projID, tplID, token)
+	taskID := createTask(t, client, ts.URL, projID, tplID, token)
 
 	// Delete task
 	_, status, _ := doRequestWithToken(t, client, http.MethodDelete,
@@ -164,7 +171,7 @@ func TestRequireRoleMiddleware(t *testing.T) {
 	_, db, _ := setupTestRouter(t)
 
 	svc := service.New(db, nil, nil)
-	wsChecker, _, _, _ := configureWorkspaceAuthForTest(svc)
+	wsChecker, _, _ := configureWorkspaceAuthForTest(svc)
 	r := chi.NewRouter()
 	authHandler := handler.NewAuthHandler(svc, testJWTSecret)
 	r.Mount("/api/auth", authHandler.Routes())

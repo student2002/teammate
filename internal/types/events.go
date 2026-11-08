@@ -21,6 +21,7 @@ type SSEEvent struct {
 // Standard SSE event-type constants.
 const (
 	EventNodePending            = "node:pending"             // A new node is pending claim
+	EventNodeReady              = "node:ready"               // A workflow V2 node became ready (wake-up only; payload carries ids, not graph structure)
 	EventNodeContinuationInvite = "node:continuation_invite" // Continuation-right invitation after a node completes
 	EventMentionTrigger         = "mention:trigger"          // @mention trigger
 	EventTaskInterrupt          = "task:interrupt"           // Task interruption (control event)

@@ -4,6 +4,7 @@ package store_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -111,31 +112,47 @@ func createTestAgent(t *testing.T, s *store.Store, workspaceID string) types.Age
 	return agent
 }
 
+// createTestWorkflowTemplate creates a workflow template with a V2-shaped
+// linear graph: a trigger.manual source node followed by nodeCount-1 agent.task
+// nodes chained by success→input edges. Returns the template and its created
+// nodes in sort order.
 func createTestWorkflowTemplate(t *testing.T, s *store.Store, workspaceID string, nodeCount int) (types.WorkflowTemplate, []types.WorkflowTemplateNode) {
 	t.Helper()
+	if nodeCount < 1 {
+		nodeCount = 1
+	}
 	params := types.CreateWorkflowTemplateParams{
 		WorkspaceID: workspaceID,
 		Name:        "flow-" + uuid.New().String()[:8],
 		Description: strPtr("test workflow"),
 	}
+	nodeIDs := make([]string, nodeCount)
 	nodes := make([]types.CreateTemplateNodeParams, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		nodeType := "standard"
-		if i == 1 && nodeCount > 2 {
-			nodeType = "review"
+		nodeIDs[i] = uuid.NewString()
+		typeKey := "agent.task"
+		if i == 0 {
+			typeKey = "trigger.manual"
 		}
-		desc := fmt.Sprintf("node %d description", i+1)
 		nodes[i] = types.CreateTemplateNodeParams{
-			Name:            fmt.Sprintf("node-%d", i+1),
-			Description:     &desc,
-			SortOrder:       int32(i + 1),
-			NodeType:        nodeType,
-			AssigneeType:    "any_agent",
-			TimeoutMinutes:  60,
-			MaxRejectCycles: 3,
+			ID:        &nodeIDs[i],
+			Name:      fmt.Sprintf("node-%d", i+1),
+			SortOrder: int32(i + 1),
+			TypeKey:   typeKey,
+			Config:    json.RawMessage(`{}`),
+			UIConfig:  json.RawMessage(`{}`),
 		}
 	}
-	tpl, createdNodes, err := s.CreateWorkflowTemplate(context.Background(), params, nodes)
+	edges := make([]types.CreateTemplateEdgeParams, 0, nodeCount-1)
+	for i := 0; i+1 < nodeCount; i++ {
+		edges = append(edges, types.CreateTemplateEdgeParams{
+			SourceNodeID: nodeIDs[i],
+			SourcePort:   "success",
+			TargetNodeID: nodeIDs[i+1],
+			TargetPort:   "input",
+		})
+	}
+	tpl, createdNodes, _, err := s.CreateWorkflowTemplate(context.Background(), params, nodes, edges)
 	if err != nil {
 		t.Fatalf("create workflow template: %v", err)
 	}

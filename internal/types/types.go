@@ -49,21 +49,6 @@ const (
 	AgentStatusPaused  = "paused"  // Paused
 )
 
-// NodeType defines the type of a workflow node.
-const (
-	NodeTypeStandard = "standard" // Standard node (executed by an AI agent)
-	NodeTypeReview   = "review"   // Review node (reviewed by AI or human)
-	NodeTypeManual   = "manual"   // Manual node (must be executed by a human)
-)
-
-// AssigneeType defines the executor type of a node.
-const (
-	AssigneeTypeAnyAgent      = "any_agent"      // Any Agent (can claim)
-	AssigneeTypeSpecificAgent = "specific_agent"  // Specified Agent
-	AssigneeTypeHuman         = "human"          // Human user
-	AssigneeTypeAuto          = "auto"           // Auto-assign
-)
-
 // TaskType defines the type classification of a task.
 const (
 	TaskTypeStory = "story" // User story
@@ -79,36 +64,49 @@ const (
 	TaskPriorityLow    = "low"    // Low
 )
 
-// TaskStatus defines the status of a task.
+// TaskStatus defines the status of a task. The terminal state is decided by
+// the ports of the flow.end inbound edges: completed / failed.
 const (
 	TaskStatusActive    = "active"    // Active
 	TaskStatusCompleted = "completed" // Completed
+	TaskStatusFailed    = "failed"    // Failed
 	TaskStatusCancelled = "cancelled" // Cancelled
 )
 
-// TaskNodeStatus defines the status of a workflow node.
+// TaskNodeStatus defines the V2 status machine of a workflow node:
 //
-// Real node states (5 kinds):
-//   - pending: pending
-//   - in_progress: in progress
-//   - completed: completed
-//   - rejected: returned
-//   - manual_intervention: requires manual intervention
+//	waiting → ready → running → succeeded / failed
+//	   └────────────────────────┴── skipped (branch not activated)
+//	any state → cancelled; running → manual_intervention
 const (
-	TaskNodeStatusPending            = "pending"             // Pending
-	TaskNodeStatusInProgress         = "in_progress"         // In progress
-	TaskNodeStatusCompleted          = "completed"           // Completed
-	TaskNodeStatusRejected           = "rejected"            // Returned
+	TaskNodeStatusWaiting            = "waiting"             // Waiting for inbound edges / timer / event
+	TaskNodeStatusReady              = "ready"               // Ready to be claimed
+	TaskNodeStatusRunning            = "running"             // Executing
+	TaskNodeStatusSucceeded          = "succeeded"           // Succeeded
+	TaskNodeStatusFailed             = "failed"              // Failed
+	TaskNodeStatusSkipped            = "skipped"             // Skipped (branch not activated)
+	TaskNodeStatusCancelled          = "cancelled"           // Cancelled
 	TaskNodeStatusManualIntervention = "manual_intervention" // Requires manual intervention
 )
 
-// TransitionAction defines the action type of a node state transition.
+// ActivationMode defines how a node's inbound edges activate it.
 const (
-	TransitionActionApprove      = "approve"       // Approve
-	TransitionActionReject       = "reject"        // Reject
-	TransitionActionManual       = "manual"        // Manual intervention
-	TransitionActionReclaim      = "reclaim"       // Reclaim
-	TransitionActionTimeout      = "timeout"       // Timeout
+	ActivationModeAll = "all" // All inbound edges must be activated
+	ActivationModeAny = "any" // Any inbound edge activates the node
+)
+
+// TransitionAction defines the action type of a node state transition,
+// matching the V2 status machine one-to-one.
+const (
+	TransitionActionReady        = "ready"         // Waiting → ready
+	TransitionActionStart        = "start"         // Ready → running
+	TransitionActionComplete     = "complete"      // Running → succeeded
+	TransitionActionFail         = "fail"          // Running → failed
+	TransitionActionRetry        = "retry"         // Failed → waiting (scheduled retry)
+	TransitionActionSkip         = "skip"          // → skipped
+	TransitionActionCancel       = "cancel"        // → cancelled
+	TransitionActionManual       = "manual"        // → manual_intervention
+	TransitionActionTimeout      = "timeout"       // Timeout-driven transition
 	TransitionActionInterruptAck = "interrupt_ack" // Interrupt acknowledgement
 )
 
@@ -247,54 +245,49 @@ type Daemon struct {
 
 // WorkflowTemplate represents a reusable workflow definition template.
 //
-// The template defines the ordered steps of task execution, e.g. [Requirements analysis -> Coding -> Review -> Deploy].
+// The template is a graph of typed nodes (type_key) connected by port-based
+// edges; triggering is configured on the template's trigger node, and version
+// increments on every full-graph save.
 type WorkflowTemplate struct {
-	ID              string          `json:"id" db:"id"`                       // Template UUID
-	WorkspaceID     string          `json:"workspace_id" db:"workspace_id"`   // Workspace ID
-	Name            string          `json:"name" db:"name"`                   // Template name
-	Description     string          `json:"description" db:"description"`     // Description
-	IsBuiltin       bool            `json:"is_builtin" db:"is_builtin"`       // Whether it is a built-in template
-	TriggerType     string          `json:"trigger_type" db:"trigger_type"`   // Trigger type
-	TriggerConfig   json.RawMessage `json:"trigger_config" db:"trigger_config"` // Trigger configuration (JSON)
-	TriggerEnabled  bool            `json:"trigger_enabled" db:"trigger_enabled"` // Whether the trigger is enabled
-	NextRunAt       *time.Time      `json:"next_run_at" db:"next_run_at"`     // Next run time
-	LastTriggeredAt *time.Time      `json:"last_triggered_at" db:"last_triggered_at"` // Last triggered time
-	CreatedAt       time.Time       `json:"created_at" db:"created_at"`       // Creation time
-	UpdatedAt       time.Time       `json:"updated_at" db:"updated_at"`       // Update time
+	ID          string    `json:"id" db:"id"`                     // Template UUID
+	WorkspaceID string    `json:"workspace_id" db:"workspace_id"` // Workspace ID
+	Name        string    `json:"name" db:"name"`                 // Template name
+	Description string    `json:"description" db:"description"`   // Description
+	IsBuiltin   bool      `json:"is_builtin" db:"is_builtin"`     // Whether it is a built-in template
+	Version     int       `json:"version" db:"version"`           // Graph version (bumped on full-graph save)
+	Enabled     bool      `json:"enabled" db:"enabled"`           // Whether the template can be instantiated
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// WorkflowTriggerRun represents a single workflow trigger execution record.
-type WorkflowTriggerRun struct {
-	ID                 string          `json:"id" db:"id"`                          // Run record UUID
-	WorkspaceID        string          `json:"workspace_id" db:"workspace_id"`      // Workspace ID
-	ProjectID          string          `json:"project_id" db:"project_id"`          // Project ID
-	WorkflowTemplateID string          `json:"workflow_template_id" db:"workflow_template_id"` // Template ID
-	TriggerType        string          `json:"trigger_type" db:"trigger_type"`      // Trigger type
-	ExternalKey        string          `json:"external_key" db:"external_key"`      // External deduplication key
-	Status             string          `json:"status" db:"status"`                  // Status
-	TaskID             *int32          `json:"task_id" db:"task_id"`                // Associated task ID
-	Payload            json.RawMessage `json:"payload" db:"payload"`                // Trigger payload (JSON)
-	Error              string          `json:"error" db:"error"`                    // Error message
-	CreatedAt          time.Time       `json:"created_at" db:"created_at"`          // Creation time
-}
-
-// WorkflowTemplateNode represents a single step node in a workflow template.
+// WorkflowTemplateNode represents a single typed node in a workflow template.
+// type_key resolves against the Server-side node registry; config is the
+// node-type-specific payload and ui_config only stores canvas position/folding.
 type WorkflowTemplateNode struct {
-	ID              string          `json:"id" db:"id"`                        // Node UUID
-	TemplateID      string          `json:"template_id" db:"template_id"`      // Owning template ID
-	Name            string          `json:"name" db:"name"`                    // Node name
-	Description     string          `json:"description" db:"description"`      // Description
-	SortOrder       int             `json:"sort_order" db:"sort_order"`        // Sort order
-	NodeType        string          `json:"node_type" db:"node_type"`          // Node type
-	AssigneeType    string          `json:"assignee_type" db:"assignee_type"`  // Assignee type
-	AssigneeID      *string         `json:"assignee_id" db:"assignee_id"`      // Specified assignee ID
-	TimeoutMinutes  int             `json:"timeout_minutes" db:"timeout_minutes"` // Timeout (minutes)
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`   // Read-only directories (JSON)
-	FullControlDirs json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"` // Full control directories (JSON)
-	Artifact        json.RawMessage `json:"artifact" db:"artifact"`            // Artifact definition (JSON)
-	DependsOn       []string        `json:"depends_on" db:"depends_on"`        // List of dependency node IDs
-	MaxRejectCycles int             `json:"max_reject_cycles" db:"max_reject_cycles"` // Maximum reject cycles
-	CreatedAt       time.Time       `json:"created_at" db:"created_at"`        // Creation time
+	ID         string          `json:"id" db:"id"`                    // Node UUID
+	TemplateID string          `json:"template_id" db:"template_id"`  // Owning template ID
+	Name       string          `json:"name" db:"name"`                // Node name
+	SortOrder  int             `json:"sort_order" db:"sort_order"`    // Sort order
+	TypeKey    string          `json:"type_key" db:"type_key"`        // Node type key (registry-resolved)
+	Config     json.RawMessage `json:"config" db:"config"`            // Node-type-specific configuration (JSON)
+	UIConfig   json.RawMessage `json:"ui_config" db:"ui_config"`      // Canvas layout (JSON)
+	CreatedAt  time.Time       `json:"created_at" db:"created_at"`    // Creation time
+	UpdatedAt  time.Time       `json:"updated_at" db:"updated_at"`    // Update time
+}
+
+// WorkflowTemplateEdge represents a directed port-to-port connection between
+// two template nodes: when the source port fires, the target node wakes up.
+type WorkflowTemplateEdge struct {
+	ID           string          `json:"id" db:"id"`                     // Edge UUID
+	TemplateID   string          `json:"template_id" db:"template_id"`   // Owning template ID
+	SourceNodeID string          `json:"source_node_id" db:"source_node_id"` // Source node UUID
+	SourcePort   string          `json:"source_port" db:"source_port"`   // Output port on the source node
+	TargetNodeID string          `json:"target_node_id" db:"target_node_id"` // Target node UUID
+	TargetPort   string          `json:"target_port" db:"target_port"`   // Input port on the target node
+	Label        string          `json:"label" db:"label"`               // Edge label
+	SortOrder    int             `json:"sort_order" db:"sort_order"`     // Sort order
+	Config       json.RawMessage `json:"config" db:"config"`             // Edge configuration (JSON)
+	CreatedAt    time.Time       `json:"created_at" db:"created_at"`     // Creation time
 }
 
 // Project represents a software project within a workspace.
@@ -324,57 +317,67 @@ type ProjectMember struct {
 
 // Task represents a unit of work in a project.
 //
-// A task is instantiated from a workflow template as an ordered set of workflow nodes.
+// A task is instantiated from a workflow template as a graph of task nodes;
+// workflow_version/source_event_id/trigger_payload snapshot the instantiation
+// context and context/failure are maintained by the engine during execution.
 type Task struct {
-	ID           int32      `json:"id" db:"id"`                     // Task ID (auto-increment integer)
-	ProjectID    string     `json:"project_id" db:"project_id"`     // Owning project ID
-	WorkflowName string     `json:"workflow_name" db:"workflow_name"` // Workflow name
-	WorkflowTemplateID *string `json:"workflow_template_id" db:"workflow_template_id"` // Creating template (nil for ad-hoc tasks)
-	Title        string     `json:"title" db:"title"`               // Task title
-	Description  string     `json:"description" db:"description"`   // Task description
-	Constraints  string     `json:"constraints" db:"constraints"`   // Constraints
-	Type         string     `json:"type" db:"type"`                 // Task type (story/bug/task)
-	Priority     string     `json:"priority" db:"priority"`         // Priority
-	Status       string     `json:"status" db:"status"`             // Task status
-	AuthorType   string     `json:"author_type" db:"author_type"`   // Author type
-	AuthorID     string     `json:"author_id" db:"author_id"`       // Author ID
-	DueDate      *time.Time `json:"due_date" db:"due_date"`          // Due date
-	Labels       []string   `json:"labels" db:"labels"`              // List of labels
-	Sequence     int        `json:"sequence" db:"sequence"`          // Sort sequence number
-	ParentTaskID *int32     `json:"parent_task_id" db:"parent_task_id"` // Parent task ID (for subtasks)
-	GitBranch    *string    `json:"git_branch" db:"git_branch"`      // Associated Git branch
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`      // Creation time
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`      // Update time
+	ID                 int32           `json:"id" db:"id"`                     // Task ID (auto-increment integer)
+	ProjectID          string          `json:"project_id" db:"project_id"`     // Owning project ID
+	WorkflowName       string          `json:"workflow_name" db:"workflow_name"` // Workflow name
+	WorkflowTemplateID *string         `json:"workflow_template_id" db:"workflow_template_id"` // Creating template (nil for ad-hoc tasks)
+	WorkflowVersion    int             `json:"workflow_version" db:"workflow_version"` // Template graph version at instantiation
+	SourceEventID      *string         `json:"source_event_id" db:"source_event_id"` // Originating workflow_events row (nil for manual creation)
+	TriggerPayload     json.RawMessage `json:"trigger_payload" db:"trigger_payload"` // Trigger payload snapshot (JSON)
+	Context            json.RawMessage `json:"context" db:"context"`           // Engine run context: trigger/task/vars/nodes roots (JSON)
+	Failure            json.RawMessage `json:"failure" db:"failure"`           // Task failure detail (JSON)
+	Title              string          `json:"title" db:"title"`               // Task title
+	Description        string          `json:"description" db:"description"`   // Task description
+	Constraints        string          `json:"constraints" db:"constraints"`   // Constraints
+	Type               string          `json:"type" db:"type"`                 // Task type (story/bug/task)
+	Priority           string          `json:"priority" db:"priority"`         // Priority
+	Status             string          `json:"status" db:"status"`             // Task status
+	AuthorType         string          `json:"author_type" db:"author_type"`   // Author type
+	AuthorID           string          `json:"author_id" db:"author_id"`       // Author ID
+	DueDate            *time.Time      `json:"due_date" db:"due_date"`         // Due date
+	Labels             []string        `json:"labels" db:"labels"`             // List of labels
+	Sequence           int             `json:"sequence" db:"sequence"`         // Sort sequence number
+	ParentTaskID       *int32          `json:"parent_task_id" db:"parent_task_id"` // Parent task ID (for subtasks)
+	GitBranch          *string         `json:"git_branch" db:"git_branch"`     // Associated Git branch
+	CreatedAt          time.Time       `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt          time.Time       `json:"updated_at" db:"updated_at"`     // Update time
 }
 
-// TaskNode represents a single step in task workflow execution.
+// TaskNode represents a single node instance of a task run (a run snapshot of
+// a template node, unique per (task_id, template_node_id)).
 //
-// Node state machine: pending -> in_progress -> completed/rejected/manual_intervention
+// V2 status machine: waiting → ready → running → succeeded/failed;
+// skipped marks unactivated branches; manual_intervention requires a human.
 type TaskNode struct {
-	ID                   string     `json:"id" db:"id"`                                     // Node UUID
-	TaskID               int32      `json:"task_id" db:"task_id"`                           // Owning task ID
-	Name                 string     `json:"name" db:"name"`                                 // Node name
-	Description          string     `json:"description" db:"description"`                   // Description
-	SortOrder            int        `json:"sort_order" db:"sort_order"`                     // Sort order
-	NodeType             string     `json:"node_type" db:"node_type"`                       // Node type
-	Status               string     `json:"status" db:"status"`                             // Node status
-	AssigneeType         string     `json:"assignee_type" db:"assignee_type"`               // Assignee type
-	AssigneeID           *string    `json:"assignee_id" db:"assignee_id"`                   // Assignee ID
-	ReservedForAgentID   *string    `json:"reserved_for_agent_id" db:"reserved_for_agent_id"` // Reserved for a specific Agent (renewal right)
-	RejectCount          int        `json:"reject_count" db:"reject_count"`                 // Reject count
-	Version              int        `json:"version" db:"version"`                           // Optimistic lock version
-	MaxRejectCycles      int        `json:"max_reject_cycles" db:"max_reject_cycles"`       // Maximum reject cycles
-	TimeoutMinutes       int        `json:"timeout_minutes" db:"timeout_minutes"`           // Timeout (minutes)
-	CompletedAt          *time.Time `json:"completed_at" db:"completed_at"`                 // Completion time
-	CompletedBy          *string    `json:"completed_by" db:"completed_by"`                 // Completer ID
-	Summary              string     `json:"summary" db:"summary"`                           // Node execution summary
-	PreviousSummary      string     `json:"previous_summary" db:"previous_summary"`         // Previous execution summary
-	ReservationExpiresAt *time.Time `json:"reservation_expires_at" db:"reservation_expires_at"` // Reservation expiration time
-	ReadonlyDirs         json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"`               // Read-only directories (JSON array, from template node)
-	FullControlDirs      json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"`       // Full control directories (JSON array, from template node)
-	DependsOn            []string   `json:"depends_on" db:"depends_on"`                     // List of dependency node IDs
-	CreatedAt            time.Time  `json:"created_at" db:"created_at"`                     // Creation time
-	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`                     // Update time
+	ID                 string          `json:"id" db:"id"`                     // Node UUID
+	TaskID             int32           `json:"task_id" db:"task_id"`           // Owning task ID
+	TemplateNodeID     string          `json:"template_node_id" db:"template_node_id"` // Originating template node UUID
+	Name               string          `json:"name" db:"name"`                 // Node name
+	SortOrder          int             `json:"sort_order" db:"sort_order"`     // Sort order
+	TypeKey            string          `json:"type_key" db:"type_key"`         // Node type key (registry-resolved)
+	Config             json.RawMessage `json:"config" db:"config"`             // Node-type-specific configuration snapshot (JSON)
+	Status             string          `json:"status" db:"status"`             // Node status (V2 machine)
+	ActivationMode     string          `json:"activation_mode" db:"activation_mode"` // Inbound edge activation mode (all/any)
+	Input              json.RawMessage `json:"input" db:"input"`               // Resolved input snapshot (JSON)
+	Output             json.RawMessage `json:"output" db:"output"`             // Execution output (JSON)
+	Error              json.RawMessage `json:"error" db:"error"`               // Failure detail (JSON)
+	AttemptCount       int             `json:"attempt_count" db:"attempt_count"` // Executed attempt count
+	MaxAttempts        int             `json:"max_attempts" db:"max_attempts"` // Maximum attempts before failure
+	NextRetryAt        *time.Time      `json:"next_retry_at" db:"next_retry_at"` // Scheduled retry time
+	WaitKey            string          `json:"wait_key" db:"wait_key"`         // Wait registration key (empty = not waiting)
+	WaitExpiresAt      *time.Time      `json:"wait_expires_at" db:"wait_expires_at"` // Wait deadline
+	Version            int             `json:"version" db:"version"`           // Optimistic lock version
+	ReservedForAgentID *string         `json:"reserved_for_agent_id" db:"reserved_for_agent_id"` // Agent currently reserved/assigned
+	Summary            string          `json:"summary" db:"summary"`           // Node execution summary
+	ReadonlyDirs       json.RawMessage `json:"readonly_dirs" db:"readonly_dirs"` // Read-only directories (JSON array, from template node)
+	FullControlDirs    json.RawMessage `json:"full_control_dirs" db:"full_control_dirs"` // Full control directories (JSON array, from template node)
+	CompletedAt        *time.Time      `json:"completed_at" db:"completed_at"` // Terminal transition time
+	CreatedAt          time.Time       `json:"created_at" db:"created_at"`     // Creation time
+	UpdatedAt          time.Time       `json:"updated_at" db:"updated_at"`     // Update time
 }
 
 // NodeTransition records the state transition history of a workflow node.

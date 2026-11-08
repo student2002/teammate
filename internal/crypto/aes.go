@@ -79,6 +79,19 @@ func SetEncryptionKey(key []byte) error {
 }
 
 // EncryptPAT encrypts a PAT (Personal Access Token) using AES-256-GCM and returns a Base64-encoded string.
+// It shares the generic AES-GCM implementation with EncryptString.
+func EncryptPAT(plaintext string) (string, error) {
+	return EncryptString(plaintext)
+}
+
+// DecryptPAT decrypts a Base64-encoded PAT encrypted with AES-256-GCM.
+// It shares the generic AES-GCM implementation with DecryptString.
+func DecryptPAT(encoded string) (string, error) {
+	return DecryptString(encoded)
+}
+
+// EncryptString encrypts any secret string (PAT, webhook secret, ...) using
+// AES-256-GCM and returns the Base64-encoded "nonce + ciphertext + tag".
 //
 // Encryption flow:
 //  1. Create an AES-256 block cipher
@@ -86,14 +99,7 @@ func SetEncryptionKey(key []byte) error {
 //  3. Generate a random nonce (12 bytes)
 //  4. Encrypt the plaintext with AES-GCM, producing ciphertext + a 16-byte authentication tag
 //  5. Return the Base64-encoded combination of "nonce + ciphertext + tag"
-//
-// Parameters:
-//   - plaintext: the plaintext PAT string
-//
-// Returns:
-//   - string: the Base64-encoded ciphertext
-//   - error: returned when encryption fails
-func EncryptPAT(plaintext string) (string, error) {
+func EncryptString(plaintext string) (string, error) {
 	if len(encryptionKey) == 0 {
 		return "", fmt.Errorf("encryption key not initialized; call InitEncryptionKey() first")
 	}
@@ -116,23 +122,17 @@ func EncryptPAT(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// DecryptPAT decrypts a Base64-encoded PAT encrypted with AES-256-GCM.
+// DecryptString decrypts a Base64-encoded AES-256-GCM ciphertext produced by
+// EncryptString.
 //
 // Decryption flow:
 //  1. Base64-decode to obtain the raw bytes
 //  2. Split the nonce (first 12 bytes) from the ciphertext+tag (remaining bytes)
 //  3. Decrypt with AES-GCM and verify the authentication tag
-//  4. Return the plaintext PAT string
+//  4. Return the plaintext string
 //
 // Security note: if the ciphertext is tampered with or the key does not match, AES-GCM authentication-tag verification fails.
-//
-// Parameters:
-//   - encoded: the Base64-encoded ciphertext string
-//
-// Returns:
-//   - string: the decrypted plaintext PAT
-//   - error: returned when decryption fails
-func DecryptPAT(encoded string) (string, error) {
+func DecryptString(encoded string) (string, error) {
 	if len(encryptionKey) == 0 {
 		return "", fmt.Errorf("encryption key not initialized; call InitEncryptionKey() first")
 	}

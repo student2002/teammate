@@ -11,15 +11,18 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
+// TestGetBoardData_ColumnMapping verifies that GetBoardData returns the board
+// columns for a project. A V2 task without node instances has no active node,
+// so it does not appear in any column.
 func TestGetBoardData_ColumnMapping(t *testing.T) {
 	s, _ := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
+	_, _ = createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	_, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	_, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Board task",
 		Type:       "task",
@@ -27,7 +30,7 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 		Status:     "active",
 		AuthorType: "member",
 		AuthorID:   uuid.New().String(),
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -41,68 +44,6 @@ func TestGetBoardData_ColumnMapping(t *testing.T) {
 	}
 }
 
-// TestDaemonAgentPendingDiscovery verifies discovery for a daemon-bound agent:
-// the agent is manually bound to a daemon, and its pending nodes are
-// discoverable through the board (the watcher's poll source).
-func TestDaemonAgentPendingDiscovery(t *testing.T) {
-	s, _ := setupTestStore(t)
-	ctx := context.Background()
-
-	ws := createTestWorkspace(t, s)
-	proj := createTestProject(t, s, ws.ID)
-	agent := createTestAgent(t, s, ws.ID)
-	addAgentToProject(t, s, proj.ID, agent.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
-
-	// Create a task with pending nodes
-	_, _, err := s.CreateTask(ctx, types.CreateTaskParams{
-		ProjectID:  proj.ID,
-		Title:      "Pending task",
-		Type:       "task",
-		Priority:   "medium",
-		Status:     "active",
-		AuthorType: "member",
-		AuthorID:   uuid.New().String(),
-	}, tplNodes)
-	if err != nil {
-		t.Fatalf("CreateTask: %v", err)
-	}
-
-	// Bind the agent to the daemon (manual binding path)
-	daemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "discovery-daemon")
-	if err != nil {
-		t.Fatalf("CreateDaemon: %v", err)
-	}
-	if err := s.RegisterDaemonAgent(ctx, uuid.MustParse(ws.ID), daemon.ID, uuid.MustParse(agent.ID)); err != nil {
-		t.Fatalf("RegisterDaemonAgent: %v", err)
-	}
-	bound, err := s.GetAgent(ctx, uuid.MustParse(agent.ID))
-	if err != nil {
-		t.Fatalf("GetAgent: %v", err)
-	}
-	if bound.DaemonID != daemon.ID.String() {
-		t.Fatalf("expected agent bound to daemon %s, got %q", daemon.ID, bound.DaemonID)
-	}
-	if bound.Status != types.AgentStatusOnline {
-		t.Fatalf("expected bound agent online, got %q", bound.Status)
-	}
-
-	// Board still exposes the pending node for the watcher to discover
-	columns, err := s.GetBoardData(ctx, uuid.MustParse(proj.ID))
-	if err != nil {
-		t.Fatalf("GetBoardData: %v", err)
-	}
-	pending := 0
-	for _, col := range columns {
-		if col.Key == "pending" {
-			pending = len(col.Tasks)
-		}
-	}
-	if pending == 0 {
-		t.Fatal("expected at least 1 pending task on the board")
-	}
-}
-
 // TestDaemonAgentMentionComments verifies mention comments remain retrievable
 // for a daemon-bound agent (execution context injection source).
 func TestDaemonAgentMentionComments(t *testing.T) {
@@ -113,9 +54,8 @@ func TestDaemonAgentMentionComments(t *testing.T) {
 	proj := createTestProject(t, s, ws.ID)
 	agent := createTestAgent(t, s, ws.ID)
 	addAgentToProject(t, s, proj.ID, agent.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	task, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Comment task",
 		Type:       "task",
@@ -123,7 +63,7 @@ func TestDaemonAgentMentionComments(t *testing.T) {
 		Status:     "active",
 		AuthorType: "member",
 		AuthorID:   uuid.New().String(),
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

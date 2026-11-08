@@ -69,10 +69,9 @@ func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 	token, wsID := registerTestUser(t, client, srv.URL)
 
 	projID := createProject(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
+	tplID, _ := createV2WorkflowTemplate(t, client, srv.URL, wsID, token)
 
-	taskID, _ := createTask(t, client, srv.URL, projID, tplID, token)
+	taskID := createTask(t, client, srv.URL, projID, tplID, token)
 
 	// Create comment — the request body no longer contains author_type/author_id fields
 	// The server should derive these fields from JWT claims
@@ -84,97 +83,5 @@ func TestCommentAuthorDerivedFromClaims(t *testing.T) {
 	_, status, respBody := doRequestWithToken(t, client, http.MethodPost, url, token, body)
 	if status != http.StatusCreated {
 		t.Fatalf("create comment: expected 201, got %d, body: %s", status, respBody)
-	}
-}
-
-// TestTokenUsageAgentMustBeAssignee verifies that agents can only report token usage for nodes they are assigned to.
-func TestTokenUsageAgentMustBeAssignee(t *testing.T) {
-	router, db, _ := setupTestRouter(t)
-	defer db.Close()
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-	client := srv.Client()
-	token, wsID := registerTestUser(t, client, srv.URL)
-
-	projID := createProject(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
-
-	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
-	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
-	addAgentToProject(t, dbQueries(t, db), projID, agent1ID)
-	addAgentToProject(t, dbQueries(t, db), projID, agent2ID)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent1ID, token)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
-
-	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
-	codeNodeID := nodes[0]["id"].(string)
-
-	// Agent1 claims the code node
-	claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
-
-	// Agent2 attempts to report token usage for agent1's node — should be forbidden
-	body := map[string]interface{}{
-		"task_node_id":  codeNodeID,
-		"model":         "claude-3.5-sonnet",
-		"input_tokens":  1000,
-		"output_tokens": 500,
-		"total_tokens":  1500,
-	}
-	url := fmt.Sprintf("%s/api/tasks/%d/token-usage", srv.URL, taskID)
-	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, url, agent2Token, agent2ID, body)
-	if status != http.StatusForbidden {
-		t.Errorf("agent2 reporting token usage for agent1's node: expected 403, got %d", status)
-	}
-
-	// Agent1 can report token usage for its own node
-	_, status, _ = doRequestWithAgentKey(t, client, http.MethodPost, url, agent1Token, agent1ID, body)
-	if status != http.StatusCreated {
-		t.Errorf("agent1 reporting token usage for own node: expected 201, got %d", status)
-	}
-}
-
-// TestUpdateSummaryAgentMustBeAssignee verifies that agents can only update summaries for nodes they are assigned to.
-func TestUpdateSummaryAgentMustBeAssignee(t *testing.T) {
-	router, db, _ := setupTestRouter(t)
-	defer db.Close()
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-	client := srv.Client()
-	token, wsID := registerTestUser(t, client, srv.URL)
-
-	projID := createProject(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-	setProjectDefaultWorkflow(t, testEnv{client, srv.URL, token}, wsID, projID)
-
-	agent1ID, agent1Token := createAgent(t, client, srv.URL, wsID, token)
-	agent2ID, agent2Token := createAgent(t, client, srv.URL, wsID, token)
-	addAgentToProject(t, dbQueries(t, db), projID, agent1ID)
-	addAgentToProject(t, dbQueries(t, db), projID, agent2ID)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent1ID, token)
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agent2ID, token)
-
-	taskID, nodes := createTask(t, client, srv.URL, projID, tplID, token)
-	codeNodeID := nodes[0]["id"].(string)
-
-	// Agent1 claims the code node
-	claimNode(t, client, srv.URL, taskID, codeNodeID, agent1ID, agent1Token)
-
-	// Agent2 attempts to update agent1's node summary — should be forbidden
-	body := map[string]interface{}{
-		"summary": "Hacked summary",
-	}
-	url := fmt.Sprintf("%s/api/tasks/%d/nodes/%s/summary", srv.URL, taskID, codeNodeID)
-	_, status, _ := doRequestWithAgentKey(t, client, http.MethodPost, url, agent2Token, agent2ID, body)
-	if status != http.StatusForbidden {
-		t.Errorf("agent2 updating summary for agent1's node: expected 403, got %d", status)
-	}
-
-	// Agent1 can update its own node summary
-	_, status, _ = doRequestWithAgentKey(t, client, http.MethodPost, url, agent1Token, agent1ID, body)
-	if status != http.StatusOK {
-		t.Errorf("agent1 updating summary for own node: expected 200, got %d", status)
 	}
 }

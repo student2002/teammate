@@ -11,22 +11,23 @@ import (
 
 	"github.com/google/uuid"
 
+	db "github.com/teammate/server/internal/db/generated"
 	"github.com/teammate/server/internal/store"
 	"github.com/teammate/server/internal/types"
 )
 
-// TestDeleteAgent_ClearsNodeRefs verifies that task_nodes.assignee_id is explicitly set to NULL when an Agent is deleted.
+// TestDeleteAgent_ClearsNodeRefs verifies that task_nodes.reserved_for_agent_id is explicitly set to NULL when an Agent is deleted.
 func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
-	s, db := setupTestStore(t)
+	s, dbConn := setupTestStore(t)
 	ctx := context.Background()
 
 	ws := createTestWorkspace(t, s)
 	agent := createTestAgent(t, s, ws.ID)
 	proj := createTestProject(t, s, ws.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
+	_, _ = createTestWorkflowTemplate(t, s, ws.ID, 2)
 
 	desc := "desc"
-	task, createdNodes, err := s.CreateTask(ctx, types.CreateTaskParams{
+	task, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:    proj.ID,
 		Title:        "cleanup test task",
 		Description:  &desc,
@@ -36,27 +37,40 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 		AuthorType:   "agent",
 		AuthorID:     agent.ID,
 		WorkflowName: "test-flow",
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// Point the node assignee to the Agent about to be deleted
-	if _, err := db.Exec(
-		`UPDATE task_nodes SET assignee_id = $1 WHERE id = $2`, agent.ID, createdNodes[0].ID); err != nil {
-		t.Fatalf("set node assignee: %v", err)
+	// Insert a node instance reserved by the Agent about to be deleted
+	node, err := db.New(dbConn).CreateTaskNode(ctx, db.CreateTaskNodeParams{
+		TaskID:         task.ID,
+		TemplateNodeID: uuid.MustParse(uuid.NewString()),
+		Name:           "code",
+		SortOrder:      1,
+		TypeKey:        "agent.task",
+		Config:         []byte(`{}`),
+		Status:         db.TaskNodeStatusRunning,
+		ActivationMode: "all",
+	})
+	if err != nil {
+		t.Fatalf("create task node: %v", err)
+	}
+	if _, err := dbConn.Exec(
+		`UPDATE task_nodes SET reserved_for_agent_id = $1 WHERE id = $2`, agent.ID, node.ID); err != nil {
+		t.Fatalf("set node reservation: %v", err)
 	}
 
 	if err := s.DeleteAgent(ctx, uuid.MustParse(agent.ID)); err != nil {
 		t.Fatalf("DeleteAgent: %v", err)
 	}
 
-	var assignee sql.NullString
-	if err := db.QueryRow(`SELECT assignee_id FROM task_nodes WHERE id = $1`, createdNodes[0].ID).Scan(&assignee); err != nil {
-		t.Fatalf("query node assignee: %v", err)
+	var reserved sql.NullString
+	if err := dbConn.QueryRow(`SELECT reserved_for_agent_id FROM task_nodes WHERE id = $1`, node.ID).Scan(&reserved); err != nil {
+		t.Fatalf("query node reservation: %v", err)
 	}
-	if assignee.Valid {
-		t.Fatalf("expected task_nodes.assignee_id to be NULL, got %q", assignee.String)
+	if reserved.Valid {
+		t.Fatalf("expected task_nodes.reserved_for_agent_id to be NULL, got %q", reserved.String)
 	}
 
 	// The task itself should still exist (nodes preserved, only references cleared)
@@ -64,8 +78,8 @@ func TestDeleteAgent_ClearsNodeRefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTaskNodes after DeleteAgent: %v", err)
 	}
-	if len(nodes) != 2 {
-		t.Fatalf("expected 2 nodes to remain, got %d", len(nodes))
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node to remain, got %d", len(nodes))
 	}
 }
 
@@ -76,10 +90,9 @@ func TestDeleteProject_ClearsMemorySourceTask(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 1)
 
 	desc := "desc"
-	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	task, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:    proj.ID,
 		Title:        "mem ref task",
 		Description:  &desc,
@@ -89,7 +102,7 @@ func TestDeleteProject_ClearsMemorySourceTask(t *testing.T) {
 		AuthorType:   "member",
 		AuthorID:     uuid.New().String(),
 		WorkflowName: "test-flow",
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

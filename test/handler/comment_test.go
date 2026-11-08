@@ -45,9 +45,9 @@ func TestCommentCreateAndList(t *testing.T) {
 	token, wsID := registerTestUser(t, client, baseURL)
 
 	projID := createProject(t, client, baseURL, wsID, token)
-	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, baseURL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
-	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
+	taskID := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
 	// Create comment
@@ -95,9 +95,9 @@ func TestCommentContentLengthValidation(t *testing.T) {
 	token, wsID := registerTestUser(t, client, baseURL)
 
 	projID := createProject(t, client, baseURL, wsID, token)
-	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, baseURL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
-	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
+	taskID := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
 	// Create a comment with content exceeding 10000 characters
@@ -140,9 +140,9 @@ func TestCommentReplyThread(t *testing.T) {
 	token, wsID := registerTestUser(t, client, baseURL)
 
 	projID := createProject(t, client, baseURL, wsID, token)
-	tplID := createWorkflowTemplate3Nodes(t, client, baseURL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, baseURL, wsID, token)
 	setProjectDefaultWorkflow(t, testEnv{client, baseURL, token}, wsID, projID)
-	taskID, _ := createTask(t, client, baseURL, projID, tplID, token)
+	taskID := createTask(t, client, baseURL, projID, tplID, token)
 	defer deleteTask(t, client, baseURL, projID, taskID, token)
 
 	// Create parent comment

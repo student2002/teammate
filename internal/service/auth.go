@@ -81,11 +81,11 @@ func NewAuthService(svc *Service, jwtSecret string) *AuthService {
 
 // LoginResult holds the result of a login operation.
 type LoginResult struct {
-	Token       string        // JWT token
-	ExpiresAt   time.Time     // token expiration time
-	Member      types.Member  // the logged-in member info (domain model, excluding PasswordHash)
-	WorkspaceID uuid.UUID     // default workspace ID
-	Role        string        // the member's role in the workspace
+	Token       string       // JWT token
+	ExpiresAt   time.Time    // token expiration time
+	Member      types.Member // the logged-in member info (domain model, excluding PasswordHash)
+	WorkspaceID uuid.UUID    // default workspace ID
+	Role        string       // the member's role in the workspace
 }
 
 // Login authenticates a member login by email and password.
@@ -141,11 +141,11 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 
 // RegisterResult holds the result of a registration operation.
 type RegisterResult struct {
-	Token       string        // JWT token
-	ExpiresAt   time.Time     // token expiration time
-	Member      types.Member  // the created member info (domain model, excluding PasswordHash)
-	WorkspaceID uuid.UUID     // default workspace ID
-	Role        string        // the member's role in the workspace
+	Token       string       // JWT token
+	ExpiresAt   time.Time    // token expiration time
+	Member      types.Member // the created member info (domain model, excluding PasswordHash)
+	WorkspaceID uuid.UUID    // default workspace ID
+	Role        string       // the member's role in the workspace
 }
 
 // Register creates a new member account and returns a JWT token.

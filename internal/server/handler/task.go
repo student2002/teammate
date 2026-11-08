@@ -1,6 +1,6 @@
 // task.go provides HTTP API endpoints for task CRUD management, node list queries, and Git branch updates.
 //
-// Tasks are defined by workflow templates and contain ordered nodes. Creating a task automatically generates the nodes.
+// Tasks are defined by workflow templates; the workflow engine instantiates the template graph into task nodes (Start).
 
 package handler
 
@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -46,7 +47,7 @@ func (h *TaskHandler) Routes() chi.Router {
 	return r
 }
 
-// CreateTask handles the POST /projects/{projectId}/tasks endpoint, creating a new task and generating ordered nodes based on the workflow template.
+// CreateTask handles the POST /projects/{projectId}/tasks endpoint, creating the task main record against a workflow template.
 //
 // Parameters:
 //   - w: HTTP response writer
@@ -63,7 +64,7 @@ func (h *TaskHandler) Routes() chi.Router {
 //   - workflow_template_id: UUID, workflow template ID (required)
 //
 // Response:
-//   - 201: task created successfully, returns task and node info
+//   - 201: task created successfully, returns the task
 //   - 400: parameter error
 //   - 401: not authenticated
 //   - 403: no permission
@@ -72,8 +73,8 @@ func (h *TaskHandler) Routes() chi.Router {
 // Processing flow:
 //  1. verify authentication status and write permission
 //  2. verify the project and workflow template belong to the current workspace
-//  3. call service to create the task and generate nodes
-//  4. return task and node info
+//  3. call service to create the task record
+//  4. return the created task
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	// verify authentication status and write permission
 	claims, ok := svcmw.GetAuthFromContext(r.Context())
@@ -153,7 +154,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// call service to create the task
-	result, err := taskSvc.Create(r.Context(), projectID, buildCreateTaskParams(
+	task, err := taskSvc.Create(r.Context(), projectID, buildCreateTaskParams(
 		projectID, req.Title, req.Description, req.Constraints, taskType, priority,
 		TaskStatusActive, authorType, authorID, dueDate, labels, template.Name,
 	), req.WorkflowTemplateID)
@@ -162,11 +163,10 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// return task and node info
+	// return the created task
 	w.WriteHeader(http.StatusCreated)
 	response.JSON(w, r, map[string]interface{}{
-		"task":  result.Task,
-		"nodes": result.Nodes,
+		"task": task,
 	})
 }
 
@@ -456,10 +456,23 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// waiting/ready nodes must not keep executing after the cancel (the
+		// running ones above keep their interrupt flow), and the task's live
+		// event waiters are resolved so late events cannot wake the run.
+		runSvc := service.NewWorkflowRunService(h.Svc)
+		if err := runSvc.CancelTaskRun(r.Context(), taskID); err != nil {
+			slog.Error("cancel workflow run nodes", "task_id", taskID, "err", err)
+		}
+
+		// a cancelled parent run explicitly cancels its still-active child runs (§9.5)
+		if err := runSvc.CancelChildRuns(r.Context(), taskID); err != nil {
+			slog.Error("cancel child workflow runs", "task_id", taskID, "err", err)
+		}
+
 		// send a task:interrupt control event to the Agents currently executing
 		for _, node := range nodes {
-			if node.Status == types.TaskNodeStatusInProgress && node.AssigneeID != nil {
-				assigneeID, _ := uuid.Parse(*node.AssigneeID)
+			if node.Status == types.TaskNodeStatusRunning && node.ReservedForAgentID != nil {
+				assigneeID, _ := uuid.Parse(*node.ReservedForAgentID)
 				h.Svc.PublishControlEvent(r.Context(), assigneeID, "task:interrupt", map[string]interface{}{
 					"task_id": taskID,
 					"node_id": node.ID,

@@ -211,7 +211,7 @@ func buildOperation(method, path string) *OpenAPIOperation {
 //
 // Inference rules (fixes review issue 6: global only BearerAuth, Agent-specific endpoints must be marked as ApiKeyAuth):
 //   - Agent-specific endpoints (/runtimes/*, /token-usage, /messages, /logs, /git-branch,
-//     /token-exchange, /agents/*/rotate-token, /agents/*/in-progress-nodes,
+//     /token-exchange, /agents/*/rotate-token,
 //     /agents/*/execution/*) use API Key (st_/tm_ Token) auth
 //   - Other endpoints use the global BearerAuth (return nil to indicate inheriting the global)
 //
@@ -254,13 +254,6 @@ func inferSecurity(path string) []map[string][]interface{} {
 		}
 	}
 
-	// Agent self-management endpoints (query in-progress nodes, execute MCP)
-	agentSelfEndpoints := map[string]bool{
-		"in-progress-nodes": true,
-	}
-	if strings.Contains(path, "/agents/") && agentSelfEndpoints[lastSeg] {
-		return []map[string][]interface{}{{"ApiKeyAuth": {}}, {"BearerAuth": {}}}
-	}
 	// execution/mcp-servers is daemon-only, ApiKeyAuth only
 	if strings.Contains(path, "/agents/") && lastSeg == "mcp-servers" &&
 		strings.Contains(path, "/execution/") {
@@ -401,8 +394,6 @@ func pathToTag(path string) (string, string) {
 		return "Search", "Task, agent search"
 	case "board":
 		return "Board", "Board data"
-	case "review":
-		return "Review", "Review queue, self-review detection"
 	case "stats":
 		return "Stats", "Project/agent/template statistics"
 	case "health", "ready":
@@ -411,8 +402,6 @@ func pathToTag(path string) (string, string) {
 		return "Token Usage", "Token usage query and reporting"
 	case "git-credentials":
 		return "Git Credentials", "Git credential management"
-	case "webhooks":
-		return "System", "Webhook entry"
 	case "agent-roles":
 		return "System", "Agent role query"
 	default:
@@ -429,10 +418,10 @@ func pathToTag(path string) (string, string) {
 //   - Multiple * segments are each replaced with {nodeBase} to ensure the path template is valid
 //
 // Parameters:
-//   - route: the raw path reflected by chi.Walk (e.g. /api/tasks/{taskId}/nodes/*/{id}/approve)
+//   - route: the raw path reflected by chi.Walk (e.g. /api/tasks/{taskId}/logs/ws)
 //
 // Returns:
-//   - string: the normalized path (e.g. /tasks/{taskId}/nodes/{nodeBase}/{id}/approve); an empty string means it should be skipped
+//   - string: the normalized path (e.g. /tasks/{taskId}/logs/{nodeBase}/ws); an empty string means it should be skipped
 func normalizeRoute(route string) string {
 	// Strip the /api prefix (fixes issue 3: tag misalignment)
 	clean := strings.TrimPrefix(route, "/api")
@@ -526,12 +515,9 @@ func inferSummary(method, path string) string {
 		"grant":                   "Grant permission",
 		"import":                  "Import community workflow",
 		"transfer-ownership":      "Transfer ownership",
-		"self-review-check":       "Self-review detection",
-		"review-queue":            "Get review queue",
 		"agent-stats":             "Get agent statistics",
 		"agent-roles":             "List agent roles",
 		"health-check":            "MCP health check",
-		"in-progress-nodes":       "Query in-progress nodes",
 		"git-branch":              "Update Git branch",
 	}
 	if summary, ok := verbMap[lastSeg]; ok {

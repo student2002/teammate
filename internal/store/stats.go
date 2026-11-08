@@ -73,7 +73,7 @@ func (s *Store) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*Proj
 	err = s.db.QueryRowContext(ctx, `
 		SELECT
 			CASE WHEN COUNT(*) = 0 THEN 0
-			ELSE (COUNT(*) FILTER (WHERE status = 'completed'))::float / COUNT(*)::float
+			ELSE (COUNT(*) FILTER (WHERE status = 'succeeded'))::float / COUNT(*)::float
 			END
 		FROM task_nodes
 		WHERE task_id IN (SELECT id FROM tasks WHERE project_id = $1)
@@ -124,7 +124,7 @@ func (s *Store) GetAgentStats(ctx context.Context, agentID uuid.UUID) (*AgentSta
 	var inputTokens, outputTokens, totalTokens int64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
-			COALESCE((SELECT COUNT(*) FROM task_nodes WHERE assignee_id = $1 AND status = 'completed'), 0),
+			COALESCE((SELECT COUNT(*) FROM task_nodes WHERE reserved_for_agent_id = $1 AND status = 'succeeded'), 0),
 			COALESCE(SUM(tu.input_tokens), 0),
 			COALESCE(SUM(tu.output_tokens), 0),
 			COALESCE(SUM(tu.total_tokens), 0)
@@ -141,7 +141,7 @@ func (s *Store) GetAgentStats(ctx context.Context, agentID uuid.UUID) (*AgentSta
 			EXTRACT(EPOCH FROM AVG(t.updated_at - t.created_at)) / 3600.0
 		FROM tasks t
 		JOIN task_nodes tn ON tn.task_id = t.id
-		WHERE tn.assignee_id = $1
+		WHERE tn.reserved_for_agent_id = $1
 		  AND t.status = 'completed'
 	`, agentID).Scan(&avgTime)
 	if err != nil {

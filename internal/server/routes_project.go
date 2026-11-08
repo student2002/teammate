@@ -1,4 +1,4 @@
-// routes_project.go registers project-level routes: tasks, board, review, Git credentials, stats.
+// routes_project.go registers project-level routes: tasks, board, Git credentials, stats.
 package server
 
 import (
@@ -18,11 +18,11 @@ func (reg *routeRegistrar) registerProjectRoutes(r chi.Router) {
 		// Tasks
 		r.Mount("/tasks", handler.NewTaskHandler(svc).Routes())
 
+		// Workflow runs (V2 engine): manual run of a template
+		r.Post("/workflows/{templateId}/runs", handler.NewWorkflowRunHandler(svc).StartRun)
+
 		// Board
 		r.Mount("/board", handler.NewBoardHandler(svc).Routes())
-
-		// Review
-		r.Mount("/review", handler.NewReviewHandler(svc).Routes())
 
 		// Stats
 		r.Get("/stats", handler.NewStatsHandler(svc).GetProjectStats)

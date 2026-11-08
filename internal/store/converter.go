@@ -214,11 +214,21 @@ func ToDomainTask(t db.Task) (types.Task, error) {
 		v := t.WorkflowTemplateID.UUID.String()
 		wtplID = &v
 	}
+	sourceEventID := (*string)(nil)
+	if t.SourceEventID.Valid {
+		v := t.SourceEventID.UUID.String()
+		sourceEventID = &v
+	}
 	return types.Task{
 		ID:                t.ID,
 		ProjectID:         t.ProjectID.String(),
 		WorkflowName:      t.WorkflowName,
 		WorkflowTemplateID: wtplID,
+		WorkflowVersion:   int(t.WorkflowVersion),
+		SourceEventID:     sourceEventID,
+		TriggerPayload:    t.TriggerPayload,
+		Context:           t.Context,
+		Failure:           t.Failure,
 		Title:        t.Title,
 		Description:  t.Description.String,
 		Constraints:  t.Constraints.String,
@@ -328,30 +338,31 @@ func FromDomainUpdateTaskGitBranchParams(p types.UpdateTaskGitBranchParams) (db.
 // ToDomainTaskNode converts db.TaskNode to types.TaskNode.
 func ToDomainTaskNode(n db.TaskNode) (types.TaskNode, error) {
 	return types.TaskNode{
-		ID:                   n.ID.String(),
-		TaskID:               n.TaskID,
-		Name:                 n.Name,
-		Description:          n.Description.String,
-		SortOrder:            int(n.SortOrder),
-		NodeType:             string(n.NodeType),
-		Status:               string(n.Status),
-		AssigneeType:         string(n.AssigneeType),
-		AssigneeID:           nullUUIDToString(n.AssigneeID),
-		ReservedForAgentID:   nullUUIDToString(n.ReservedForAgentID),
-		RejectCount:          int(n.RejectCount),
-		MaxRejectCycles:      int(n.MaxRejectCycles),
-		TimeoutMinutes:       int(n.TimeoutMinutes),
-		Version:              int(n.Version),
-		CompletedAt:          nullTimeToPtr(n.CompletedAt),
-		CompletedBy:          nullUUIDToString(n.CompletedBy),
-		Summary:              n.Summary,
-		PreviousSummary:      n.PreviousSummary,
-		ReservationExpiresAt: nullTimeToPtr(n.ReservationExpiresAt),
-		ReadonlyDirs:         nullRawToRaw(n.ReadonlyDirs),
-		FullControlDirs:      nullRawToRaw(n.FullControlDirs),
-		DependsOn:            uuidSliceToStringSlice(n.DependsOn),
-		CreatedAt:            n.CreatedAt,
-		UpdatedAt:            n.UpdatedAt,
+		ID:                 n.ID.String(),
+		TaskID:             n.TaskID,
+		TemplateNodeID:     n.TemplateNodeID.String(),
+		Name:               n.Name,
+		SortOrder:          int(n.SortOrder),
+		TypeKey:            n.TypeKey,
+		Config:             n.Config,
+		Status:             string(n.Status),
+		ActivationMode:     n.ActivationMode,
+		Input:              n.Input,
+		Output:             n.Output,
+		Error:              n.Error,
+		AttemptCount:       int(n.AttemptCount),
+		MaxAttempts:        int(n.MaxAttempts),
+		NextRetryAt:        nullTimeToPtr(n.NextRetryAt),
+		WaitKey:            n.WaitKey,
+		WaitExpiresAt:      nullTimeToPtr(n.WaitExpiresAt),
+		Version:            int(n.Version),
+		ReservedForAgentID: nullUUIDToString(n.ReservedForAgentID),
+		Summary:            n.Summary,
+		ReadonlyDirs:       nullRawToRaw(n.ReadonlyDirs),
+		FullControlDirs:    nullRawToRaw(n.FullControlDirs),
+		CompletedAt:        nullTimeToPtr(n.CompletedAt),
+		CreatedAt:          n.CreatedAt,
+		UpdatedAt:          n.UpdatedAt,
 	}, nil
 }
 
@@ -370,129 +381,23 @@ func ToDomainTaskNodeSlice(ns []db.TaskNode) ([]types.TaskNode, error) {
 
 // FromDomainCreateTaskNodeParams converts types.CreateTaskNodeParams to db.CreateTaskNodeParams.
 func FromDomainCreateTaskNodeParams(p types.CreateTaskNodeParams) (db.CreateTaskNodeParams, error) {
-	assigneeID := stringToNullUUID(p.AssigneeID)
-	reserved := stringToNullUUID(p.ReservedForAgentID)
-	deps, err := stringSliceToUUIDSlice(p.DependsOn)
+	templateNodeID, err := stringToUUID(p.TemplateNodeID)
 	if err != nil {
-		return db.CreateTaskNodeParams{}, fmt.Errorf("convert depends_on: %w", err)
+		return db.CreateTaskNodeParams{}, fmt.Errorf("convert template node id: %w", err)
 	}
 	return db.CreateTaskNodeParams{
-		TaskID:             p.TaskID,
-		Name:               p.Name,
-		Description:        ptrToNullString(p.Description),
-		SortOrder:          p.SortOrder,
-		NodeType:           db.NodeType(p.NodeType),
-		Status:             db.TaskNodeStatus(p.Status),
-		AssigneeType:       db.AssigneeType(p.AssigneeType),
-		AssigneeID:         assigneeID,
-		ReservedForAgentID: reserved,
-		MaxRejectCycles:    p.MaxRejectCycles,
-		TimeoutMinutes:     p.TimeoutMinutes,
-		ReadonlyDirs:       rawToNullRaw(p.ReadonlyDirs),
-		FullControlDirs:    rawToNullRaw(p.FullControlDirs),
-		DependsOn:          deps,
+		TaskID:          p.TaskID,
+		TemplateNodeID:  templateNodeID,
+		Name:            p.Name,
+		SortOrder:       p.SortOrder,
+		TypeKey:         p.TypeKey,
+		Config:          p.Config,
+		Status:          db.TaskNodeStatus(p.Status),
+		ActivationMode:  p.ActivationMode,
+		MaxAttempts:     p.MaxAttempts,
+		ReadonlyDirs:    rawToNullRaw(p.ReadonlyDirs),
+		FullControlDirs: rawToNullRaw(p.FullControlDirs),
 	}, nil
-}
-
-// FromDomainClaimTaskNodeParams converts types.ClaimTaskNodeParams to db.ClaimTaskNodeParams.
-func FromDomainClaimTaskNodeParams(p types.ClaimTaskNodeParams) (db.ClaimTaskNodeParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.ClaimTaskNodeParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.ClaimTaskNodeParams{
-		ID:         id,
-		AssigneeID: stringToNullUUID(p.AssigneeID),
-		Version:    p.Version,
-	}, nil
-}
-
-// FromDomainClaimTaskNodeByHumanParams converts types.ClaimTaskNodeByHumanParams to db.ClaimTaskNodeByHumanParams.
-func FromDomainClaimTaskNodeByHumanParams(p types.ClaimTaskNodeByHumanParams) (db.ClaimTaskNodeByHumanParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.ClaimTaskNodeByHumanParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.ClaimTaskNodeByHumanParams{
-		ID:         id,
-		AssigneeID: stringToNullUUID(p.AssigneeID),
-		Version:    p.Version,
-	}, nil
-}
-
-// FromDomainReclaimTaskNodeParams converts types.ReclaimTaskNodeParams to db.ReclaimTaskNodeParams.
-func FromDomainReclaimTaskNodeParams(p types.ReclaimTaskNodeParams) (db.ReclaimTaskNodeParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.ReclaimTaskNodeParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.ReclaimTaskNodeParams{ID: id, Version: p.Version}, nil
-}
-
-// FromDomainResetRejectCountParams converts types.ResetRejectCountParams to db.ResetRejectCountParams.
-func FromDomainResetRejectCountParams(p types.ResetRejectCountParams) (db.ResetRejectCountParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.ResetRejectCountParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.ResetRejectCountParams{ID: id}, nil
-}
-
-// FromDomainUpdateNodeSummaryParams converts types.UpdateNodeSummaryParams to db.UpdateNodeSummaryParams.
-func FromDomainUpdateNodeSummaryParams(p types.UpdateNodeSummaryParams) (db.UpdateNodeSummaryParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.UpdateNodeSummaryParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.UpdateNodeSummaryParams{ID: id, Summary: p.Summary}, nil
-}
-
-// FromDomainUpdateTaskNodeStatusParams converts types.UpdateTaskNodeStatusParams to db.UpdateTaskNodeStatusParams.
-func FromDomainUpdateTaskNodeStatusParams(p types.UpdateTaskNodeStatusParams) (db.UpdateTaskNodeStatusParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.UpdateTaskNodeStatusParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.UpdateTaskNodeStatusParams{
-		ID:                   id,
-		Status:               db.TaskNodeStatus(p.Status),
-		AssigneeType:         db.AssigneeType(p.AssigneeType),
-		AssigneeID:           stringToNullUUID(p.AssigneeID),
-		ReservedForAgentID:   stringToNullUUID(p.ReservedForAgentID),
-		RejectCount:          p.RejectCount,
-		CompletedAt:          ptrToNullTime(p.CompletedAt),
-		CompletedBy:          stringToNullUUID(p.CompletedBy),
-		ReservationExpiresAt: ptrToNullTime(p.ReservationExpiresAt),
-		Version:              p.Version,
-		Status_2:             db.TaskNodeStatus(p.ExpectedCurrentStatus),
-	}, nil
-}
-
-// FromDomainGetNextTaskNodeParams converts types.GetNextTaskNodeParams to db.GetNextTaskNodeParams.
-func FromDomainGetNextTaskNodeParams(p types.GetNextTaskNodeParams) (db.GetNextTaskNodeParams, error) {
-	id, err := stringToUUID(p.NodeID)
-	if err != nil {
-		return db.GetNextTaskNodeParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.GetNextTaskNodeParams{TaskID: p.TaskID, ID: id}, nil
-}
-
-// FromDomainGetPrevTaskNodeParams converts types.GetPrevTaskNodeParams to db.GetPrevTaskNodeParams.
-func FromDomainGetPrevTaskNodeParams(p types.GetPrevTaskNodeParams) (db.GetPrevTaskNodeParams, error) {
-	id, err := stringToUUID(p.NodeID)
-	if err != nil {
-		return db.GetPrevTaskNodeParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.GetPrevTaskNodeParams{TaskID: p.TaskID, ID: id}, nil
-}
-
-// FromDomainGetPrevStandardNodeAssigneeParams converts types.GetPrevStandardNodeAssigneeParams to db.GetPrevStandardNodeAssigneeParams.
-func FromDomainGetPrevStandardNodeAssigneeParams(p types.GetPrevStandardNodeAssigneeParams) (db.GetPrevStandardNodeAssigneeParams, error) {
-	id, err := stringToUUID(p.NodeID)
-	if err != nil {
-		return db.GetPrevStandardNodeAssigneeParams{}, fmt.Errorf("convert node id: %w", err)
-	}
-	return db.GetPrevStandardNodeAssigneeParams{TaskID: p.TaskID, ID: id}, nil
 }
 
 // ===========================================================================
@@ -1202,18 +1107,15 @@ func FromDomainCreateCommunityWorkflowParams(p types.CreateCommunityWorkflowPara
 // ToDomainWorkflowTemplate converts db.WorkflowTemplate to types.WorkflowTemplate.
 func ToDomainWorkflowTemplate(t db.WorkflowTemplate) (types.WorkflowTemplate, error) {
 	return types.WorkflowTemplate{
-		ID:              t.ID.String(),
-		WorkspaceID:     t.WorkspaceID.String(),
-		Name:            t.Name,
-		Description:     t.Description.String,
-		IsBuiltin:       t.IsBuiltin,
-		TriggerType:     string(t.TriggerType),
-		TriggerConfig:   t.TriggerConfig,
-		TriggerEnabled:  t.TriggerEnabled,
-		NextRunAt:       nullTimeToPtr(t.NextRunAt),
-		LastTriggeredAt: nullTimeToPtr(t.LastTriggeredAt),
-		CreatedAt:       t.CreatedAt,
-		UpdatedAt:       t.UpdatedAt,
+		ID:          t.ID.String(),
+		WorkspaceID: t.WorkspaceID.String(),
+		Name:        t.Name,
+		Description: t.Description.String,
+		IsBuiltin:   t.IsBuiltin,
+		Version:     int(t.Version),
+		Enabled:     t.Enabled,
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
 	}, nil
 }
 
@@ -1233,21 +1135,15 @@ func ToDomainWorkflowTemplateSlice(ts []db.WorkflowTemplate) ([]types.WorkflowTe
 // ToDomainWorkflowTemplateNode converts db.WorkflowTemplateNode to types.WorkflowTemplateNode.
 func ToDomainWorkflowTemplateNode(n db.WorkflowTemplateNode) (types.WorkflowTemplateNode, error) {
 	return types.WorkflowTemplateNode{
-		ID:              n.ID.String(),
-		TemplateID:      n.TemplateID.String(),
-		Name:            n.Name,
-		Description:     n.Description.String,
-		SortOrder:       int(n.SortOrder),
-		NodeType:        string(n.NodeType),
-		AssigneeType:    string(n.AssigneeType),
-		AssigneeID:      nullUUIDToString(n.AssigneeID),
-		TimeoutMinutes:  int(n.TimeoutMinutes),
-		ReadonlyDirs:    nullRawToRaw(n.ReadonlyDirs),
-		FullControlDirs: nullRawToRaw(n.FullControlDirs),
-		Artifact:        nullRawToRaw(n.Artifact),
-		DependsOn:       uuidSliceToStringSlice(n.DependsOn),
-		MaxRejectCycles: int(n.MaxRejectCycles),
-		CreatedAt:       n.CreatedAt,
+		ID:         n.ID.String(),
+		TemplateID: n.TemplateID.String(),
+		Name:       n.Name,
+		SortOrder:  int(n.SortOrder),
+		TypeKey:    n.TypeKey,
+		Config:     n.Config,
+		UIConfig:   n.UiConfig,
+		CreatedAt:  n.CreatedAt,
+		UpdatedAt:  n.UpdatedAt,
 	}, nil
 }
 
@@ -1264,6 +1160,100 @@ func ToDomainWorkflowTemplateNodeSlice(ns []db.WorkflowTemplateNode) ([]types.Wo
 	return out, nil
 }
 
+// ToDomainWorkflowTemplateEdge converts db.WorkflowTemplateEdge to types.WorkflowTemplateEdge.
+func ToDomainWorkflowTemplateEdge(e db.WorkflowTemplateEdge) (types.WorkflowTemplateEdge, error) {
+	return types.WorkflowTemplateEdge{
+		ID:           e.ID.String(),
+		TemplateID:   e.TemplateID.String(),
+		SourceNodeID: e.SourceNodeID.String(),
+		SourcePort:   e.SourcePort,
+		TargetNodeID: e.TargetNodeID.String(),
+		TargetPort:   e.TargetPort,
+		Label:        e.Label,
+		SortOrder:    int(e.SortOrder),
+		Config:       e.Config,
+		CreatedAt:    e.CreatedAt,
+	}, nil
+}
+
+// ToDomainWorkflowTemplateEdgeSlice converts []db.WorkflowTemplateEdge to []types.WorkflowTemplateEdge.
+func ToDomainWorkflowTemplateEdgeSlice(es []db.WorkflowTemplateEdge) ([]types.WorkflowTemplateEdge, error) {
+	out := make([]types.WorkflowTemplateEdge, 0, len(es))
+	for _, e := range es {
+		d, err := ToDomainWorkflowTemplateEdge(e)
+		if err != nil {
+			return nil, fmt.Errorf("convert workflow template edge: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// ===========================================================================
+// TaskEdge / TaskNodeAttempt domain (workflow run engine)
+// ===========================================================================
+
+// ToDomainTaskEdge converts db.TaskEdge to types.TaskEdge.
+func ToDomainTaskEdge(e db.TaskEdge) (types.TaskEdge, error) {
+	return types.TaskEdge{
+		ID:           e.ID.String(),
+		TaskID:       e.TaskID,
+		SourceNodeID: e.SourceNodeID.String(),
+		SourcePort:   e.SourcePort,
+		TargetNodeID: e.TargetNodeID.String(),
+		TargetPort:   e.TargetPort,
+		Label:        e.Label,
+		Config:       e.Config,
+		Resolution:   string(e.Resolution),
+		ResolvedAt:   nullTimeToPtr(e.ResolvedAt),
+		CreatedAt:    e.CreatedAt,
+	}, nil
+}
+
+// ToDomainTaskEdgeSlice converts []db.TaskEdge to []types.TaskEdge.
+func ToDomainTaskEdgeSlice(es []db.TaskEdge) ([]types.TaskEdge, error) {
+	out := make([]types.TaskEdge, 0, len(es))
+	for _, e := range es {
+		d, err := ToDomainTaskEdge(e)
+		if err != nil {
+			return nil, fmt.Errorf("convert task edge: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// ToDomainTaskNodeAttempt converts db.TaskNodeAttempt to types.TaskNodeAttempt.
+func ToDomainTaskNodeAttempt(a db.TaskNodeAttempt) (types.TaskNodeAttempt, error) {
+	return types.TaskNodeAttempt{
+		ID:           a.ID.String(),
+		TaskID:       a.TaskID,
+		TaskNodeID:   a.TaskNodeID.String(),
+		AttemptNo:    a.AttemptNo,
+		ExecutorKind: string(a.ExecutorKind),
+		ExecutorID:   a.ExecutorID,
+		Status:       string(a.Status),
+		Input:        a.Input,
+		Output:       a.Output,
+		Error:        a.Error,
+		StartedAt:    a.StartedAt,
+		CompletedAt:  nullTimeToPtr(a.CompletedAt),
+	}, nil
+}
+
+// ToDomainTaskNodeAttemptSlice converts []db.TaskNodeAttempt to []types.TaskNodeAttempt.
+func ToDomainTaskNodeAttemptSlice(as []db.TaskNodeAttempt) ([]types.TaskNodeAttempt, error) {
+	out := make([]types.TaskNodeAttempt, 0, len(as))
+	for _, a := range as {
+		d, err := ToDomainTaskNodeAttempt(a)
+		if err != nil {
+			return nil, fmt.Errorf("convert task node attempt: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
 // FromDomainCreateWorkflowTemplateParams converts types.CreateWorkflowTemplateParams to db.CreateWorkflowTemplateParams.
 func FromDomainCreateWorkflowTemplateParams(p types.CreateWorkflowTemplateParams) (db.CreateWorkflowTemplateParams, error) {
 	ws, err := stringToUUID(p.WorkspaceID)
@@ -1271,34 +1261,28 @@ func FromDomainCreateWorkflowTemplateParams(p types.CreateWorkflowTemplateParams
 		return db.CreateWorkflowTemplateParams{}, fmt.Errorf("convert workspace id: %w", err)
 	}
 	return db.CreateWorkflowTemplateParams{
-		WorkspaceID:     ws,
-		Name:            p.Name,
-		Description:     ptrToNullString(p.Description),
-		IsBuiltin:       p.IsBuiltin,
-		TriggerType:     db.WorkflowTriggerType(p.TriggerType),
-		TriggerConfig:   p.TriggerConfig,
-		TriggerEnabled:  p.TriggerEnabled,
-		NextRunAt:       ptrToNullTime(p.NextRunAt),
-		LastTriggeredAt: ptrToNullTime(p.LastTriggeredAt),
+		WorkspaceID: ws,
+		Name:        p.Name,
+		Description: ptrToNullString(p.Description),
+		IsBuiltin:   p.IsBuiltin,
+		Version:     p.Version,
+		Enabled:     p.Enabled,
 	}, nil
 }
 
-// FromDomainUpdateWorkflowTemplateParams converts types.UpdateWorkflowTemplateParams to db.UpdateWorkflowTemplateParams.
+// FromDomainUpdateWorkflowTemplateParams converts types.UpdateWorkflowTemplateParams to db.UpdateWorkflowTemplateGraphParams.
 //
 // Note: the db version ID is uuid.UUID; the domain version ID is string.
-func FromDomainUpdateWorkflowTemplateParams(p types.UpdateWorkflowTemplateParams) (db.UpdateWorkflowTemplateParams, error) {
+func FromDomainUpdateWorkflowTemplateParams(p types.UpdateWorkflowTemplateParams) (db.UpdateWorkflowTemplateGraphParams, error) {
 	id, err := stringToUUID(p.ID)
 	if err != nil {
-		return db.UpdateWorkflowTemplateParams{}, fmt.Errorf("convert id: %w", err)
+		return db.UpdateWorkflowTemplateGraphParams{}, fmt.Errorf("convert id: %w", err)
 	}
-	return db.UpdateWorkflowTemplateParams{
-		ID:             id,
-		Name:           p.Name,
-		Description:    ptrToNullString(p.Description),
-		TriggerType:    db.WorkflowTriggerType(p.TriggerType),
-		TriggerConfig:  p.TriggerConfig,
-		TriggerEnabled: p.TriggerEnabled,
-		NextRunAt:      ptrToNullTime(p.NextRunAt),
+	return db.UpdateWorkflowTemplateGraphParams{
+		ID:          id,
+		Name:        p.Name,
+		Description: ptrToNullString(p.Description),
+		Enabled:     p.Enabled,
 	}, nil
 }
 
@@ -1313,53 +1297,79 @@ func FromDomainCreateTemplateNodeParams(p types.CreateTemplateNodeParams) (db.Cr
 			return db.CreateTemplateNodeParams{}, fmt.Errorf("convert template id: %w", err)
 		}
 	}
-	var assigneeID uuid.NullUUID
-	if p.AssigneeID != nil {
-		if u, err := uuid.Parse(*p.AssigneeID); err == nil {
-			assigneeID = uuid.NullUUID{UUID: u, Valid: true}
-		}
-	}
-	dependsOn, err := stringSliceToUUIDSlice(p.DependsOn)
-	if err != nil {
-		return db.CreateTemplateNodeParams{}, fmt.Errorf("convert depends on: %w", err)
-	}
 	var nodeID uuid.NullUUID
 	if p.ID != nil {
-		if u, err := uuid.Parse(*p.ID); err == nil {
-			nodeID = uuid.NullUUID{UUID: u, Valid: true}
-		} else {
+		u, err := uuid.Parse(*p.ID)
+		if err != nil {
 			return db.CreateTemplateNodeParams{}, fmt.Errorf("convert template node id: %w", err)
 		}
+		nodeID = uuid.NullUUID{UUID: u, Valid: true}
+	}
+	// config/ui_config 是 NOT NULL 列（schema 默认 '{}'），显式插入绕过表默认值，
+	// 缺省时按 schema 默认补 '{}'
+	config := p.Config
+	if len(config) == 0 {
+		config = json.RawMessage(`{}`)
+	}
+	uiConfig := p.UIConfig
+	if len(uiConfig) == 0 {
+		uiConfig = json.RawMessage(`{}`)
 	}
 	return db.CreateTemplateNodeParams{
-		NodeID:          nodeID,
-		TemplateID:      tplID,
-		Name:            p.Name,
-		Description:     ptrToNullString(p.Description),
-		SortOrder:       int32(p.SortOrder),
-		NodeType:        db.NodeType(p.NodeType),
-		AssigneeType:    db.AssigneeType(p.AssigneeType),
-		AssigneeID:      assigneeID,
-		TimeoutMinutes:  int32(p.TimeoutMinutes),
-		MaxRejectCycles: int32(p.MaxRejectCycles),
-		ReadonlyDirs:    rawToNullRaw(p.ReadonlyDirs),
-		FullControlDirs: rawToNullRaw(p.FullControlDirs),
-		Artifact:        rawToNullRaw(p.Artifact),
-		DependsOn:       dependsOn,
+		NodeID:     nodeID,
+		TemplateID: tplID,
+		Name:       p.Name,
+		SortOrder:  p.SortOrder,
+		TypeKey:    p.TypeKey,
+		Config:     config,
+		UiConfig:   uiConfig,
 	}, nil
 }
 
-// FromDomainCreateTemplateNodeParamsSlice batch converts []types.CreateTemplateNodeParams to []db.CreateTemplateNodeParams.
-func FromDomainCreateTemplateNodeParamsSlice(ps []types.CreateTemplateNodeParams) ([]db.CreateTemplateNodeParams, error) {
-	out := make([]db.CreateTemplateNodeParams, 0, len(ps))
-	for _, p := range ps {
-		d, err := FromDomainCreateTemplateNodeParams(p)
+// FromDomainCreateTemplateEdgeParams converts types.CreateTemplateEdgeParams to db.CreateTemplateEdgeParams.
+func FromDomainCreateTemplateEdgeParams(p types.CreateTemplateEdgeParams) (db.CreateTemplateEdgeParams, error) {
+	// TemplateID allows empty: the edge may be backfilled with TemplateID after the template is created within the transaction
+	var tplID uuid.UUID
+	if p.TemplateID != "" {
+		var err error
+		tplID, err = stringToUUID(p.TemplateID)
 		if err != nil {
-			return nil, fmt.Errorf("convert create template node params: %w", err)
+			return db.CreateTemplateEdgeParams{}, fmt.Errorf("convert template id: %w", err)
 		}
-		out = append(out, d)
 	}
-	return out, nil
+	sourceID, err := stringToUUID(p.SourceNodeID)
+	if err != nil {
+		return db.CreateTemplateEdgeParams{}, fmt.Errorf("convert source node id: %w", err)
+	}
+	targetID, err := stringToUUID(p.TargetNodeID)
+	if err != nil {
+		return db.CreateTemplateEdgeParams{}, fmt.Errorf("convert target node id: %w", err)
+	}
+	var edgeID uuid.NullUUID
+	if p.ID != nil {
+		u, err := uuid.Parse(*p.ID)
+		if err != nil {
+			return db.CreateTemplateEdgeParams{}, fmt.Errorf("convert template edge id: %w", err)
+		}
+		edgeID = uuid.NullUUID{UUID: u, Valid: true}
+	}
+	// config 是 NOT NULL 列（schema 默认 '{}'），显式插入绕过表默认值，
+	// 缺省时按 schema 默认补 '{}'
+	config := p.Config
+	if len(config) == 0 {
+		config = json.RawMessage(`{}`)
+	}
+	return db.CreateTemplateEdgeParams{
+		EdgeID:       edgeID,
+		TemplateID:   tplID,
+		SourceNodeID: sourceID,
+		SourcePort:   p.SourcePort,
+		TargetNodeID: targetID,
+		TargetPort:   p.TargetPort,
+		Label:        p.Label,
+		SortOrder:    p.SortOrder,
+		Config:       config,
+	}, nil
 }
 
 // ===========================================================================
@@ -1680,51 +1690,6 @@ func fromDomainUpdateMcpServerStatusParams(p types.UpdateMcpServerStatusParams) 
 		ID:     id,
 		Status: p.Status,
 	}, nil
-}
-
-// ToDomainGetInProgressNodesByAgentRow converts db.GetInProgressNodesByAgentRow to types.GetInProgressNodesByAgentRow.
-func ToDomainGetInProgressNodesByAgentRow(r db.GetInProgressNodesByAgentRow) (types.GetInProgressNodesByAgentRow, error) {
-	return types.GetInProgressNodesByAgentRow{
-		ID:                   r.ID.String(),
-		TaskID:               r.TaskID,
-		Name:                 r.Name,
-		Description:          r.Description.String,
-		SortOrder:            r.SortOrder,
-		NodeType:             string(r.NodeType),
-		Status:               string(r.Status),
-		AssigneeType:         string(r.AssigneeType),
-		AssigneeID:           nullUUIDToString(r.AssigneeID),
-		ReservedForAgentID:   nullUUIDToString(r.ReservedForAgentID),
-		RejectCount:          r.RejectCount,
-		MaxRejectCycles:      r.MaxRejectCycles,
-		TimeoutMinutes:       r.TimeoutMinutes,
-		Version:              r.Version,
-		CompletedAt:          nullTimeToPtr(r.CompletedAt),
-		CompletedBy:          nullUUIDToString(r.CompletedBy),
-		Summary:              r.Summary,
-		PreviousSummary:      r.PreviousSummary,
-		ReservationExpiresAt: nullTimeToPtr(r.ReservationExpiresAt),
-		ReadonlyDirs:         nullRawToRaw(r.ReadonlyDirs),
-		FullControlDirs:      nullRawToRaw(r.FullControlDirs),
-		DependsOn:            uuidSliceToStringSlice(r.DependsOn),
-		CreatedAt:            r.CreatedAt,
-		UpdatedAt:            r.UpdatedAt,
-		ProjectID:            r.ProjectID.String(),
-	}, nil
-}
-
-
-// ToDomainGetInProgressNodesByAgentRowSlice converts []db.GetInProgressNodesByAgentRow to []types.GetInProgressNodesByAgentRow.
-func ToDomainGetInProgressNodesByAgentRowSlice(rs []db.GetInProgressNodesByAgentRow) ([]types.GetInProgressNodesByAgentRow, error) {
-	out := make([]types.GetInProgressNodesByAgentRow, 0, len(rs))
-	for _, r := range rs {
-		d, err := ToDomainGetInProgressNodesByAgentRow(r)
-		if err != nil {
-			return nil, fmt.Errorf("convert in-progress nodes row: %w", err)
-		}
-		out = append(out, d)
-	}
-	return out, nil
 }
 
 // ToDomainProjectMember converts db.ProjectMember to types.ProjectMember.
@@ -2093,103 +2058,8 @@ func ToDomainGetTemplateStatsRow(r db.GetTemplateStatsRow) types.GetTemplateStat
 	case int64:
 		avgCompletion = float64(v)
 	}
-	var rejectRate float64
-	switch v := r.RejectRate.(type) {
-	case float64:
-		rejectRate = v
-	case int64:
-		rejectRate = float64(v)
-	}
 	return types.GetTemplateStatsRow{
 		UsageCount:           r.UsageCount,
 		AvgCompletionSeconds: avgCompletion,
-		RejectRate:           rejectRate,
 	}
-}
-
-// ToDomainWorkflowTriggerRun converts db.WorkflowTriggerRun to types.WorkflowTriggerRun.
-func ToDomainWorkflowTriggerRun(r db.WorkflowTriggerRun) (types.WorkflowTriggerRun, error) {
-	return types.WorkflowTriggerRun{
-		ID:                 r.ID.String(),
-		WorkspaceID:        r.WorkspaceID.String(),
-		ProjectID:          r.ProjectID.String(),
-		WorkflowTemplateID: r.WorkflowTemplateID.String(),
-		TriggerType:        string(r.TriggerType),
-		ExternalKey:        r.ExternalKey,
-		Status:             r.Status,
-		TaskID:             nullInt32ToPtr(r.TaskID),
-		Payload:            r.Payload,
-		Error:              r.Error,
-		CreatedAt:          r.CreatedAt,
-	}, nil
-}
-
-// FromDomainCreateWorkflowTriggerRunParams converts domain params to db params.
-func FromDomainCreateWorkflowTriggerRunParams(p types.CreateWorkflowTriggerRunParams) (db.CreateWorkflowTriggerRunParams, error) {
-	wsID, err := stringToUUID(p.WorkspaceID)
-	if err != nil {
-		return db.CreateWorkflowTriggerRunParams{}, fmt.Errorf("convert workspace id: %w", err)
-	}
-	projID, err := stringToUUID(p.ProjectID)
-	if err != nil {
-		return db.CreateWorkflowTriggerRunParams{}, fmt.Errorf("convert project id: %w", err)
-	}
-	tplID, err := stringToUUID(p.WorkflowTemplateID)
-	if err != nil {
-		return db.CreateWorkflowTriggerRunParams{}, fmt.Errorf("convert template id: %w", err)
-	}
-	return db.CreateWorkflowTriggerRunParams{
-		WorkspaceID:        wsID,
-		ProjectID:          projID,
-		WorkflowTemplateID: tplID,
-		TriggerType:        db.WorkflowTriggerType(p.TriggerType),
-		ExternalKey:        p.ExternalKey,
-		Status:             p.Status,
-		Payload:            p.Payload,
-	}, nil
-}
-
-// FromDomainMarkWorkflowTriggerRunCompletedParams converts domain params to db params.
-func FromDomainMarkWorkflowTriggerRunCompletedParams(p types.MarkWorkflowTriggerRunCompletedParams) (db.MarkWorkflowTriggerRunCompletedParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.MarkWorkflowTriggerRunCompletedParams{}, fmt.Errorf("convert id: %w", err)
-	}
-	return db.MarkWorkflowTriggerRunCompletedParams{
-		ID:     id,
-		TaskID: ptrToNullInt32(p.TaskID),
-	}, nil
-}
-
-// FromDomainMarkWorkflowTriggerRunFailedParams converts domain params to db params.
-func FromDomainMarkWorkflowTriggerRunFailedParams(p types.MarkWorkflowTriggerRunFailedParams) (db.MarkWorkflowTriggerRunFailedParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.MarkWorkflowTriggerRunFailedParams{}, fmt.Errorf("convert id: %w", err)
-	}
-	return db.MarkWorkflowTriggerRunFailedParams{
-		ID:    id,
-		Error: p.Error,
-	}, nil
-}
-
-// FromDomainListDueScheduledWorkflowTemplatesParams converts domain params to db params.
-func FromDomainListDueScheduledWorkflowTemplatesParams(p types.ListDueScheduledWorkflowTemplatesParams) (db.ListDueScheduledWorkflowTemplatesParams, error) {
-	return db.ListDueScheduledWorkflowTemplatesParams{
-		NextRunAt: ptrToNullTime(p.NextRunAt),
-		Limit:     p.Limit,
-	}, nil
-}
-
-// FromDomainUpdateWorkflowTemplateTriggerScheduleParams converts domain params to db params.
-func FromDomainUpdateWorkflowTemplateTriggerScheduleParams(p types.UpdateWorkflowTemplateTriggerScheduleParams) (db.UpdateWorkflowTemplateTriggerScheduleParams, error) {
-	id, err := stringToUUID(p.ID)
-	if err != nil {
-		return db.UpdateWorkflowTemplateTriggerScheduleParams{}, fmt.Errorf("convert id: %w", err)
-	}
-	return db.UpdateWorkflowTemplateTriggerScheduleParams{
-		ID:              id,
-		NextRunAt:       ptrToNullTime(p.NextRunAt),
-		LastTriggeredAt: ptrToNullTime(p.LastTriggeredAt),
-	}, nil
 }

@@ -19,6 +19,7 @@ package server
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,14 @@ type Config struct {
 	ReadTimeout time.Duration
 	// WriteTimeout is the HTTP server write timeout, default 60 seconds.
 	WriteTimeout time.Duration
+	// GitHubAPIURL is the GitHub REST API root used by workflow GitHub
+	// integrations (TEAMS_GITHUB_API_URL), default https://api.github.com.
+	// Tests inject an httptest server address here.
+	GitHubAPIURL string
+	// HTTPNodeAllowHTTP permits workflow HTTP nodes to target plain http://
+	// URLs (TEAMS_HTTP_NODE_ALLOW_HTTP). Default off: action.http only accepts
+	// https:// unless the deployment explicitly opts in.
+	HTTPNodeAllowHTTP bool
 }
 
 // LoadConfig reads configuration from TEAMS_-prefixed environment variables.
@@ -60,18 +69,20 @@ type Config struct {
 //   - Config: the loaded configuration struct
 func LoadConfig() Config {
 	return Config{
-		Port:           envInt("TEAMS_PORT", 8080),
-		DatabaseURL:    envStr("TEAMS_DATABASE_URL", "postgres://postgres:teammate@localhost:15432/teammate?sslmode=disable"),
-		RedisURL:       envStr("TEAMS_REDIS_URL", "redis://localhost:16379/0"),
-		JWTSecret:      envStr("TEAMS_JWT_SECRET", "dev-secret-change-me"),
-		AllowedOrigins: envStr("TEAMS_ALLOWED_ORIGINS", "*"),
-		BaseURL:        envStr("TEAMS_BASE_URL", "http://localhost:8080"),
-		GitHubClientID: envStr("TEAMS_GITHUB_CLIENT_ID", ""),
-		GitHubSecret:   envStr("TEAMS_GITHUB_SECRET", ""),
-		GoogleClientID: envStr("TEAMS_GOOGLE_CLIENT_ID", ""),
-		GoogleSecret:   envStr("TEAMS_GOOGLE_SECRET", ""),
-		ReadTimeout:    envDuration("TEAMS_READ_TIMEOUT", 15*time.Second),
-		WriteTimeout:   envDuration("TEAMS_WRITE_TIMEOUT", 60*time.Second),
+		Port:              envInt("TEAMS_PORT", 8080),
+		DatabaseURL:       envStr("TEAMS_DATABASE_URL", "postgres://postgres:teammate@localhost:15432/teammate?sslmode=disable"),
+		RedisURL:          envStr("TEAMS_REDIS_URL", "redis://localhost:16379/0"),
+		JWTSecret:         envStr("TEAMS_JWT_SECRET", "dev-secret-change-me"),
+		AllowedOrigins:    envStr("TEAMS_ALLOWED_ORIGINS", "*"),
+		BaseURL:           envStr("TEAMS_BASE_URL", "http://localhost:8080"),
+		GitHubClientID:    envStr("TEAMS_GITHUB_CLIENT_ID", ""),
+		GitHubSecret:      envStr("TEAMS_GITHUB_SECRET", ""),
+		GoogleClientID:    envStr("TEAMS_GOOGLE_CLIENT_ID", ""),
+		GoogleSecret:      envStr("TEAMS_GOOGLE_SECRET", ""),
+		ReadTimeout:       envDuration("TEAMS_READ_TIMEOUT", 15*time.Second),
+		WriteTimeout:      envDuration("TEAMS_WRITE_TIMEOUT", 60*time.Second),
+		GitHubAPIURL:      envStr("TEAMS_GITHUB_API_URL", ""),
+		HTTPNodeAllowHTTP: envBool("TEAMS_HTTP_NODE_ALLOW_HTTP", false),
 	}
 }
 
@@ -123,4 +134,19 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+// envBool reads a boolean value from the environment variable, returning fallback
+// when unset. Only the exact values "1", "true", "yes" (case-insensitive) count as true.
+func envBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }

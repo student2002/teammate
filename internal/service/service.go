@@ -19,6 +19,7 @@ import (
 	"github.com/teammate/server/internal/clock"
 	"github.com/teammate/server/internal/store"
 	"github.com/teammate/server/internal/types"
+	"github.com/teammate/server/internal/workflow"
 )
 
 // EventPublisher defines the event publishing interface, used to push SSE events to the Agent runtime.
@@ -38,12 +39,21 @@ func nextSSEEventID() string {
 }
 
 // Service holds all data storage and infrastructure connections, providing business logic orchestration capabilities.
-// As the unified entry point for all sub-services (AgentService, TaskService, NodeService, etc.),
+// As the unified entry point for all sub-services (AgentService, TaskService, WorkflowService, etc.),
 // it manages the Store, EventPublisher, Redis, and database connections.
 type Service struct {
 	Store *store.Store   // data access layer, encapsulating sqlc-generated queries
 	Hub   EventPublisher // SSE event publisher, managing Agent connections and event broadcasting
 	Redis *redis.Client  // Redis client, used for caching, distributed locks, and event buffering
+	// WorkflowRegistry holds the V2 node catalog; it is the trust boundary for
+	// template graph validation and node config checks.
+	WorkflowRegistry *workflow.Registry
+	// GitHubAPIURL is the GitHub REST API root used by the GitHub client
+	// (TEAMS_GITHUB_API_URL). Empty selects the client's public default.
+	GitHubAPIURL string
+	// HTTPNodeAllowHTTP permits action.http nodes to target plain http:// URLs
+	// (TEAMS_HTTP_NODE_ALLOW_HTTP). Default off: only https:// is accepted.
+	HTTPNodeAllowHTTP bool
 }
 
 // New creates a new Service instance.
@@ -57,9 +67,10 @@ type Service struct {
 //   - *Service: the initialized Service instance
 func New(pgDB *sql.DB, hub EventPublisher, rdb *redis.Client) *Service {
 	return &Service{
-		Store: store.New(pgDB),
-		Hub:   hub,
-		Redis: rdb,
+		Store:            store.New(pgDB),
+		Hub:              hub,
+		Redis:            rdb,
+		WorkflowRegistry: mustBuiltinWorkflowRegistry(),
 	}
 }
 
@@ -67,17 +78,17 @@ func New(pgDB *sql.DB, hub EventPublisher, rdb *redis.Client) *Service {
 // The custom clock allows controlling the passage of time in unit tests.
 func NewWithClock(pgDB *sql.DB, hub EventPublisher, rdb *redis.Client, c clock.Clock) *Service {
 	return &Service{
-		Store: store.NewWithClock(pgDB, c),
-		Hub:   hub,
-		Redis: rdb,
+		Store:            store.NewWithClock(pgDB, c),
+		Hub:              hub,
+		Redis:            rdb,
+		WorkflowRegistry: mustBuiltinWorkflowRegistry(),
 	}
 }
 
 // publishToProject broadcasts an SSE event to the agent members of the specified project (project-granularity delivery).
 // Difference from workspace broadcasting: it only delivers to the online runtimes of agents that are "members of that project" —
-// non-project members do not receive node notifications (the consumers that claim nodes are the project member agents, see
-// service/node.go Claim's CheckAgentProjectAccess), preventing unrelated Agents from
-// perceiving the existence of tasks within the project.
+// non-project members do not receive node notifications (the consumers that claim nodes are the project member agents),
+// preventing unrelated Agents from perceiving the existence of tasks within the project.
 // If there are no online runtimes, the event is buffered to all runtimes of the member agents (including offline ones),
 // ensuring that runtimes can receive missed events when they come back online (SSE reconnection compensation mechanism).
 // If Hub is nil (e.g. in a test environment), this is a no-op.

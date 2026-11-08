@@ -1,0 +1,21 @@
+{
+  "doc": "Normalized trigger output contract (plan §3.3): stable subset of the GitHub webhook payload. raw keeps the original JSON but is never auto-injected into agent prompts.",
+  "event": "issues",
+  "action": "opened",
+  "delivery_id": "d1000000-0000-4000-8000-000000000001",
+  "repository": {
+    "id": 1,
+    "full_name": "owner/repo",
+    "default_branch": "main"
+  },
+  "sender": { "login": "octocat" },
+  "issue": {
+    "number": 42,
+    "title": "登录页提交后返回 500",
+    "body": "复现步骤：……",
+    "labels": ["bug"],
+    "url": "https://github.com/owner/repo/issues/42"
+  },
+  "pull_request": null,
+  "raw": {}
+}

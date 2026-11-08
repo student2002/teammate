@@ -1,0 +1,15 @@
+{
+  "doc": "agentd execution unit contract (plan §12.6). execution_id is an opaque token agentd echoes back; agentd never sees type_key, ports, edges or retry policy.",
+  "execution_id": "c1000000-0000-4000-8000-000000000001",
+  "execution_kind": "agent",
+  "instruction": "分析 Issue 并完成修复",
+  "input": {
+    "title": "登录页提交后返回 500",
+    "body": "复现步骤：……",
+    "repository": "owner/repo"
+  },
+  "command": null,
+  "timeout_minutes": 60,
+  "readonly_dirs": [],
+  "full_control_dirs": ["."]
+}

@@ -1,13 +1,13 @@
 // board.go provides query operations for board data.
 //
-// The board groups tasks into 4 columns by their current node status:
-//   - pending (pending)
-//   - in_progress (in progress)
-//   - completed (completed)
+// The board groups tasks into columns by their current node status:
+//   - pending (waiting/ready)
+//   - in_progress (running)
+//   - succeeded (completed)
+//   - failed
 //   - manual_intervention (requires manual intervention)
 //
 // A task's column position is determined by the status of its currently active node.
-// The rejected status is uniformly mapped to the manual_intervention column.
 package store
 
 import (
@@ -29,8 +29,8 @@ type BoardColumnTask struct {
 	Type              db.TaskType     `json:"type"`                // task type
 	CurrentNodeName   string          `json:"current_node_name"`   // current node name
 	CurrentNodeStatus string          `json:"current_node_status"` // current node status
-	CurrentNodeType   string          `json:"current_node_type"`   // current node type
-	AssigneeID        interface{}     `json:"assignee_id"`         // current node assignee ID
+	CurrentNodeType   string          `json:"current_node_type"`   // current node type_key
+	AssigneeID        interface{}     `json:"assignee_id"`         // current node reserved agent ID
 }
 
 // BoardColumn represents a column in the board, including the column key and the task list.
@@ -47,8 +47,8 @@ var ColumnDefs = []struct {
 }{
 	{"pending", "Pending"},
 	{"in_progress", "In Progress"},
-	{"rejected", "Rejected"},
-	{"completed", "Completed"},
+	{"succeeded", "Completed"},
+	{"failed", "Failed"},
 	{"manual_intervention", "Manual Intervention Required"},
 }
 
@@ -57,16 +57,16 @@ var ColumnDefs = []struct {
 // Steps:
 //  1. Query all tasks under the project
 //  2. Query all workflow nodes for these tasks
-//  3. For each task, find its currently active node (the first node that is not completed)
+//  3. For each task, find its currently active node (the first node that has not reached a terminal status)
 //  4. Map the node status to the corresponding board column
-//  5. Build and return the 4-column structure
+//  5. Build and return the 5-column structure
 //
 // Parameters:
 //   - ctx: request context
 //   - projectID: project UUID
 //
 // Returns:
-//   - []BoardColumn: 4 board columns, each containing the tasks for the corresponding status
+//   - []BoardColumn: 5 board columns, each containing the tasks for the corresponding status
 //   - error: error returned when the query fails
 func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardColumn, error) {
 	// Get the project's tasks -- query only the columns needed for board display
@@ -104,7 +104,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 
 	// Get all nodes for these tasks
 	nodeRows, err := s.db.QueryContext(ctx, `
-		SELECT tn.task_id, tn.name, tn.node_type, tn.status, tn.assignee_id, tn.sort_order
+		SELECT tn.task_id, tn.name, tn.type_key, tn.status, tn.reserved_for_agent_id, tn.sort_order
 		FROM task_nodes tn
 		WHERE tn.task_id IN (
 			SELECT id FROM tasks WHERE project_id = $1
@@ -117,19 +117,19 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 	defer nodeRows.Close()
 
 	type nodeInfo struct {
-		TaskID     int32
-		Name       string
-		NodeType   db.NodeType
-		Status     db.TaskNodeStatus
-		AssigneeID uuid.NullUUID
-		SortOrder  int32
+		TaskID             int32
+		Name               string
+		TypeKey            string
+		Status             db.TaskNodeStatus
+		ReservedForAgentID uuid.NullUUID
+		SortOrder          int32
 	}
 	nodesByTask := make(map[int32][]nodeInfo)
 	for nodeRows.Next() {
 		var n nodeInfo
 		if scanErr := nodeRows.Scan(
-			&n.TaskID, &n.Name, &n.NodeType,
-			&n.Status, &n.AssigneeID, &n.SortOrder,
+			&n.TaskID, &n.Name, &n.TypeKey,
+			&n.Status, &n.ReservedForAgentID, &n.SortOrder,
 		); scanErr != nil {
 			return nil, fmt.Errorf("scan node row: %w", scanErr)
 		}
@@ -148,9 +148,9 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 	// Group tasks into columns by their current node status
 	for _, t := range tasks {
 		if t.Status == db.TaskStatusCompleted {
-			columnMap["completed"] = append(columnMap["completed"], BoardColumnTask{
+			columnMap["succeeded"] = append(columnMap["succeeded"], BoardColumnTask{
 				ID: t.ID, Title: t.Title, Priority: t.Priority, Type: t.Type,
-				CurrentNodeName: "Completed", CurrentNodeStatus: "completed", CurrentNodeType: "", AssigneeID: nil,
+				CurrentNodeName: "Completed", CurrentNodeStatus: "succeeded", CurrentNodeType: "", AssigneeID: nil,
 			})
 			continue
 		}
@@ -162,7 +162,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 		if len(nodes) == 0 {
 			columnMap["pending"] = append(columnMap["pending"], BoardColumnTask{
 				ID: t.ID, Title: t.Title, Priority: t.Priority, Type: t.Type,
-				CurrentNodeName: "", CurrentNodeStatus: "pending", CurrentNodeType: "", AssigneeID: nil,
+				CurrentNodeName: "", CurrentNodeStatus: "waiting", CurrentNodeType: "", AssigneeID: nil,
 			})
 			continue
 		}
@@ -170,7 +170,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 		var currentNode nodeInfo
 		found := false
 		for _, n := range nodes {
-			if n.Status != db.TaskNodeStatusCompleted {
+			if n.Status != db.TaskNodeStatusSucceeded {
 				currentNode = n
 				found = true
 				break
@@ -182,15 +182,15 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 
 		columnKey := MapNodeStatusToColumn(currentNode.Status)
 
-		var assigneeID interface{}
-		if currentNode.AssigneeID.Valid {
-			assigneeID = currentNode.AssigneeID.UUID.String()
+		var reservedID interface{}
+		if currentNode.ReservedForAgentID.Valid {
+			reservedID = currentNode.ReservedForAgentID.UUID.String()
 		}
 
 		columnMap[columnKey] = append(columnMap[columnKey], BoardColumnTask{
 			ID: t.ID, Title: t.Title, Priority: t.Priority, Type: t.Type,
 			CurrentNodeName: currentNode.Name, CurrentNodeStatus: string(currentNode.Status),
-			CurrentNodeType: string(currentNode.NodeType), AssigneeID: assigneeID,
+			CurrentNodeType: currentNode.TypeKey, AssigneeID: reservedID,
 		})
 	}
 
@@ -207,7 +207,7 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 	return result, nil
 }
 
-// MapNodeStatusToColumn maps a node status to a board column key; review nodes and standard nodes are merged into the same column.
+// MapNodeStatusToColumn maps a V2 node status to a board column key.
 //
 // Parameters:
 //   - status: node status
@@ -216,14 +216,14 @@ func (s *Store) GetBoardData(ctx context.Context, projectID uuid.UUID) ([]BoardC
 //   - string: board column key
 func MapNodeStatusToColumn(status db.TaskNodeStatus) string {
 	switch status {
-	case db.TaskNodeStatusPending:
+	case db.TaskNodeStatusWaiting, db.TaskNodeStatusReady:
 		return "pending"
-	case db.TaskNodeStatusInProgress:
+	case db.TaskNodeStatusRunning:
 		return "in_progress"
-	case db.TaskNodeStatusCompleted:
-		return "completed"
-	case db.TaskNodeStatusRejected:
-		return "rejected"
+	case db.TaskNodeStatusSucceeded:
+		return "succeeded"
+	case db.TaskNodeStatusFailed:
+		return "failed"
 	case db.TaskNodeStatusManualIntervention:
 		return "manual_intervention"
 	default:

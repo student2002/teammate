@@ -80,11 +80,6 @@ type GetCompletedTasksOlderThanParams struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// GetInProgressNodesByAgentParams is the domain parameter struct for querying in-progress nodes for an Agent.
-type GetInProgressNodesByAgentParams struct {
-	AgentID string `json:"agent_id"`
-}
-
 // IsAgentProjectMemberParams is the domain parameter struct for determining whether an Agent is a project member.
 type IsAgentProjectMemberParams struct {
 	ProjectID string `json:"project_id"`

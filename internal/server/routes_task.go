@@ -1,4 +1,4 @@
-// routes_task.go registers task-level routes: nodes, comments, token usage, review, subtasks, logs, Git branches.
+// routes_task.go registers task-level routes: comments, token usage, subtasks, logs, Git branches.
 package server
 
 import (
@@ -6,6 +6,7 @@ import (
 
 	"github.com/teammate/server/internal/server/handler"
 	svcmw "github.com/teammate/server/internal/server/middleware"
+	"github.com/teammate/server/internal/types"
 )
 
 // registerTaskRoutes registers task-scoped routes.
@@ -16,20 +17,11 @@ func (reg *routeRegistrar) registerTaskRoutes(r chi.Router) {
 	r.Route("/tasks/{taskId}", func(r chi.Router) {
 		r.Use(svcmw.TaskAccessMiddlewareWithChecker(reg.taskChk, reg.wsChk))
 
-		// Nodes (with node-level workspace check)
-		r.Route("/nodes", func(r chi.Router) {
-			r.Use(svcmw.NodeAccessMiddlewareWithChecker(reg.nodeChk, reg.wsChk))
-			r.Mount("/", handler.NewNodeHandler(svc).Routes())
-		})
-
 		// Comments
 		r.Mount("/comments", handler.NewCommentHandler(svc).Routes())
 
 		// Token usage
 		r.Mount("/token-usage", handler.NewTokenUsageHandler(svc).Routes())
-
-		// Review (self-review check)
-		r.Mount("/review", handler.NewReviewHandler(svc).Routes())
 
 		// Subtasks
 		r.Mount("/subtasks", handler.NewSubtaskHandler(svc).Routes())
@@ -42,5 +34,16 @@ func (reg *routeRegistrar) registerTaskRoutes(r chi.Router) {
 
 		// Git branch update (reported by agentd after git init)
 		r.Put("/git-branch", handler.NewUpdateGitBranchHandler(svc))
+
+		// Workflow run view (V2 engine)
+		r.Get("/graph", handler.NewWorkflowRunHandler(svc).GetTaskGraph)
+
+		// Node execution protocol (S4 agentd): discovery, claim and receipts.
+		// Agents need task:execute (granted by default); human claimants are
+		// narrowed to member+ inside the handler.
+		r.Group(func(r chi.Router) {
+			r.Use(svcmw.RequireAccessWithChecker([]string{"owner", "admin", "member", "viewer"}, types.PermTaskExecute, reg.agentPerm))
+			r.Mount("/nodes", handler.NewNodeExecutionHandler(svc).Routes())
+		})
 	})
 }

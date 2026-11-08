@@ -1,6 +1,6 @@
 -- 001_init.sql
--- Teammate database initialization migration
--- This file is an applied baseline migration: create new 002_*.up.sql for schema changes, do not modify this file
+-- Teammate database initialization migration (workflow V2 target schema)
+-- Schema changes rewrite this file directly and reset dev/acceptance databases (项目未上线,不保留旧结构)
 
 -- ============================================================
 -- 0. Extensions
@@ -15,14 +15,17 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TYPE agent_provider AS ENUM ('claude', 'openclaw', 'opencode', 'atomcode', 'mimocode', 'copilot', 'hermes', 'gemini', 'pi', 'cursor', 'kimi', 'kiro');
 CREATE TYPE agent_status AS ENUM ('online', 'offline', 'busy', 'paused', 'pending');
 CREATE TYPE project_status AS ENUM ('planned', 'active', 'paused', 'completed', 'archived');
-CREATE TYPE node_type AS ENUM ('standard', 'review', 'manual');
-CREATE TYPE assignee_type AS ENUM ('any_agent', 'specific_agent', 'human', 'auto');
-CREATE TYPE workflow_trigger_type AS ENUM ('manual', 'schedule', 'github_issue');
 CREATE TYPE task_type AS ENUM ('story', 'bug', 'task');
 CREATE TYPE task_priority AS ENUM ('urgent', 'high', 'medium', 'low');
-CREATE TYPE task_status AS ENUM ('active', 'completed', 'cancelled');
-CREATE TYPE task_node_status AS ENUM ('pending', 'in_progress', 'completed', 'rejected', 'manual_intervention');
-CREATE TYPE transition_action AS ENUM ('approve', 'reject', 'manual', 'reclaim', 'timeout', 'interrupt_ack');
+-- 任务终态由 flow.end 的入边端口决定:completed / failed
+CREATE TYPE task_status AS ENUM ('active', 'completed', 'failed', 'cancelled');
+-- V2 节点状态机:waiting(等入边/定时/事件) → ready → running → succeeded/failed;skipped 为未激活分支
+CREATE TYPE task_node_status AS ENUM ('waiting', 'ready', 'running', 'succeeded', 'failed', 'skipped', 'cancelled', 'manual_intervention');
+-- 节点状态迁移动作,与 V2 状态机的迁移一一对应
+CREATE TYPE transition_action AS ENUM ('ready', 'start', 'complete', 'fail', 'retry', 'skip', 'cancel', 'manual', 'timeout', 'interrupt_ack');
+CREATE TYPE edge_resolution AS ENUM ('pending', 'activated', 'skipped');
+CREATE TYPE attempt_status AS ENUM ('running', 'succeeded', 'failed', 'cancelled');
+CREATE TYPE executor_kind AS ENUM ('server', 'agentd', 'human');
 CREATE TYPE runtime_status AS ENUM ('online', 'offline', 'error');
 CREATE TYPE daemon_status AS ENUM ('online', 'offline');
 CREATE TYPE memory_type AS ENUM ('architecture', 'command', 'convention', 'decision', 'insight', 'environment');
@@ -104,44 +107,65 @@ CREATE INDEX idx_agents_status ON agents(status);
 CREATE UNIQUE INDEX idx_agents_daemon_name ON agents(daemon_id, name) WHERE daemon_id IS NOT NULL;
 
 -- 3.4 workflow_templates — workflow templates
+-- 触发配置全部进入唯一的 trigger 节点(version 在每次整图保存时 +1)
 CREATE TABLE workflow_templates (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name         VARCHAR(200) NOT NULL,
     description  TEXT DEFAULT '',
     is_builtin   BOOLEAN NOT NULL DEFAULT false,
-    trigger_type workflow_trigger_type NOT NULL DEFAULT 'manual',
-    trigger_config JSONB NOT NULL DEFAULT '{}',
-    trigger_enabled BOOLEAN NOT NULL DEFAULT true,
-    next_run_at TIMESTAMPTZ,
-    last_triggered_at TIMESTAMPTZ,
+    version      INTEGER NOT NULL DEFAULT 1,
+    enabled      BOOLEAN NOT NULL DEFAULT true,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_wf_templates_workspace ON workflow_templates(workspace_id);
-CREATE INDEX idx_wf_templates_due_triggers ON workflow_templates(next_run_at)
-    WHERE trigger_enabled = true AND trigger_type = 'schedule' AND next_run_at IS NOT NULL;
 
 -- 3.5 workflow_template_nodes — template node definitions
+-- type_key 不用数据库 enum(节点目录由 Server registry 持有);ui_config 只存画布位置与折叠态
 CREATE TABLE workflow_template_nodes (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    template_id      UUID NOT NULL REFERENCES workflow_templates(id) ON DELETE CASCADE,
-    name             VARCHAR(200) NOT NULL,
-    description      TEXT DEFAULT '',
-    sort_order       INTEGER NOT NULL,
-    node_type        node_type NOT NULL DEFAULT 'standard',
-    assignee_type    assignee_type NOT NULL DEFAULT 'any_agent',
-    assignee_id      UUID,
-    timeout_minutes  INTEGER NOT NULL DEFAULT 60,
-    max_reject_cycles INTEGER NOT NULL DEFAULT 5,
-    readonly_dirs    JSONB DEFAULT '[]',
-    full_control_dirs JSONB DEFAULT '[]',
-    artifact         JSONB DEFAULT '[]',
-    depends_on       UUID[] DEFAULT '{}',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID NOT NULL REFERENCES workflow_templates(id) ON DELETE CASCADE,
+    name        VARCHAR(200) NOT NULL,
+    sort_order  INTEGER NOT NULL,
+    type_key    TEXT NOT NULL,
+    config      JSONB NOT NULL DEFAULT '{}',
+    ui_config   JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT workflow_template_nodes_template_sort_order_key UNIQUE (template_id, sort_order)
 );
 CREATE INDEX idx_wf_template_nodes_template ON workflow_template_nodes(template_id);
+
+-- 3.5a workflow_template_schedules — 定时触发节点的到期状态
+-- 模板保存时由 Service 同步:trigger.schedule 节点的 interval_minutes 决定
+-- next_run_at;触发由 scheduler 周期扫描,CAS 推进防多实例重复触发。
+-- 无外键:模板删除时应用层清理
+CREATE TABLE workflow_template_schedules (
+    template_id   UUID PRIMARY KEY,
+    project_id    UUID NOT NULL,
+    next_run_at   TIMESTAMPTZ NOT NULL,
+    last_fired_at TIMESTAMPTZ,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_wf_template_schedules_due ON workflow_template_schedules(next_run_at);
+
+-- 3.5b workflow_template_edges — 模板连线:source 端口激活时唤醒 target
+CREATE TABLE workflow_template_edges (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id    UUID NOT NULL REFERENCES workflow_templates(id) ON DELETE CASCADE,
+    source_node_id UUID NOT NULL,
+    source_port    TEXT NOT NULL,
+    target_node_id UUID NOT NULL,
+    target_port    TEXT NOT NULL,
+    label          TEXT NOT NULL DEFAULT '',
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    config         JSONB NOT NULL DEFAULT '{}',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- 同一 (source, source_port, target) 唯一:一个输出端口到同一目标只有一条边
+    UNIQUE(template_id, source_node_id, source_port, target_node_id)
+);
+CREATE INDEX idx_wf_template_edges_template ON workflow_template_edges(template_id);
 
 -- 3.6 projects
 CREATE TABLE projects (
@@ -176,11 +200,18 @@ CREATE INDEX idx_project_members_project ON project_members(project_id);
 CREATE INDEX idx_project_members_agent ON project_members(agent_id);
 
 -- 3.8 tasks (id is an auto-increment integer within the workspace)
+-- workflow_version/source_event_id/trigger_payload 是实例化时的运行上下文快照;
+-- context 承载 trigger/task/vars/nodes 四根,在推进过程中由引擎维护
 CREATE TABLE tasks (
     id             INTEGER PRIMARY KEY DEFAULT nextval('tasks_id_seq'),
     project_id     UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     workflow_name  TEXT NOT NULL DEFAULT '',
     workflow_template_id UUID,
+    workflow_version     INTEGER NOT NULL DEFAULT 1,
+    source_event_id      UUID,
+    trigger_payload      JSONB NOT NULL DEFAULT '{}',
+    context              JSONB NOT NULL DEFAULT '{}',
+    failure              JSONB NOT NULL DEFAULT '{}',
     title          VARCHAR(500) NOT NULL,
     description    TEXT DEFAULT '',
     constraints    TEXT DEFAULT '',
@@ -200,41 +231,84 @@ CREATE TABLE tasks (
 CREATE INDEX idx_tasks_project ON tasks(project_id);
 CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_project_status ON tasks(project_id, status);
+-- sequence 是同工程内的展示排序号;唯一约束把并发创建的 MAX+1 竞争变成可见错误
+CREATE UNIQUE INDEX idx_tasks_project_sequence ON tasks(project_id, sequence);
 
--- 3.9 task_nodes — task node instances
+-- 3.9 task_nodes — task node instances(模板节点的运行快照)
+-- input 在进入 ready 前由 Server 解析表达式并快照;agentd 不解析工作流表达式
 CREATE TABLE task_nodes (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id               INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    template_node_id      UUID NOT NULL,
     name                  VARCHAR(200) NOT NULL,
-    description           TEXT DEFAULT '',
     sort_order            INTEGER NOT NULL,
-    node_type             node_type NOT NULL DEFAULT 'standard',
-    status                task_node_status NOT NULL DEFAULT 'pending',
-    assignee_type         assignee_type NOT NULL DEFAULT 'any_agent',
-    assignee_id           UUID,
-    reserved_for_agent_id UUID,
-    reject_count          INTEGER NOT NULL DEFAULT 0,
-    max_reject_cycles     INTEGER NOT NULL DEFAULT 5,
-    timeout_minutes       INTEGER NOT NULL DEFAULT 60,
+    type_key              TEXT NOT NULL,
+    config                JSONB NOT NULL DEFAULT '{}',
+    status                task_node_status NOT NULL DEFAULT 'waiting',
+    activation_mode       VARCHAR(10) NOT NULL DEFAULT 'all' CHECK (activation_mode IN ('all', 'any')),
+    input                 JSONB NOT NULL DEFAULT '{}',
+    output                JSONB NOT NULL DEFAULT '{}',
+    error                 JSONB NOT NULL DEFAULT '{}',
+    attempt_count         INTEGER NOT NULL DEFAULT 0,
+    max_attempts          INTEGER NOT NULL DEFAULT 1,
+    next_retry_at         TIMESTAMPTZ,
+    wait_key              TEXT NOT NULL DEFAULT '',
+    wait_expires_at       TIMESTAMPTZ,
     version               INTEGER NOT NULL DEFAULT 1,
-    completed_at          TIMESTAMPTZ,
-    completed_by          UUID,
+    reserved_for_agent_id UUID,
     summary               TEXT NOT NULL DEFAULT '',
-    previous_summary      TEXT NOT NULL DEFAULT '',
-    reservation_expires_at TIMESTAMPTZ,
-    readonly_dirs      JSONB DEFAULT '[]',
-    full_control_dirs  JSONB DEFAULT '[]',
-    depends_on       UUID[] DEFAULT '{}',
+    readonly_dirs         JSONB DEFAULT '[]',
+    full_control_dirs     JSONB DEFAULT '[]',
+    completed_at          TIMESTAMPTZ,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(task_id, sort_order)
+    -- 一个模板节点在一个任务里只有一个实例(运行快照)
+    UNIQUE(task_id, template_node_id)
 );
 CREATE INDEX idx_task_nodes_task ON task_nodes(task_id);
 CREATE INDEX idx_task_nodes_status ON task_nodes(status);
-CREATE INDEX idx_task_nodes_assignee ON task_nodes(assignee_id);
+CREATE INDEX idx_task_nodes_reserved ON task_nodes(reserved_for_agent_id);
 CREATE INDEX idx_task_nodes_task_status ON task_nodes(task_id, status);
-CREATE INDEX idx_task_nodes_timeout ON task_nodes(status, updated_at)
-    WHERE status = 'in_progress' AND node_type != 'manual' AND assignee_type != 'human';
+-- 调度扫描:到期重试与到期等待
+CREATE INDEX idx_task_nodes_retry_due ON task_nodes(next_retry_at)
+    WHERE status = 'waiting' AND next_retry_at IS NOT NULL;
+CREATE INDEX idx_task_nodes_wait_due ON task_nodes(wait_expires_at)
+    WHERE status = 'waiting' AND wait_key != '';
+
+-- 3.9b task_edges — 模板边的任务快照与激活状态
+CREATE TABLE task_edges (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id        INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    source_node_id UUID NOT NULL,
+    source_port    TEXT NOT NULL,
+    target_node_id UUID NOT NULL,
+    target_port    TEXT NOT NULL,
+    label          TEXT NOT NULL DEFAULT '',
+    config         JSONB NOT NULL DEFAULT '{}',
+    resolution     edge_resolution NOT NULL DEFAULT 'pending',
+    resolved_at    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_task_edges_task ON task_edges(task_id);
+CREATE INDEX idx_task_edges_target ON task_edges(task_id, target_node_id);
+
+-- 3.9c task_node_attempts — 每次真正执行一条尝试记录
+CREATE TABLE task_node_attempts (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id       INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    task_node_id  UUID NOT NULL,
+    attempt_no    INTEGER NOT NULL,
+    executor_kind executor_kind NOT NULL DEFAULT 'server',
+    executor_id   TEXT NOT NULL DEFAULT '',
+    status        attempt_status NOT NULL DEFAULT 'running',
+    input         JSONB NOT NULL DEFAULT '{}',
+    output        JSONB NOT NULL DEFAULT '{}',
+    error         JSONB NOT NULL DEFAULT '{}',
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at  TIMESTAMPTZ,
+    UNIQUE(task_node_id, attempt_no)
+);
+CREATE INDEX idx_task_node_attempts_node ON task_node_attempts(task_node_id);
 
 -- 3.10 node_transitions — node transition history
 CREATE TABLE node_transitions (
@@ -350,23 +424,62 @@ CREATE TABLE git_credentials (
 );
 CREATE INDEX idx_git_credentials_project ON git_credentials(project_id);
 
--- 3.16b workflow_trigger_runs — workflow trigger history and external event deduplication
-CREATE TABLE workflow_trigger_runs (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id         UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    project_id           UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    workflow_template_id UUID NOT NULL REFERENCES workflow_templates(id) ON DELETE CASCADE,
-    trigger_type         workflow_trigger_type NOT NULL,
-    external_key         TEXT NOT NULL DEFAULT '',
-    status               VARCHAR(20) NOT NULL,
-    task_id              INTEGER,
-    payload              JSONB NOT NULL DEFAULT '{}',
-    error                TEXT NOT NULL DEFAULT '',
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(workflow_template_id, external_key)
+-- 3.16b integrations — 工程级外部集成(第一版 github)
+-- PAT/webhook secret 用 Server encryption key 加密落库;凭据不下发给 agentd;
+-- pat_masked 在写入时预计算,读取掩码不再需要解密
+CREATE TABLE integrations (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id             UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    project_id               UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    provider                 VARCHAR(50) NOT NULL DEFAULT 'github',
+    name                     VARCHAR(200) NOT NULL DEFAULT '',
+    config                   JSONB NOT NULL DEFAULT '{}',
+    encrypted_secret         TEXT NOT NULL DEFAULT '',
+    pat_masked               TEXT NOT NULL DEFAULT '',
+    encrypted_webhook_secret TEXT NOT NULL DEFAULT '',
+    status                   VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_by               UUID,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_workflow_trigger_runs_workspace ON workflow_trigger_runs(workspace_id, created_at DESC);
-CREATE INDEX idx_workflow_trigger_runs_template ON workflow_trigger_runs(workflow_template_id, created_at DESC);
+CREATE INDEX idx_integrations_project ON integrations(project_id);
+
+-- 3.16c workflow_events — 外部事件入库(durable),按 delivery 唯一去重
+CREATE TABLE workflow_events (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider       VARCHAR(50) NOT NULL DEFAULT 'github',
+    integration_id UUID NOT NULL,
+    external_id    TEXT NOT NULL,
+    event_type     TEXT NOT NULL DEFAULT '',
+    action         TEXT NOT NULL DEFAULT '',
+    payload        JSONB NOT NULL DEFAULT '{}',
+    status         VARCHAR(20) NOT NULL DEFAULT 'pending',
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    error          TEXT NOT NULL DEFAULT '',
+    received_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processed_at   TIMESTAMPTZ,
+    -- 租约判定:claim/回执写时刷新,超时未完成由调度回收重排
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- (provider, integration_id, external_id) 唯一:重放 delivery 不产生重复处理
+CREATE UNIQUE INDEX idx_workflow_events_delivery ON workflow_events(provider, integration_id, external_id);
+CREATE INDEX idx_workflow_events_status ON workflow_events(status, received_at);
+
+-- 3.16d workflow_event_waiters — flow.wait(github_event) 的等待注册
+CREATE TABLE workflow_event_waiters (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id        INTEGER NOT NULL,
+    task_node_id   UUID NOT NULL,
+    integration_id UUID NOT NULL,
+    event_type     TEXT NOT NULL,
+    filter         JSONB NOT NULL DEFAULT '{}',
+    status         VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    expires_at     TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at    TIMESTAMPTZ
+);
+CREATE INDEX idx_workflow_event_waiters_event ON workflow_event_waiters(integration_id, event_type, status);
+CREATE INDEX idx_workflow_event_waiters_task ON workflow_event_waiters(task_id);
 
 -- 3.17 skills — skills
 CREATE TABLE skills (
@@ -554,7 +667,7 @@ CREATE TABLE daemons (
 );
 CREATE INDEX idx_daemons_workspace ON daemons(workspace_id);
 
--- 3.19 custom_themes — 运行时上传的自定义主题（部署后经前端导入入口安装，不改源码）
+-- 3.30 custom_themes — 运行时上传的自定义主题（部署后经前端导入入口安装，不改源码）
 -- 无外键：created_by 仅记录上传者(展示用)；主题为部署级共享资源
 CREATE TABLE custom_themes (
     id          VARCHAR(64) PRIMARY KEY,

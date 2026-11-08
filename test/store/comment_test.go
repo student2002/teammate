@@ -16,9 +16,8 @@ func TestCommentCRUD(t *testing.T) {
 
 	ws := createTestWorkspace(t, s)
 	proj := createTestProject(t, s, ws.ID)
-	_, tplNodes := createTestWorkflowTemplate(t, s, ws.ID, 2)
 
-	task, _, err := s.CreateTask(ctx, types.CreateTaskParams{
+	task, err := s.CreateTask(ctx, types.CreateTaskParams{
 		ProjectID:  proj.ID,
 		Title:      "Comment task",
 		Type:       "task",
@@ -26,7 +25,7 @@ func TestCommentCRUD(t *testing.T) {
 		Status:     "active",
 		AuthorType: "member",
 		AuthorID:   uuid.New().String(),
-	}, tplNodes)
+	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

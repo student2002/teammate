@@ -1,0 +1,7 @@
+{
+  "doc": "Condition AST contract (plan §4.3). Supported ops: eq, neq, exists, contains, in, gt, gte, lt, lte, matches. matches uses Go regexp with a 256-char pattern limit.",
+  "all": [
+    { "path": "trigger.action", "op": "eq", "value": "opened" },
+    { "path": "trigger.issue.labels", "op": "contains", "value": "bug" }
+  ]
+}

@@ -1,17 +1,22 @@
 // template_stats.go provides the business logic for workflow template statistics.
-// Statistics include usage count, average completion time, and reject rate.
+// Statistics include usage count and average completion time.
 package service
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 )
 
+// ErrTemplateNotFound marks GetStats on a template id that has no template
+// row (or no stats row): the handler maps it to 404 via errors.Is.
+var ErrTemplateNotFound = errors.New("template not found")
+
 // TemplateStatsService provides the business logic for workflow template statistics.
-// Statistics include usage count, average completion time, and reject rate.
+// Statistics include usage count and average completion time.
 type TemplateStatsService struct {
 	svc *Service
 }
@@ -25,10 +30,9 @@ func NewTemplateStatsService(svc *Service) *TemplateStatsService {
 type TemplateStatsResult struct {
 	UsageCount           int64   `json:"usage_count"`            // usage count
 	AvgCompletionSeconds float64 `json:"avg_completion_seconds"` // average completion time (seconds)
-	RejectRate           float64 `json:"reject_rate"`            // reject rate (0-1)
 }
 
-// GetStats retrieves the statistics for the specified workflow template, including usage count, average completion time, and reject rate.
+// GetStats retrieves the statistics for the specified workflow template, including usage count and average completion time.
 //
 // Steps:
 //  1. Verify the template exists
@@ -45,7 +49,7 @@ type TemplateStatsResult struct {
 func (s *TemplateStatsService) GetStats(ctx context.Context, id uuid.UUID) (*TemplateStatsResult, error) {
 	if _, err := s.svc.Store.GetWorkflowTemplate(ctx, id); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("template not found")
+			return nil, ErrTemplateNotFound
 		}
 		return nil, fmt.Errorf("get workflow template: %w", err)
 	}
@@ -53,7 +57,7 @@ func (s *TemplateStatsService) GetStats(ctx context.Context, id uuid.UUID) (*Tem
 	stats, err := s.svc.Store.GetTemplateStats(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("template not found")
+			return nil, ErrTemplateNotFound
 		}
 		return nil, fmt.Errorf("get template stats: %w", err)
 	}
@@ -61,6 +65,5 @@ func (s *TemplateStatsService) GetStats(ctx context.Context, id uuid.UUID) (*Tem
 	return &TemplateStatsResult{
 		UsageCount:           stats.UsageCount,
 		AvgCompletionSeconds: stats.AvgCompletionSeconds,
-		RejectRate:           stats.RejectRate,
 	}, nil
 }

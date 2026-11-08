@@ -244,20 +244,6 @@ type UpdateProjectParams struct {
 	MaxReviewCycles *int32  `json:"max_review_cycles"`
 }
 
-// === Review domain ===
-
-// GetReviewNodeAuthorParams is the domain parameter struct for querying the original author of a review node.
-type GetReviewNodeAuthorParams struct {
-	TaskID int32  `json:"task_id"`
-	ID     string `json:"id"`
-}
-
-// GetReviewNodeReviewerParams is the domain parameter struct for querying the reviewer of a review node.
-type GetReviewNodeReviewerParams struct {
-	ID     string `json:"id"`
-	TaskID int32  `json:"task_id"`
-}
-
 // === Runtime domain ===
 
 
@@ -293,95 +279,43 @@ type SearchTasksByWorkspaceAndProjectParams struct {
 
 // CreateTemplateNodeParams is the domain parameter struct for creating a workflow template node.
 type CreateTemplateNodeParams struct {
-	TemplateID      string          `json:"template_id"`
-	ID              *string         `json:"id"` // node identity; nil lets the database generate one. Stable ids keep depends_on references valid across node-list replacement.
-	Name            string          `json:"name"`
-	Description     *string         `json:"description"`
-	SortOrder       int32           `json:"sort_order"`
-	NodeType        string          `json:"node_type"`
-	AssigneeType    string          `json:"assignee_type"`
-	AssigneeID      *string         `json:"assignee_id"`
-	TimeoutMinutes  int32           `json:"timeout_minutes"`
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`
-	FullControlDirs json.RawMessage `json:"full_control_dirs"`
-	Artifact        json.RawMessage `json:"artifact"`
-	MaxRejectCycles int32           `json:"max_reject_cycles"`
-	DependsOn       []string        `json:"depends_on"`
+	TemplateID string          `json:"template_id"`
+	ID         *string         `json:"id"` // node identity; nil lets the database generate one. Stable ids keep edge references valid across full graph replacement.
+	Name       string          `json:"name"`
+	SortOrder  int32           `json:"sort_order"`
+	TypeKey    string          `json:"type_key"`
+	Config     json.RawMessage `json:"config"`
+	UIConfig   json.RawMessage `json:"ui_config"`
+}
+
+// CreateTemplateEdgeParams is the domain parameter struct for creating a workflow template edge.
+type CreateTemplateEdgeParams struct {
+	TemplateID   string          `json:"template_id"`
+	ID           *string         `json:"id"` // edge identity; nil lets the database generate one.
+	SourceNodeID string          `json:"source_node_id"`
+	SourcePort   string          `json:"source_port"`
+	TargetNodeID string          `json:"target_node_id"`
+	TargetPort   string          `json:"target_port"`
+	Label        string          `json:"label"`
+	SortOrder    int32           `json:"sort_order"`
+	Config       json.RawMessage `json:"config"`
 }
 
 // CreateWorkflowTemplateParams is the domain parameter struct for creating a workflow template.
 type CreateWorkflowTemplateParams struct {
-	WorkspaceID     string          `json:"workspace_id"`
-	Name            string          `json:"name"`
-	Description     *string         `json:"description"`
-	IsBuiltin       bool            `json:"is_builtin"`
-	TriggerType     string          `json:"trigger_type"`
-	TriggerConfig   json.RawMessage `json:"trigger_config"`
-	TriggerEnabled  bool            `json:"trigger_enabled"`
-	NextRunAt       *time.Time      `json:"next_run_at"`
-	LastTriggeredAt *time.Time      `json:"last_triggered_at"`
-}
-
-// UpdateTemplateNodeParams is the domain parameter struct for updating a workflow template node.
-type UpdateTemplateNodeParams struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name"`
-	Description     *string         `json:"description"`
-	SortOrder       int32           `json:"sort_order"`
-	NodeType        string          `json:"node_type"`
-	AssigneeType    string          `json:"assignee_type"`
-	AssigneeID      *string         `json:"assignee_id"`
-	TimeoutMinutes  int32           `json:"timeout_minutes"`
-	ReadonlyDirs    json.RawMessage `json:"readonly_dirs"`
-	FullControlDirs json.RawMessage `json:"full_control_dirs"`
-	Artifact        json.RawMessage `json:"artifact"`
-	MaxRejectCycles int32           `json:"max_reject_cycles"`
-	DependsOn       []string        `json:"depends_on"`
+	WorkspaceID string  `json:"workspace_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	IsBuiltin   bool    `json:"is_builtin"`
+	Version     int32   `json:"version"`
+	Enabled     bool    `json:"enabled"`
 }
 
 // UpdateWorkflowTemplateParams is the domain parameter struct for updating a workflow template.
+// version is owned by the Service layer and not written here.
 type UpdateWorkflowTemplateParams struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Description    *string         `json:"description"`
-	TriggerType    string          `json:"trigger_type"`
-	TriggerConfig  json.RawMessage `json:"trigger_config"`
-	TriggerEnabled bool            `json:"trigger_enabled"`
-	NextRunAt      *time.Time      `json:"next_run_at"`
-}
-
-// CreateWorkflowTriggerRunParams is the domain parameter struct for creating a workflow trigger run record.
-type CreateWorkflowTriggerRunParams struct {
-	WorkspaceID        string          `json:"workspace_id"`
-	ProjectID          string          `json:"project_id"`
-	WorkflowTemplateID string          `json:"workflow_template_id"`
-	TriggerType        string          `json:"trigger_type"`
-	ExternalKey        string          `json:"external_key"`
-	Status             string          `json:"status"`
-	Payload            json.RawMessage `json:"payload"`
-}
-
-// MarkWorkflowTriggerRunCompletedParams is the domain parameter struct for marking a trigger run as completed.
-type MarkWorkflowTriggerRunCompletedParams struct {
-	ID     string `json:"id"`
-	TaskID *int32 `json:"task_id"`
-}
-
-// MarkWorkflowTriggerRunFailedParams is the domain parameter struct for marking a trigger run as failed.
-type MarkWorkflowTriggerRunFailedParams struct {
-	ID    string `json:"id"`
-	Error string `json:"error"`
-}
-
-// ListDueScheduledWorkflowTemplatesParams is the domain parameter struct for querying due scheduled templates.
-type ListDueScheduledWorkflowTemplatesParams struct {
-	NextRunAt *time.Time `json:"next_run_at"`
-	Limit     int32      `json:"limit"`
-}
-
-// UpdateWorkflowTemplateTriggerScheduleParams is the domain parameter struct for updating a template's trigger schedule.
-type UpdateWorkflowTemplateTriggerScheduleParams struct {
-	ID              string     `json:"id"`
-	NextRunAt       *time.Time `json:"next_run_at"`
-	LastTriggeredAt *time.Time `json:"last_triggered_at"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Enabled     bool    `json:"enabled"`
 }

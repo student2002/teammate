@@ -112,48 +112,48 @@ func (ns NullAgentStatus) Value() (driver.Value, error) {
 	return string(ns.AgentStatus), nil
 }
 
-type AssigneeType string
+type AttemptStatus string
 
 const (
-	AssigneeTypeAnyAgent      AssigneeType = "any_agent"
-	AssigneeTypeSpecificAgent AssigneeType = "specific_agent"
-	AssigneeTypeHuman         AssigneeType = "human"
-	AssigneeTypeAuto          AssigneeType = "auto"
+	AttemptStatusRunning   AttemptStatus = "running"
+	AttemptStatusSucceeded AttemptStatus = "succeeded"
+	AttemptStatusFailed    AttemptStatus = "failed"
+	AttemptStatusCancelled AttemptStatus = "cancelled"
 )
 
-func (e *AssigneeType) Scan(src interface{}) error {
+func (e *AttemptStatus) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = AssigneeType(s)
+		*e = AttemptStatus(s)
 	case string:
-		*e = AssigneeType(s)
+		*e = AttemptStatus(s)
 	default:
-		return fmt.Errorf("unsupported scan type for AssigneeType: %T", src)
+		return fmt.Errorf("unsupported scan type for AttemptStatus: %T", src)
 	}
 	return nil
 }
 
-type NullAssigneeType struct {
-	AssigneeType AssigneeType `json:"assignee_type"`
-	Valid        bool         `json:"valid"` // Valid is true if AssigneeType is not NULL
+type NullAttemptStatus struct {
+	AttemptStatus AttemptStatus `json:"attempt_status"`
+	Valid         bool          `json:"valid"` // Valid is true if AttemptStatus is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAssigneeType) Scan(value interface{}) error {
+func (ns *NullAttemptStatus) Scan(value interface{}) error {
 	if value == nil {
-		ns.AssigneeType, ns.Valid = "", false
+		ns.AttemptStatus, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.AssigneeType.Scan(value)
+	return ns.AttemptStatus.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullAssigneeType) Value() (driver.Value, error) {
+func (ns NullAttemptStatus) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.AssigneeType), nil
+	return string(ns.AttemptStatus), nil
 }
 
 type DaemonStatus string
@@ -196,6 +196,92 @@ func (ns NullDaemonStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.DaemonStatus), nil
+}
+
+type EdgeResolution string
+
+const (
+	EdgeResolutionPending   EdgeResolution = "pending"
+	EdgeResolutionActivated EdgeResolution = "activated"
+	EdgeResolutionSkipped   EdgeResolution = "skipped"
+)
+
+func (e *EdgeResolution) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EdgeResolution(s)
+	case string:
+		*e = EdgeResolution(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EdgeResolution: %T", src)
+	}
+	return nil
+}
+
+type NullEdgeResolution struct {
+	EdgeResolution EdgeResolution `json:"edge_resolution"`
+	Valid          bool           `json:"valid"` // Valid is true if EdgeResolution is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEdgeResolution) Scan(value interface{}) error {
+	if value == nil {
+		ns.EdgeResolution, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EdgeResolution.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEdgeResolution) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EdgeResolution), nil
+}
+
+type ExecutorKind string
+
+const (
+	ExecutorKindServer ExecutorKind = "server"
+	ExecutorKindAgentd ExecutorKind = "agentd"
+	ExecutorKindHuman  ExecutorKind = "human"
+)
+
+func (e *ExecutorKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ExecutorKind(s)
+	case string:
+		*e = ExecutorKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ExecutorKind: %T", src)
+	}
+	return nil
+}
+
+type NullExecutorKind struct {
+	ExecutorKind ExecutorKind `json:"executor_kind"`
+	Valid        bool         `json:"valid"` // Valid is true if ExecutorKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullExecutorKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.ExecutorKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ExecutorKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullExecutorKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ExecutorKind), nil
 }
 
 type McpAuthType string
@@ -285,49 +371,6 @@ func (ns NullMemoryType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.MemoryType), nil
-}
-
-type NodeType string
-
-const (
-	NodeTypeStandard NodeType = "standard"
-	NodeTypeReview   NodeType = "review"
-	NodeTypeManual   NodeType = "manual"
-)
-
-func (e *NodeType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = NodeType(s)
-	case string:
-		*e = NodeType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for NodeType: %T", src)
-	}
-	return nil
-}
-
-type NullNodeType struct {
-	NodeType NodeType `json:"node_type"`
-	Valid    bool     `json:"valid"` // Valid is true if NodeType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullNodeType) Scan(value interface{}) error {
-	if value == nil {
-		ns.NodeType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.NodeType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullNodeType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.NodeType), nil
 }
 
 type ProjectStatus string
@@ -421,10 +464,13 @@ func (ns NullRuntimeStatus) Value() (driver.Value, error) {
 type TaskNodeStatus string
 
 const (
-	TaskNodeStatusPending            TaskNodeStatus = "pending"
-	TaskNodeStatusInProgress         TaskNodeStatus = "in_progress"
-	TaskNodeStatusCompleted          TaskNodeStatus = "completed"
-	TaskNodeStatusRejected           TaskNodeStatus = "rejected"
+	TaskNodeStatusWaiting            TaskNodeStatus = "waiting"
+	TaskNodeStatusReady              TaskNodeStatus = "ready"
+	TaskNodeStatusRunning            TaskNodeStatus = "running"
+	TaskNodeStatusSucceeded          TaskNodeStatus = "succeeded"
+	TaskNodeStatusFailed             TaskNodeStatus = "failed"
+	TaskNodeStatusSkipped            TaskNodeStatus = "skipped"
+	TaskNodeStatusCancelled          TaskNodeStatus = "cancelled"
 	TaskNodeStatusManualIntervention TaskNodeStatus = "manual_intervention"
 )
 
@@ -512,6 +558,7 @@ type TaskStatus string
 const (
 	TaskStatusActive    TaskStatus = "active"
 	TaskStatusCompleted TaskStatus = "completed"
+	TaskStatusFailed    TaskStatus = "failed"
 	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
@@ -640,10 +687,14 @@ func (ns NullTokenType) Value() (driver.Value, error) {
 type TransitionAction string
 
 const (
-	TransitionActionApprove      TransitionAction = "approve"
-	TransitionActionReject       TransitionAction = "reject"
+	TransitionActionReady        TransitionAction = "ready"
+	TransitionActionStart        TransitionAction = "start"
+	TransitionActionComplete     TransitionAction = "complete"
+	TransitionActionFail         TransitionAction = "fail"
+	TransitionActionRetry        TransitionAction = "retry"
+	TransitionActionSkip         TransitionAction = "skip"
+	TransitionActionCancel       TransitionAction = "cancel"
 	TransitionActionManual       TransitionAction = "manual"
-	TransitionActionReclaim      TransitionAction = "reclaim"
 	TransitionActionTimeout      TransitionAction = "timeout"
 	TransitionActionInterruptAck TransitionAction = "interrupt_ack"
 )
@@ -681,49 +732,6 @@ func (ns NullTransitionAction) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.TransitionAction), nil
-}
-
-type WorkflowTriggerType string
-
-const (
-	WorkflowTriggerTypeManual      WorkflowTriggerType = "manual"
-	WorkflowTriggerTypeSchedule    WorkflowTriggerType = "schedule"
-	WorkflowTriggerTypeGithubIssue WorkflowTriggerType = "github_issue"
-)
-
-func (e *WorkflowTriggerType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = WorkflowTriggerType(s)
-	case string:
-		*e = WorkflowTriggerType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for WorkflowTriggerType: %T", src)
-	}
-	return nil
-}
-
-type NullWorkflowTriggerType struct {
-	WorkflowTriggerType WorkflowTriggerType `json:"workflow_trigger_type"`
-	Valid               bool                `json:"valid"` // Valid is true if WorkflowTriggerType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullWorkflowTriggerType) Scan(value interface{}) error {
-	if value == nil {
-		ns.WorkflowTriggerType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.WorkflowTriggerType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullWorkflowTriggerType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.WorkflowTriggerType), nil
 }
 
 type Agent struct {
@@ -882,6 +890,22 @@ type GitCredential struct {
 	UpdatedAt    time.Time     `db:"updated_at" json:"updated_at"`
 }
 
+type Integration struct {
+	ID                     uuid.UUID       `db:"id" json:"id"`
+	WorkspaceID            uuid.UUID       `db:"workspace_id" json:"workspace_id"`
+	ProjectID              uuid.UUID       `db:"project_id" json:"project_id"`
+	Provider               string          `db:"provider" json:"provider"`
+	Name                   string          `db:"name" json:"name"`
+	Config                 json.RawMessage `db:"config" json:"config"`
+	EncryptedSecret        string          `db:"encrypted_secret" json:"encrypted_secret"`
+	PatMasked              string          `db:"pat_masked" json:"pat_masked"`
+	EncryptedWebhookSecret string          `db:"encrypted_webhook_secret" json:"encrypted_webhook_secret"`
+	Status                 string          `db:"status" json:"status"`
+	CreatedBy              uuid.NullUUID   `db:"created_by" json:"created_by"`
+	CreatedAt              time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt              time.Time       `db:"updated_at" json:"updated_at"`
+}
+
 type Invitation struct {
 	ID          uuid.UUID     `db:"id" json:"id"`
 	WorkspaceID uuid.UUID     `db:"workspace_id" json:"workspace_id"`
@@ -989,25 +1013,44 @@ type Skill struct {
 }
 
 type Task struct {
-	ID                 int32          `db:"id" json:"id"`
-	ProjectID          uuid.UUID      `db:"project_id" json:"project_id"`
-	WorkflowName       string         `db:"workflow_name" json:"workflow_name"`
-	WorkflowTemplateID uuid.NullUUID  `db:"workflow_template_id" json:"workflow_template_id"`
-	Title              string         `db:"title" json:"title"`
-	Description        sql.NullString `db:"description" json:"description"`
-	Constraints        sql.NullString `db:"constraints" json:"constraints"`
-	Type               TaskType       `db:"type" json:"type"`
-	Priority           TaskPriority   `db:"priority" json:"priority"`
-	Status             TaskStatus     `db:"status" json:"status"`
-	AuthorType         string         `db:"author_type" json:"author_type"`
-	AuthorID           uuid.UUID      `db:"author_id" json:"author_id"`
-	DueDate            sql.NullTime   `db:"due_date" json:"due_date"`
-	Labels             []string       `db:"labels" json:"labels"`
-	Sequence           int32          `db:"sequence" json:"sequence"`
-	ParentTaskID       sql.NullInt32  `db:"parent_task_id" json:"parent_task_id"`
-	GitBranch          sql.NullString `db:"git_branch" json:"git_branch"`
-	CreatedAt          time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt          time.Time      `db:"updated_at" json:"updated_at"`
+	ID                 int32           `db:"id" json:"id"`
+	ProjectID          uuid.UUID       `db:"project_id" json:"project_id"`
+	WorkflowName       string          `db:"workflow_name" json:"workflow_name"`
+	WorkflowTemplateID uuid.NullUUID   `db:"workflow_template_id" json:"workflow_template_id"`
+	WorkflowVersion    int32           `db:"workflow_version" json:"workflow_version"`
+	SourceEventID      uuid.NullUUID   `db:"source_event_id" json:"source_event_id"`
+	TriggerPayload     json.RawMessage `db:"trigger_payload" json:"trigger_payload"`
+	Context            json.RawMessage `db:"context" json:"context"`
+	Failure            json.RawMessage `db:"failure" json:"failure"`
+	Title              string          `db:"title" json:"title"`
+	Description        sql.NullString  `db:"description" json:"description"`
+	Constraints        sql.NullString  `db:"constraints" json:"constraints"`
+	Type               TaskType        `db:"type" json:"type"`
+	Priority           TaskPriority    `db:"priority" json:"priority"`
+	Status             TaskStatus      `db:"status" json:"status"`
+	AuthorType         string          `db:"author_type" json:"author_type"`
+	AuthorID           uuid.UUID       `db:"author_id" json:"author_id"`
+	DueDate            sql.NullTime    `db:"due_date" json:"due_date"`
+	Labels             []string        `db:"labels" json:"labels"`
+	Sequence           int32           `db:"sequence" json:"sequence"`
+	ParentTaskID       sql.NullInt32   `db:"parent_task_id" json:"parent_task_id"`
+	GitBranch          sql.NullString  `db:"git_branch" json:"git_branch"`
+	CreatedAt          time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time       `db:"updated_at" json:"updated_at"`
+}
+
+type TaskEdge struct {
+	ID           uuid.UUID       `db:"id" json:"id"`
+	TaskID       int32           `db:"task_id" json:"task_id"`
+	SourceNodeID uuid.UUID       `db:"source_node_id" json:"source_node_id"`
+	SourcePort   string          `db:"source_port" json:"source_port"`
+	TargetNodeID uuid.UUID       `db:"target_node_id" json:"target_node_id"`
+	TargetPort   string          `db:"target_port" json:"target_port"`
+	Label        string          `db:"label" json:"label"`
+	Config       json.RawMessage `db:"config" json:"config"`
+	Resolution   EdgeResolution  `db:"resolution" json:"resolution"`
+	ResolvedAt   sql.NullTime    `db:"resolved_at" json:"resolved_at"`
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
 }
 
 type TaskLog struct {
@@ -1030,30 +1073,46 @@ type TaskLogChunk struct {
 }
 
 type TaskNode struct {
-	ID                   uuid.UUID             `db:"id" json:"id"`
-	TaskID               int32                 `db:"task_id" json:"task_id"`
-	Name                 string                `db:"name" json:"name"`
-	Description          sql.NullString        `db:"description" json:"description"`
-	SortOrder            int32                 `db:"sort_order" json:"sort_order"`
-	NodeType             NodeType              `db:"node_type" json:"node_type"`
-	Status               TaskNodeStatus        `db:"status" json:"status"`
-	AssigneeType         AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID           uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	ReservedForAgentID   uuid.NullUUID         `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
-	RejectCount          int32                 `db:"reject_count" json:"reject_count"`
-	MaxRejectCycles      int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	TimeoutMinutes       int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	Version              int32                 `db:"version" json:"version"`
-	CompletedAt          sql.NullTime          `db:"completed_at" json:"completed_at"`
-	CompletedBy          uuid.NullUUID         `db:"completed_by" json:"completed_by"`
-	Summary              string                `db:"summary" json:"summary"`
-	PreviousSummary      string                `db:"previous_summary" json:"previous_summary"`
-	ReservationExpiresAt sql.NullTime          `db:"reservation_expires_at" json:"reservation_expires_at"`
-	ReadonlyDirs         pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs      pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	DependsOn            []uuid.UUID           `db:"depends_on" json:"depends_on"`
-	CreatedAt            time.Time             `db:"created_at" json:"created_at"`
-	UpdatedAt            time.Time             `db:"updated_at" json:"updated_at"`
+	ID                 uuid.UUID             `db:"id" json:"id"`
+	TaskID             int32                 `db:"task_id" json:"task_id"`
+	TemplateNodeID     uuid.UUID             `db:"template_node_id" json:"template_node_id"`
+	Name               string                `db:"name" json:"name"`
+	SortOrder          int32                 `db:"sort_order" json:"sort_order"`
+	TypeKey            string                `db:"type_key" json:"type_key"`
+	Config             json.RawMessage       `db:"config" json:"config"`
+	Status             TaskNodeStatus        `db:"status" json:"status"`
+	ActivationMode     string                `db:"activation_mode" json:"activation_mode"`
+	Input              json.RawMessage       `db:"input" json:"input"`
+	Output             json.RawMessage       `db:"output" json:"output"`
+	Error              json.RawMessage       `db:"error" json:"error"`
+	AttemptCount       int32                 `db:"attempt_count" json:"attempt_count"`
+	MaxAttempts        int32                 `db:"max_attempts" json:"max_attempts"`
+	NextRetryAt        sql.NullTime          `db:"next_retry_at" json:"next_retry_at"`
+	WaitKey            string                `db:"wait_key" json:"wait_key"`
+	WaitExpiresAt      sql.NullTime          `db:"wait_expires_at" json:"wait_expires_at"`
+	Version            int32                 `db:"version" json:"version"`
+	ReservedForAgentID uuid.NullUUID         `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
+	Summary            string                `db:"summary" json:"summary"`
+	ReadonlyDirs       pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
+	FullControlDirs    pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
+	CompletedAt        sql.NullTime          `db:"completed_at" json:"completed_at"`
+	CreatedAt          time.Time             `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time             `db:"updated_at" json:"updated_at"`
+}
+
+type TaskNodeAttempt struct {
+	ID           uuid.UUID       `db:"id" json:"id"`
+	TaskID       int32           `db:"task_id" json:"task_id"`
+	TaskNodeID   uuid.UUID       `db:"task_node_id" json:"task_node_id"`
+	AttemptNo    int32           `db:"attempt_no" json:"attempt_no"`
+	ExecutorKind ExecutorKind    `db:"executor_kind" json:"executor_kind"`
+	ExecutorID   string          `db:"executor_id" json:"executor_id"`
+	Status       AttemptStatus   `db:"status" json:"status"`
+	Input        json.RawMessage `db:"input" json:"input"`
+	Output       json.RawMessage `db:"output" json:"output"`
+	Error        json.RawMessage `db:"error" json:"error"`
+	StartedAt    time.Time       `db:"started_at" json:"started_at"`
+	CompletedAt  sql.NullTime    `db:"completed_at" json:"completed_at"`
 }
 
 type TokenUsage struct {
@@ -1067,51 +1126,78 @@ type TokenUsage struct {
 	CreatedAt    time.Time      `db:"created_at" json:"created_at"`
 }
 
+type WorkflowEvent struct {
+	ID            uuid.UUID       `db:"id" json:"id"`
+	Provider      string          `db:"provider" json:"provider"`
+	IntegrationID uuid.UUID       `db:"integration_id" json:"integration_id"`
+	ExternalID    string          `db:"external_id" json:"external_id"`
+	EventType     string          `db:"event_type" json:"event_type"`
+	Action        string          `db:"action" json:"action"`
+	Payload       json.RawMessage `db:"payload" json:"payload"`
+	Status        string          `db:"status" json:"status"`
+	Attempts      int32           `db:"attempts" json:"attempts"`
+	Error         string          `db:"error" json:"error"`
+	ReceivedAt    time.Time       `db:"received_at" json:"received_at"`
+	ProcessedAt   sql.NullTime    `db:"processed_at" json:"processed_at"`
+	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
+}
+
+type WorkflowEventWaiter struct {
+	ID            uuid.UUID       `db:"id" json:"id"`
+	TaskID        int32           `db:"task_id" json:"task_id"`
+	TaskNodeID    uuid.UUID       `db:"task_node_id" json:"task_node_id"`
+	IntegrationID uuid.UUID       `db:"integration_id" json:"integration_id"`
+	EventType     string          `db:"event_type" json:"event_type"`
+	Filter        json.RawMessage `db:"filter" json:"filter"`
+	Status        string          `db:"status" json:"status"`
+	ExpiresAt     sql.NullTime    `db:"expires_at" json:"expires_at"`
+	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
+	ResolvedAt    sql.NullTime    `db:"resolved_at" json:"resolved_at"`
+}
+
 type WorkflowTemplate struct {
-	ID              uuid.UUID           `db:"id" json:"id"`
-	WorkspaceID     uuid.UUID           `db:"workspace_id" json:"workspace_id"`
-	Name            string              `db:"name" json:"name"`
-	Description     sql.NullString      `db:"description" json:"description"`
-	IsBuiltin       bool                `db:"is_builtin" json:"is_builtin"`
-	TriggerType     WorkflowTriggerType `db:"trigger_type" json:"trigger_type"`
-	TriggerConfig   json.RawMessage     `db:"trigger_config" json:"trigger_config"`
-	TriggerEnabled  bool                `db:"trigger_enabled" json:"trigger_enabled"`
-	NextRunAt       sql.NullTime        `db:"next_run_at" json:"next_run_at"`
-	LastTriggeredAt sql.NullTime        `db:"last_triggered_at" json:"last_triggered_at"`
-	CreatedAt       time.Time           `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time           `db:"updated_at" json:"updated_at"`
+	ID          uuid.UUID      `db:"id" json:"id"`
+	WorkspaceID uuid.UUID      `db:"workspace_id" json:"workspace_id"`
+	Name        string         `db:"name" json:"name"`
+	Description sql.NullString `db:"description" json:"description"`
+	IsBuiltin   bool           `db:"is_builtin" json:"is_builtin"`
+	Version     int32          `db:"version" json:"version"`
+	Enabled     bool           `db:"enabled" json:"enabled"`
+	CreatedAt   time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+type WorkflowTemplateEdge struct {
+	ID           uuid.UUID       `db:"id" json:"id"`
+	TemplateID   uuid.UUID       `db:"template_id" json:"template_id"`
+	SourceNodeID uuid.UUID       `db:"source_node_id" json:"source_node_id"`
+	SourcePort   string          `db:"source_port" json:"source_port"`
+	TargetNodeID uuid.UUID       `db:"target_node_id" json:"target_node_id"`
+	TargetPort   string          `db:"target_port" json:"target_port"`
+	Label        string          `db:"label" json:"label"`
+	SortOrder    int32           `db:"sort_order" json:"sort_order"`
+	Config       json.RawMessage `db:"config" json:"config"`
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
 }
 
 type WorkflowTemplateNode struct {
-	ID              uuid.UUID             `db:"id" json:"id"`
-	TemplateID      uuid.UUID             `db:"template_id" json:"template_id"`
-	Name            string                `db:"name" json:"name"`
-	Description     sql.NullString        `db:"description" json:"description"`
-	SortOrder       int32                 `db:"sort_order" json:"sort_order"`
-	NodeType        NodeType              `db:"node_type" json:"node_type"`
-	AssigneeType    AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID      uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	TimeoutMinutes  int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	MaxRejectCycles int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	ReadonlyDirs    pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	Artifact        pqtype.NullRawMessage `db:"artifact" json:"artifact"`
-	DependsOn       []uuid.UUID           `db:"depends_on" json:"depends_on"`
-	CreatedAt       time.Time             `db:"created_at" json:"created_at"`
+	ID         uuid.UUID       `db:"id" json:"id"`
+	TemplateID uuid.UUID       `db:"template_id" json:"template_id"`
+	Name       string          `db:"name" json:"name"`
+	SortOrder  int32           `db:"sort_order" json:"sort_order"`
+	TypeKey    string          `db:"type_key" json:"type_key"`
+	Config     json.RawMessage `db:"config" json:"config"`
+	UiConfig   json.RawMessage `db:"ui_config" json:"ui_config"`
+	CreatedAt  time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time       `db:"updated_at" json:"updated_at"`
 }
 
-type WorkflowTriggerRun struct {
-	ID                 uuid.UUID           `db:"id" json:"id"`
-	WorkspaceID        uuid.UUID           `db:"workspace_id" json:"workspace_id"`
-	ProjectID          uuid.UUID           `db:"project_id" json:"project_id"`
-	WorkflowTemplateID uuid.UUID           `db:"workflow_template_id" json:"workflow_template_id"`
-	TriggerType        WorkflowTriggerType `db:"trigger_type" json:"trigger_type"`
-	ExternalKey        string              `db:"external_key" json:"external_key"`
-	Status             string              `db:"status" json:"status"`
-	TaskID             sql.NullInt32       `db:"task_id" json:"task_id"`
-	Payload            json.RawMessage     `db:"payload" json:"payload"`
-	Error              string              `db:"error" json:"error"`
-	CreatedAt          time.Time           `db:"created_at" json:"created_at"`
+type WorkflowTemplateSchedule struct {
+	TemplateID  uuid.UUID    `db:"template_id" json:"template_id"`
+	ProjectID   uuid.UUID    `db:"project_id" json:"project_id"`
+	NextRunAt   time.Time    `db:"next_run_at" json:"next_run_at"`
+	LastFiredAt sql.NullTime `db:"last_fired_at" json:"last_fired_at"`
+	UpdatedAt   time.Time    `db:"updated_at" json:"updated_at"`
 }
 
 type Workspace struct {

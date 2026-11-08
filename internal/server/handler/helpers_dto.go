@@ -6,7 +6,7 @@ import (
 )
 
 // ---- model type aliases, removing the handler layer's direct dependency on db/generated ----
-// Note: Project is defined in project_dto.go, NodeType/AssigneeType in workflow_dto.go.
+// Note: Project is defined in project_dto.go.
 
 type TaskNode = types.TaskNode
 type WorkflowTemplate = types.WorkflowTemplate

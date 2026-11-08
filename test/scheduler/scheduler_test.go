@@ -238,126 +238,6 @@ func TestWithLockOnlyOneInstance(t *testing.T) {
 	rdb.Del(ctx, lockKey)
 }
 
-// TestClaimTimeoutRelease verifies that nodes remaining in_progress for over 30 minutes are released back to pending.
-// This test verifies that the scheduler releases expired claims on task nodes when the claiming agent's runtime instance has been offline beyond the heartbeat timeout threshold.
-func TestClaimTimeoutRelease(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-
-	// Create workspace, project, workflow, task, and node
-	ws, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "timeout-test-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "TT",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, ws.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: ws.ID,
-		Name:        "timeout-proj",
-		Description: strPtr("test"),
-		Status:      types.ProjectStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	tpl, _, err := s.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
-		WorkspaceID: ws.ID,
-		Name:        "timeout-flow",
-		Description: strPtr("test"),
-	}, []types.CreateTemplateNodeParams{
-		{Name: "code", Description: strPtr("code node"), SortOrder: 1, NodeType: types.NodeTypeStandard, AssigneeType: types.AssigneeTypeAnyAgent, TimeoutMinutes: 60},
-	})
-	if err != nil {
-		t.Fatalf("create workflow template: %v", err)
-	}
-
-	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(ws.ID), "box-timeout")
-	if err != nil {
-		t.Fatalf("create agent daemon: %v", err)
-	}
-	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(ws.ID), agentDaemon.ID, "timeout-" + uuid.NewString()[:8], "claude", "", "persona-timeout", "Tester", "tester@teammate.local")
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
-		t.Fatalf("set agent offline: %v", err)
-	}
-
-	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
-		ProjectID:  proj.ID,
-		MemberType: "agent",
-		AgentID:    strPtr(agent.ID),
-		Role:       "member",
-	})
-	if err != nil {
-		t.Fatalf("add agent to project: %v", err)
-	}
-
-	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
-		ProjectID:    uuid.MustParse(proj.ID),
-		WorkflowName: tpl.Name,
-		Title:        "Timeout test task",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         db.TaskTypeTask,
-		Priority:     db.TaskPriorityMedium,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(agent.ID),
-		Sequence:     0, // will be set by sequence sync
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  60,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusInProgress,
-		AssigneeType:    db.AssigneeTypeAnyAgent,
-	})
-	if err != nil {
-		t.Fatalf("create task node: %v", err)
-	}
-
-	// Use FakeClock to simulate 31 minutes passing for timeout checking.
-	fakeClock := clock.NewFakeClock(time.Now())
-	fakeClock.Advance(31 * time.Minute)
-	cutoff := fakeClock.Now().Add(-30 * time.Minute)
-
-	// Execute claim timeout release with the computed cutoff
-	releasedNodes, err := s.ReleaseClaimTimeoutNodes(ctx, cutoff)
-	if err != nil {
-		t.Fatalf("release claim timeout nodes: %v", err)
-	}
-
-	if len(releasedNodes) == 0 {
-		t.Fatal("expected at least 1 released node, got 0")
-	}
-
-	// Verify the node returns to pending
-	updatedNode, err := s.GetTaskNode(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("get task node: %v", err)
-	}
-	if updatedNode.Status != types.TaskNodeStatusManualIntervention {
-		t.Fatalf("expected manual_intervention after timeout release, got %s", updatedNode.Status)
-	}
-	t.Logf("claim timeout release: node correctly reset to manual_intervention (released %d nodes)", len(releasedNodes))
-}
-
 // TestHeartbeatTimeout verifies that timed-out heartbeats cause the runtime instance to be marked offline.
 func TestHeartbeatTimeout(t *testing.T) {
 	pgDB := connectTestDB(t)
@@ -451,582 +331,6 @@ func TestSchedulerCheckHeartbeatTimeout(t *testing.T) {
 	t.Log("scheduler CheckHeartbeatTimeout completed without error")
 }
 
-// TestSchedulerReleaseClaimTimeout tests the full scheduler task for claim timeout.
-func TestSchedulerReleaseClaimTimeout(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-
-	ctx := context.Background()
-
-	err := sched.ReleaseClaimTimeoutNodes(ctx)
-	if err != nil {
-		t.Fatalf("ReleaseClaimTimeoutNodes: %v", err)
-	}
-	t.Log("scheduler ReleaseClaimTimeoutNodes completed without error")
-}
-
-// TestSchedulerClearExpiredReservations verifies design doc §12.4: ClearExpiredReservations
-// clears expired (>30s) reserved_for_agent_id on pending nodes, making them open to any Agent.
-func TestSchedulerClearExpiredReservations(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-
-	// Create workspace, project, Agent, task, and pending node with reservation
-	wksp, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "reservation-clear-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "RC",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: wksp.ID,
-		Name:        "reservation-clear-proj",
-		Description: strPtr("test"),
-		Status:      types.ProjectStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-reservation")
-	if err != nil {
-		t.Fatalf("create agent daemon: %v", err)
-	}
-	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "reservation-" + uuid.NewString()[:8], "claude", "", "persona-reservation", "Tester", "tester@teammate.local")
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
-		t.Fatalf("set agent offline: %v", err)
-	}
-
-	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
-		ProjectID:    uuid.MustParse(proj.ID),
-		WorkflowName: "test-flow",
-		Title:        "Reservation clear test",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         db.TaskTypeTask,
-		Priority:     db.TaskPriorityMedium,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(agent.ID),
-		Sequence:     0,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	// Pending node with reserved_for_agent_id for agent and expired reservation_expires_at
-	agentUUID := uuid.MustParse(agent.ID)
-	expired := time.Now().Add(-2 * time.Minute) // exceeds 30s threshold
-	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:             task.ID,
-		MaxRejectCycles:    3,
-		TimeoutMinutes:     60,
-		Name:               "code",
-		Description:        sql.NullString{String: "code node", Valid: true},
-		SortOrder:          1,
-		NodeType:           db.NodeTypeStandard,
-		Status:             db.TaskNodeStatusPending,
-		AssigneeType:       db.AssigneeTypeAnyAgent,
-		ReservedForAgentID: uuid.NullUUID{UUID: agentUUID, Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("create task node: %v", err)
-	}
-	_, err = pgDB.ExecContext(ctx,
-		`UPDATE task_nodes SET reservation_expires_at = $1 WHERE id = $2`,
-		expired, node.ID)
-	if err != nil {
-		t.Fatalf("set reservation_expires_at: %v", err)
-	}
-
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-
-	// Call ClearExpiredReservations: using real clock, cutoff = now-30s,
-	// the 2-minute-expired reservation should be cleared.
-	if err := sched.ClearExpiredReservations(ctx); err != nil {
-		t.Fatalf("ClearExpiredReservations: %v", err)
-	}
-
-	got, err := s.GetTaskNode(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("get task node after clear: %v", err)
-	}
-	if got.ReservedForAgentID != nil {
-		t.Fatalf("expected reserved_for_agent_id cleared, still set to %v", *got.ReservedForAgentID)
-	}
-	if got.ReservationExpiresAt != nil {
-		t.Fatalf("expected reservation_expires_at cleared, still set to %v", *got.ReservationExpiresAt)
-	}
-	if got.Status != types.TaskNodeStatusPending {
-		t.Fatalf("expected node to remain pending, got %s", got.Status)
-	}
-	t.Log("ClearExpiredReservations cleared expired reservation, node remains pending/open to all agents")
-}
-
-// TestCheckNodeTimeout verifies that nodes exceeding timeout_minutes are set to manual_intervention.
-func TestSchedulerWorkflowTriggers(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-	now := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
-
-	wksp, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "workflow-trigger-scheduler-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "WT",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: wksp.ID,
-		Name:        "workflow-trigger-project",
-		Description: strPtr("test"),
-		Status:      "active",
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	configBytes, err := json.Marshal(map[string]interface{}{
-		"project_id":       proj.ID,
-		"interval_minutes": float64(45),
-		"title":            "Scheduled Inspection",
-		"description":      "Check project status",
-	})
-	if err != nil {
-		t.Fatalf("marshal trigger config: %v", err)
-	}
-
-	nextRunAt := now.Add(-time.Minute)
-	tpl, _, err := s.CreateWorkflowTemplate(ctx, types.CreateWorkflowTemplateParams{
-		WorkspaceID:    wksp.ID,
-		Name:           "scheduled-template-" + uuid.New().String()[:8],
-		Description:    strPtr("scheduled"),
-		TriggerType:    "schedule",
-		TriggerConfig:  configBytes,
-		TriggerEnabled: true,
-		NextRunAt:      &nextRunAt,
-	}, []types.CreateTemplateNodeParams{
-		{Name: "Execute Inspection", SortOrder: 1, NodeType: "standard", AssigneeType: "any_agent", TimeoutMinutes: 60, MaxRejectCycles: 3},
-	})
-	if err != nil {
-		t.Fatalf("create scheduled template: %v", err)
-	}
-
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-	sched.Clock = clock.NewFakeClock(now)
-
-	if err := sched.ProcessWorkflowTriggers(ctx); err != nil {
-		t.Fatalf("ProcessWorkflowTriggers: %v", err)
-	}
-
-	tasks, err := s.ListAllTasks(ctx, uuid.MustParse(proj.ID))
-	if err != nil {
-		t.Fatalf("ListAllTasks: %v", err)
-	}
-	found := false
-	for _, task := range tasks {
-		if task.Title == "Scheduled Inspection" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected scheduled trigger to create task 'Scheduled Inspection', tasks: %#v", tasks)
-	}
-
-	updated, err := s.GetWorkflowTemplate(ctx, uuid.MustParse(tpl.ID))
-	if err != nil {
-		t.Fatalf("GetWorkflowTemplate: %v", err)
-	}
-	if updated.LastTriggeredAt == nil {
-		t.Fatal("expected last_triggered_at to be set")
-	}
-	if updated.NextRunAt == nil || !updated.NextRunAt.Equal(now.Add(45*time.Minute)) {
-		t.Fatalf("next_run_at = %#v, want %s", updated.NextRunAt, now.Add(45*time.Minute))
-	}
-}
-
-func TestCheckNodeTimeout(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-
-	// Create workspace, project, Agent, task, and node
-	wksp, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "node-timeout-test-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "NT",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: wksp.ID,
-		Name:        "node-timeout-proj",
-		Description: strPtr("test"),
-		Status:      types.ProjectStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-node")
-	if err != nil {
-		t.Fatalf("create agent daemon: %v", err)
-	}
-	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "node-" + uuid.NewString()[:8], "claude", "", "persona-node", "Tester", "tester@teammate.local")
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOnline); err != nil {
-		t.Fatalf("set agent online: %v", err)
-	}
-
-	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
-		ProjectID:  proj.ID,
-		MemberType: "agent",
-		AgentID:    strPtr(agent.ID),
-		Role:       "member",
-	})
-	if err != nil {
-		t.Fatalf("add agent to project: %v", err)
-	}
-
-	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
-		ProjectID:    uuid.MustParse(proj.ID),
-		WorkflowName: "test-flow",
-		Title:        "Node timeout test task",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         db.TaskTypeTask,
-		Priority:     db.TaskPriorityMedium,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(agent.ID),
-		Sequence:     0,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  5,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusInProgress,
-		AssigneeType:    db.AssigneeTypeSpecificAgent,
-		AssigneeID:      uuid.NullUUID{UUID: uuid.MustParse(agent.ID), Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("create task node: %v", err)
-	}
-
-	sixMinAgo := time.Now().Add(-6 * time.Minute)
-	_, err = pgDB.ExecContext(ctx, `UPDATE task_nodes SET updated_at = $1 WHERE id = $2`, sixMinAgo, node.ID)
-	if err != nil {
-		t.Fatalf("set node updated_at to past: %v", err)
-	}
-
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-
-	err = sched.CheckNodeTimeout(ctx)
-	if err != nil {
-		t.Fatalf("CheckNodeTimeout: %v", err)
-	}
-
-	updatedNode, err := s.GetTaskNode(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("get task node: %v", err)
-	}
-	if updatedNode.Status != types.TaskNodeStatusManualIntervention {
-		t.Fatalf("expected manual_intervention after node timeout, got %s", updatedNode.Status)
-	}
-
-	transitions, err := s.ListNodeTransitions(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("list node transitions: %v", err)
-	}
-	if len(transitions) == 0 {
-		t.Fatal("expected at least 1 transition record, got 0")
-	}
-	lastTransition := transitions[len(transitions)-1]
-	if lastTransition.ToStatus != types.TaskNodeStatusManualIntervention {
-		t.Fatalf("expected transition to manual_intervention, got %s", lastTransition.ToStatus)
-	}
-	if lastTransition.Action != types.TransitionActionTimeout {
-		t.Fatalf("expected transition action timeout, got %s", lastTransition.Action)
-	}
-
-	t.Log("checkNodeTimeout: node correctly set to manual_intervention with timeout transition")
-}
-
-// TestOfflineAgentFallback verifies that in_progress nodes assigned to agents offline for over 1 hour are set to manual_intervention.
-func TestOfflineAgentFallback(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-
-	wksp, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "offline-fallback-test-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "OF",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: wksp.ID,
-		Name:        "offline-fallback-proj",
-		Description: strPtr("test"),
-		Status:      types.ProjectStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-offline")
-	if err != nil {
-		t.Fatalf("create agent daemon: %v", err)
-	}
-	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "offline-" + uuid.NewString()[:8], "claude", "", "persona-offline", "Tester", "tester@teammate.local")
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
-		t.Fatalf("set agent offline: %v", err)
-	}
-
-	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
-		ProjectID:  proj.ID,
-		MemberType: "agent",
-		AgentID:    strPtr(agent.ID),
-		Role:       "member",
-	})
-	if err != nil {
-		t.Fatalf("add agent to project: %v", err)
-	}
-
-	twoHoursAgo := time.Now().Add(-2 * time.Hour)
-	_, err = pgDB.ExecContext(ctx, `UPDATE agents SET updated_at = $1 WHERE id = $2`, twoHoursAgo, agent.ID)
-	if err != nil {
-		t.Fatalf("set agent updated_at to past: %v", err)
-	}
-
-	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
-		ProjectID:    uuid.MustParse(proj.ID),
-		WorkflowName: "test-flow",
-		Title:        "Offline fallback test task",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         db.TaskTypeTask,
-		Priority:     db.TaskPriorityMedium,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(agent.ID),
-		Sequence:     0,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  60,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusInProgress,
-		AssigneeType:    db.AssigneeTypeSpecificAgent,
-		AssigneeID:      uuid.NullUUID{UUID: uuid.MustParse(agent.ID), Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("create task node: %v", err)
-	}
-
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-
-	err = sched.OfflineAgentFallback(ctx)
-	if err != nil {
-		t.Fatalf("OfflineAgentFallback: %v", err)
-	}
-
-	updatedNode, err := s.GetTaskNode(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("get task node: %v", err)
-	}
-	if updatedNode.Status != types.TaskNodeStatusManualIntervention {
-		t.Fatalf("expected manual_intervention after offline agent fallback, got %s", updatedNode.Status)
-	}
-
-	transitions, err := s.ListNodeTransitions(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("list node transitions: %v", err)
-	}
-	if len(transitions) == 0 {
-		t.Fatal("expected at least 1 transition record, got 0")
-	}
-	lastTransition := transitions[len(transitions)-1]
-	if lastTransition.ToStatus != types.TaskNodeStatusManualIntervention {
-		t.Fatalf("expected transition to manual_intervention, got %s", lastTransition.ToStatus)
-	}
-
-	t.Log("offlineAgentFallback: node correctly set to manual_intervention for offline agent")
-}
-
-// TestOfflineAgentFallbackNoOpForOnlineAgent verifies that in_progress nodes assigned to online agents (offline less than 1 hour) are not affected.
-func TestOfflineAgentFallbackNoOpForOnlineAgent(t *testing.T) {
-	pgDB := connectTestDB(t)
-	t.Cleanup(func() { pgDB.Close() })
-
-	rdb := connectTestRedis(t)
-	t.Cleanup(func() { rdb.Close() })
-
-	s := store.New(pgDB)
-	ctx := context.Background()
-
-	wksp, err := s.CreateWorkspace(ctx, types.CreateWorkspaceParams{
-		Name:        "offline-noop-test-" + uuid.New().String()[:8],
-		Description: strPtr("test"),
-		IssuePrefix: "ON",
-	})
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	t.Cleanup(func() { _ = testdb.DeleteWorkspace(pgDB, wksp.ID) })
-
-	proj, err := s.CreateProject(ctx, types.CreateProjectParams{
-		WorkspaceID: wksp.ID,
-		Name:        "offline-noop-proj",
-		Description: strPtr("test"),
-		Status:      types.ProjectStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	agentDaemon, _, err := s.CreateDaemon(ctx, uuid.MustParse(wksp.ID), "box-recently")
-	if err != nil {
-		t.Fatalf("create agent daemon: %v", err)
-	}
-	agent, err := s.CreateDaemonAgent(ctx, uuid.MustParse(wksp.ID), agentDaemon.ID, "recently-" + uuid.NewString()[:8], "claude", "", "persona-recently", "Tester", "tester@teammate.local")
-	if err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := s.SetDaemonAgentStatusByName(ctx, agentDaemon.ID, agent.Name, types.AgentStatusOffline); err != nil {
-		t.Fatalf("set agent offline: %v", err)
-	}
-
-	_, err = s.CreateProjectMember(ctx, types.CreateProjectMemberParams{
-		ProjectID:  proj.ID,
-		MemberType: "agent",
-		AgentID:    strPtr(agent.ID),
-		Role:       "member",
-	})
-	if err != nil {
-		t.Fatalf("add agent to project: %v", err)
-	}
-
-	task, err := db.New(pgDB).CreateTask(ctx, db.CreateTaskParams{
-		ProjectID:    uuid.MustParse(proj.ID),
-		WorkflowName: "test-flow",
-		Title:        "Offline noop test task",
-		Description:  sql.NullString{String: "test", Valid: true},
-		Type:         db.TaskTypeTask,
-		Priority:     db.TaskPriorityMedium,
-		Status:       db.TaskStatusActive,
-		AuthorType:   "agent",
-		AuthorID:     uuid.MustParse(agent.ID),
-		Sequence:     0,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  60,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusInProgress,
-		AssigneeType:    db.AssigneeTypeSpecificAgent,
-		AssigneeID:      uuid.NullUUID{UUID: uuid.MustParse(agent.ID), Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("create task node: %v", err)
-	}
-
-	hub := ws.NewHub(rdb)
-	sched := scheduler.NewScheduler(s, hub, rdb)
-
-	err = sched.OfflineAgentFallback(ctx)
-	if err != nil {
-		t.Fatalf("OfflineAgentFallback: %v", err)
-	}
-
-	updatedNode, err := s.GetTaskNode(ctx, node.ID)
-	if err != nil {
-		t.Fatalf("get task node: %v", err)
-	}
-	if updatedNode.Status != types.TaskNodeStatusInProgress {
-		t.Fatalf("expected in_progress (agent offline < 1 hour), got %s", updatedNode.Status)
-	}
-
-	t.Log("offlineAgentFallback: correctly skipped for recently-offline agent")
-}
-
 // TestAgentAutoRecoverOnline verifies that agents stuck in "busy" status without in_progress nodes are recovered to "online".
 func TestAgentAutoRecoverOnline(t *testing.T) {
 	pgDB := connectTestDB(t)
@@ -1087,7 +391,7 @@ func TestAgentAutoRecoverOnline(t *testing.T) {
 	t.Log("agentAutoRecoverOnline: stuck busy agent correctly recovered to online")
 }
 
-// TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode verifies that offline agents with in_progress nodes are not recovered.
+// TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode verifies that busy agents with a running node are not recovered.
 func TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
@@ -1156,20 +460,25 @@ func TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 
-	_, err = db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  60,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusInProgress,
-		AssigneeType:    db.AssigneeTypeSpecificAgent,
-		AssigneeID:      uuid.NullUUID{UUID: uuid.MustParse(agent.ID), Valid: true},
+	// Insert a running node instance reserved by the busy agent (the engine
+	// owns instantiation; tests insert the snapshot directly)
+	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
+		TaskID:         task.ID,
+		TemplateNodeID: uuid.MustParse(uuid.NewString()),
+		Name:           "code",
+		SortOrder:      1,
+		TypeKey:        "agent.task",
+		Config:         []byte(`{}`),
+		Status:         db.TaskNodeStatusRunning,
+		ActivationMode: "all",
 	})
 	if err != nil {
 		t.Fatalf("create task node: %v", err)
+	}
+	if _, err := pgDB.ExecContext(ctx,
+		`UPDATE task_nodes SET reserved_for_agent_id = $1 WHERE id = $2`,
+		agent.ID, node.ID); err != nil {
+		t.Fatalf("reserve node for agent: %v", err)
 	}
 
 	hub := ws.NewHub(rdb)
@@ -1185,14 +494,14 @@ func TestAgentAutoRecoverOnlineNoOpForBusyAgentWithNode(t *testing.T) {
 		t.Fatalf("get agent after recovery attempt: %v", err)
 	}
 	if recoveredAgent.Status != types.AgentStatusBusy {
-		t.Fatalf("expected agent to remain busy (has in_progress node), got %s", recoveredAgent.Status)
+		t.Fatalf("expected agent to remain busy (has a running node), got %s", recoveredAgent.Status)
 	}
 
-	t.Log("agentAutoRecoverOnline: correctly skipped busy agent with in_progress node")
+	t.Log("agentAutoRecoverOnline: correctly skipped busy agent with a running node")
 }
 
-// TestRenotifyPendingNodes verifies that pending nodes with updated_at older than 30 seconds are re-broadcast via SSE when online agents exist.
-func TestRenotifyPendingNodes(t *testing.T) {
+// TestRenotifyReadyNodes verifies that ready nodes unclaimed for longer than 30 seconds are re-broadcast at project granularity.
+func TestRenotifyReadyNodes(t *testing.T) {
 	pgDB := connectTestDB(t)
 	t.Cleanup(func() { pgDB.Close() })
 
@@ -1276,15 +585,14 @@ func TestRenotifyPendingNodes(t *testing.T) {
 	}
 
 	node, err := db.New(pgDB).CreateTaskNode(ctx, db.CreateTaskNodeParams{
-		TaskID:          task.ID,
-		MaxRejectCycles: 3,
-		TimeoutMinutes:  60,
-		Name:            "code",
-		Description:     sql.NullString{String: "code node", Valid: true},
-		SortOrder:       1,
-		NodeType:        db.NodeTypeStandard,
-		Status:          db.TaskNodeStatusPending,
-		AssigneeType:    db.AssigneeTypeAnyAgent,
+		TaskID:         task.ID,
+		TemplateNodeID: uuid.MustParse(uuid.NewString()),
+		Name:           "work",
+		SortOrder:      1,
+		TypeKey:        "agent.task",
+		Config:         []byte(`{}`),
+		Status:         db.TaskNodeStatusReady,
+		ActivationMode: "all",
 	})
 	if err != nil {
 		t.Fatalf("create task node: %v", err)
@@ -1299,20 +607,20 @@ func TestRenotifyPendingNodes(t *testing.T) {
 	hub := ws.NewHub(rdb)
 	sched := scheduler.NewScheduler(s, hub, rdb)
 
-	err = sched.RenotifyPendingNodes(ctx)
+	err = sched.RenotifyReadyNodes(ctx)
 	if err != nil {
-		t.Fatalf("RenotifyPendingNodes: %v", err)
+		t.Fatalf("RenotifyReadyNodes: %v", err)
 	}
 
 	updatedNode, err := s.GetTaskNode(ctx, node.ID)
 	if err != nil {
 		t.Fatalf("get task node: %v", err)
 	}
-	if updatedNode.Status != types.TaskNodeStatusPending {
-		t.Fatalf("expected node to remain pending after renotify, got %s", updatedNode.Status)
+	if updatedNode.Status != types.TaskNodeStatusReady {
+		t.Fatalf("expected node to remain ready after renotify, got %s", updatedNode.Status)
 	}
 
-	t.Log("renotifyPendingNodes: completed successfully, node remains pending")
+	t.Log("renotifyReadyNodes: completed successfully, node remains ready")
 }
 
 // TestSchedulerMemoryGCDeletesLowConfidenceOldMemories verifies design doc §12.11:

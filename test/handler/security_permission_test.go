@@ -41,11 +41,11 @@ func TestViewerCannotWriteWorkflow(t *testing.T) {
 	body := map[string]interface{}{
 		"name":        "unauthorized-flow",
 		"description": "should fail",
+		"enabled":     true,
 		"nodes": []map[string]interface{}{
 			{
-				"name": "step1", "description": "test", "sort_order": 1,
-				"node_type": "standard", "assignee_type": "any_agent",
-				"timeout_minutes": 60,
+				"id": "a1000000-0000-4000-8000-000000000001", "name": "step1", "sort_order": 1,
+				"type_key": "trigger.manual",
 			},
 		},
 	}

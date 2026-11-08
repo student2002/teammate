@@ -1,7 +1,7 @@
 // board.go provides HTTP API endpoints for querying project board data, returning task data organized by column.
 //
 // This file provides the following HTTP API endpoint:
-//   - GET /projects/{projectId}/board: get project board data, returns a task list organized by column (pending/in_progress/completed/rejected/manual_intervention)
+//   - GET /projects/{projectId}/board: get project board data, returns a task list organized by column (pending/in_progress/succeeded/failed/manual_intervention)
 //
 // The board data is queried by BoardService and arranged in a predefined column order; each column contains a column key, label, and the corresponding task list.
 // The request path parameter projectId must be a valid UUID format, otherwise a 400 Bad Request is returned.

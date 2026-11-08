@@ -8,226 +8,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
-
-const claimTaskNode = `-- name: ClaimTaskNode :one
-UPDATE task_nodes
-SET status = 'in_progress',
-    assignee_type = 'specific_agent',
-    assignee_id = $2,
-    reserved_for_agent_id = $2,
-    version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'pending'
-  AND (reserved_for_agent_id IS NULL OR reserved_for_agent_id = $2)
-  AND task_nodes.version = $3
-  AND (
-    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
-    (SELECT sort_order FROM task_nodes WHERE id = $1) =
-      (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
-    OR EXISTS (
-      SELECT 1
-      FROM task_nodes prev
-      JOIN task_nodes cur ON cur.id = $1
-      WHERE prev.task_id = cur.task_id
-        AND prev.sort_order = (
-          SELECT MAX(p2.sort_order) FROM task_nodes p2
-          WHERE p2.task_id = cur.task_id AND p2.sort_order < cur.sort_order
-        )
-        AND prev.status = 'completed'
-    )
-  )
-  AND (
-    -- DAG dependency check: all depends_on nodes must have completed
-    depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep
-        WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type ClaimTaskNodeParams struct {
-	ID         uuid.UUID     `db:"id" json:"id"`
-	AssigneeID uuid.NullUUID `db:"assignee_id" json:"assignee_id"`
-	Version    int32         `db:"version" json:"version"`
-}
-
-func (q *Queries) ClaimTaskNode(ctx context.Context, arg ClaimTaskNodeParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, claimTaskNode, arg.ID, arg.AssigneeID, arg.Version)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const claimTaskNodeByHuman = `-- name: ClaimTaskNodeByHuman :one
-UPDATE task_nodes
-SET status = 'in_progress',
-    assignee_type = 'human',
-    assignee_id = $2,
-    version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'pending'
-  AND assignee_type = 'human'
-  AND task_nodes.version = $3
-  AND (
-    -- Linear-predecessor check: the first node (minimum sort_order within the task, compatible with 0- or 1-based sort_order) or the most recent preceding node has completed
-    (SELECT sort_order FROM task_nodes WHERE id = $1) =
-      (SELECT MIN(sort_order) FROM task_nodes WHERE task_id = (SELECT task_id FROM task_nodes WHERE id = $1))
-    OR EXISTS (
-      SELECT 1
-      FROM task_nodes prev
-      JOIN task_nodes cur ON cur.id = $1
-      WHERE prev.task_id = cur.task_id
-        AND prev.sort_order = (
-          SELECT MAX(p2.sort_order) FROM task_nodes p2
-          WHERE p2.task_id = cur.task_id AND p2.sort_order < cur.sort_order
-        )
-        AND prev.status = 'completed'
-    )
-  )
-  AND (
-    depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type ClaimTaskNodeByHumanParams struct {
-	ID         uuid.UUID     `db:"id" json:"id"`
-	AssigneeID uuid.NullUUID `db:"assignee_id" json:"assignee_id"`
-	Version    int32         `db:"version" json:"version"`
-}
-
-func (q *Queries) ClaimTaskNodeByHuman(ctx context.Context, arg ClaimTaskNodeByHumanParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, claimTaskNodeByHuman, arg.ID, arg.AssigneeID, arg.Version)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const clearExpiredReservations = `-- name: ClearExpiredReservations :many
-UPDATE task_nodes SET reserved_for_agent_id = NULL, reservation_expires_at = NULL, updated_at = now()
-WHERE reserved_for_agent_id IS NOT NULL
-  AND status = 'pending'
-  AND reservation_expires_at IS NOT NULL
-  AND reservation_expires_at < $1
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-func (q *Queries) ClearExpiredReservations(ctx context.Context, reservationExpiresAt sql.NullTime) ([]TaskNode, error) {
-	rows, err := q.db.QueryContext(ctx, clearExpiredReservations, reservationExpiresAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TaskNode{}
-	for rows.Next() {
-		var i TaskNode
-		if err := rows.Scan(
-			&i.ID,
-			&i.TaskID,
-			&i.Name,
-			&i.Description,
-			&i.SortOrder,
-			&i.NodeType,
-			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
-			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
-			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
 
 const countTasksByProject = `-- name: CountTasksByProject :one
 SELECT count(*) FROM tasks
@@ -372,7 +159,7 @@ INSERT INTO tasks (
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9, $10, $11, $12, $13, $14::uuid
-) RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+) RETURNING id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type CreateTaskParams struct {
@@ -392,7 +179,8 @@ type CreateTaskParams struct {
 	WorkflowTemplateID uuid.NullUUID  `db:"workflow_template_id" json:"workflow_template_id"`
 }
 
-// Task queries
+// Task queries (V2: task_nodes are run snapshots keyed by template_node_id,
+// activation is driven by task_edges resolution — the engine owns node lifecycles)
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, createTask,
 		arg.ProjectID,
@@ -416,6 +204,11 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.ProjectID,
 		&i.WorkflowName,
 		&i.WorkflowTemplateID,
+		&i.WorkflowVersion,
+		&i.SourceEventID,
+		&i.TriggerPayload,
+		&i.Context,
+		&i.Failure,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -437,73 +230,66 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 
 const createTaskNode = `-- name: CreateTaskNode :one
 INSERT INTO task_nodes (
-    task_id, name, description, sort_order,
-    node_type, status, assignee_type, assignee_id, reserved_for_agent_id,
-    max_reject_cycles, timeout_minutes, readonly_dirs, full_control_dirs, depends_on
+    task_id, template_node_id, name, sort_order, type_key, config,
+    status, activation_mode, max_attempts, readonly_dirs, full_control_dirs
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, task_id, template_node_id, name, sort_order, type_key, config, status, activation_mode, input, output, error, attempt_count, max_attempts, next_retry_at, wait_key, wait_expires_at, version, reserved_for_agent_id, summary, readonly_dirs, full_control_dirs, completed_at, created_at, updated_at
 `
 
 type CreateTaskNodeParams struct {
-	TaskID             int32                 `db:"task_id" json:"task_id"`
-	Name               string                `db:"name" json:"name"`
-	Description        sql.NullString        `db:"description" json:"description"`
-	SortOrder          int32                 `db:"sort_order" json:"sort_order"`
-	NodeType           NodeType              `db:"node_type" json:"node_type"`
-	Status             TaskNodeStatus        `db:"status" json:"status"`
-	AssigneeType       AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID         uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	ReservedForAgentID uuid.NullUUID         `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
-	MaxRejectCycles    int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	TimeoutMinutes     int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	ReadonlyDirs       pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs    pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	DependsOn          []uuid.UUID           `db:"depends_on" json:"depends_on"`
+	TaskID          int32                 `db:"task_id" json:"task_id"`
+	TemplateNodeID  uuid.UUID             `db:"template_node_id" json:"template_node_id"`
+	Name            string                `db:"name" json:"name"`
+	SortOrder       int32                 `db:"sort_order" json:"sort_order"`
+	TypeKey         string                `db:"type_key" json:"type_key"`
+	Config          json.RawMessage       `db:"config" json:"config"`
+	Status          TaskNodeStatus        `db:"status" json:"status"`
+	ActivationMode  string                `db:"activation_mode" json:"activation_mode"`
+	MaxAttempts     int32                 `db:"max_attempts" json:"max_attempts"`
+	ReadonlyDirs    pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
+	FullControlDirs pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
 }
 
 func (q *Queries) CreateTaskNode(ctx context.Context, arg CreateTaskNodeParams) (TaskNode, error) {
 	row := q.db.QueryRowContext(ctx, createTaskNode,
 		arg.TaskID,
+		arg.TemplateNodeID,
 		arg.Name,
-		arg.Description,
 		arg.SortOrder,
-		arg.NodeType,
+		arg.TypeKey,
+		arg.Config,
 		arg.Status,
-		arg.AssigneeType,
-		arg.AssigneeID,
-		arg.ReservedForAgentID,
-		arg.MaxRejectCycles,
-		arg.TimeoutMinutes,
+		arg.ActivationMode,
+		arg.MaxAttempts,
 		arg.ReadonlyDirs,
 		arg.FullControlDirs,
-		pq.Array(arg.DependsOn),
 	)
 	var i TaskNode
 	err := row.Scan(
 		&i.ID,
 		&i.TaskID,
+		&i.TemplateNodeID,
 		&i.Name,
-		&i.Description,
 		&i.SortOrder,
-		&i.NodeType,
+		&i.TypeKey,
+		&i.Config,
 		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
+		&i.ActivationMode,
+		&i.Input,
+		&i.Output,
+		&i.Error,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.NextRetryAt,
+		&i.WaitKey,
+		&i.WaitExpiresAt,
 		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
+		&i.ReservedForAgentID,
 		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
 		&i.ReadonlyDirs,
 		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -570,16 +356,6 @@ func (q *Queries) DeleteTask(ctx context.Context, id int32) error {
 	return err
 }
 
-const deleteTaskNodes = `-- name: DeleteTaskNodes :exec
-DELETE FROM task_nodes
-WHERE task_id = $1
-`
-
-func (q *Queries) DeleteTaskNodes(ctx context.Context, taskID int32) error {
-	_, err := q.db.ExecContext(ctx, deleteTaskNodes, taskID)
-	return err
-}
-
 const getComment = `-- name: GetComment :one
 SELECT id, task_id, node_id, source_node_id, parent_id, author_type, author_id, content, comment_type, metadata, mentions, edited_at, created_at, updated_at FROM comments WHERE id = $1
 `
@@ -604,17 +380,6 @@ func (q *Queries) GetComment(ctx context.Context, id uuid.UUID) (Comment, error)
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const getCompletedNodeCount = `-- name: GetCompletedNodeCount :one
-SELECT COUNT(*) FROM task_nodes WHERE task_id = $1 AND status = 'completed'
-`
-
-func (q *Queries) GetCompletedNodeCount(ctx context.Context, taskID int32) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getCompletedNodeCount, taskID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const getCompletedTasksOlderThan = `-- name: GetCompletedTasksOlderThan :many
@@ -663,274 +428,8 @@ func (q *Queries) GetCompletedTasksOlderThan(ctx context.Context, arg GetComplet
 	return items, nil
 }
 
-const getInProgressNodesByAgent = `-- name: GetInProgressNodesByAgent :many
-SELECT tn.id, tn.task_id, tn.name, tn.description, tn.sort_order, tn.node_type, tn.status, tn.assignee_type, tn.assignee_id, tn.reserved_for_agent_id, tn.reject_count, tn.max_reject_cycles, tn.timeout_minutes, tn.version, tn.completed_at, tn.completed_by, tn.summary, tn.previous_summary, tn.reservation_expires_at, tn.readonly_dirs, tn.full_control_dirs, tn.depends_on, tn.created_at, tn.updated_at, t.project_id FROM task_nodes tn
-JOIN tasks t ON tn.task_id = t.id
-JOIN projects p ON t.project_id = p.id
-WHERE tn.status = 'in_progress'
-  AND tn.assignee_id = $1
-  AND p.workspace_id = $2
-ORDER BY tn.sort_order
-`
-
-type GetInProgressNodesByAgentParams struct {
-	AssigneeID  uuid.NullUUID `db:"assignee_id" json:"assignee_id"`
-	WorkspaceID uuid.UUID     `db:"workspace_id" json:"workspace_id"`
-}
-
-type GetInProgressNodesByAgentRow struct {
-	ID                   uuid.UUID             `db:"id" json:"id"`
-	TaskID               int32                 `db:"task_id" json:"task_id"`
-	Name                 string                `db:"name" json:"name"`
-	Description          sql.NullString        `db:"description" json:"description"`
-	SortOrder            int32                 `db:"sort_order" json:"sort_order"`
-	NodeType             NodeType              `db:"node_type" json:"node_type"`
-	Status               TaskNodeStatus        `db:"status" json:"status"`
-	AssigneeType         AssigneeType          `db:"assignee_type" json:"assignee_type"`
-	AssigneeID           uuid.NullUUID         `db:"assignee_id" json:"assignee_id"`
-	ReservedForAgentID   uuid.NullUUID         `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
-	RejectCount          int32                 `db:"reject_count" json:"reject_count"`
-	MaxRejectCycles      int32                 `db:"max_reject_cycles" json:"max_reject_cycles"`
-	TimeoutMinutes       int32                 `db:"timeout_minutes" json:"timeout_minutes"`
-	Version              int32                 `db:"version" json:"version"`
-	CompletedAt          sql.NullTime          `db:"completed_at" json:"completed_at"`
-	CompletedBy          uuid.NullUUID         `db:"completed_by" json:"completed_by"`
-	Summary              string                `db:"summary" json:"summary"`
-	PreviousSummary      string                `db:"previous_summary" json:"previous_summary"`
-	ReservationExpiresAt sql.NullTime          `db:"reservation_expires_at" json:"reservation_expires_at"`
-	ReadonlyDirs         pqtype.NullRawMessage `db:"readonly_dirs" json:"readonly_dirs"`
-	FullControlDirs      pqtype.NullRawMessage `db:"full_control_dirs" json:"full_control_dirs"`
-	DependsOn            []uuid.UUID           `db:"depends_on" json:"depends_on"`
-	CreatedAt            time.Time             `db:"created_at" json:"created_at"`
-	UpdatedAt            time.Time             `db:"updated_at" json:"updated_at"`
-	ProjectID            uuid.UUID             `db:"project_id" json:"project_id"`
-}
-
-// Queries the in_progress nodes claimed but not yet completed by a given Agent in a given workspace,
-// used to resume unfinished execution after an Agent restart.
-func (q *Queries) GetInProgressNodesByAgent(ctx context.Context, arg GetInProgressNodesByAgentParams) ([]GetInProgressNodesByAgentRow, error) {
-	rows, err := q.db.QueryContext(ctx, getInProgressNodesByAgent, arg.AssigneeID, arg.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetInProgressNodesByAgentRow{}
-	for rows.Next() {
-		var i GetInProgressNodesByAgentRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.TaskID,
-			&i.Name,
-			&i.Description,
-			&i.SortOrder,
-			&i.NodeType,
-			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
-			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
-			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ProjectID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getNextTaskNode = `-- name: GetNextTaskNode :one
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes tn
-WHERE tn.task_id = $1 AND tn.sort_order > (SELECT sub.sort_order FROM task_nodes sub WHERE sub.id = $2)
-ORDER BY tn.sort_order ASC LIMIT 1
-`
-
-type GetNextTaskNodeParams struct {
-	TaskID int32     `db:"task_id" json:"task_id"`
-	ID     uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *Queries) GetNextTaskNode(ctx context.Context, arg GetNextTaskNodeParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, getNextTaskNode, arg.TaskID, arg.ID)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getPrevStandardNodeAssignee = `-- name: GetPrevStandardNodeAssignee :one
-SELECT tn.assignee_id FROM task_nodes tn
-WHERE tn.task_id = $1
-  AND tn.sort_order < (SELECT sort_order FROM task_nodes sub WHERE sub.id = $2)
-  AND tn.node_type = 'standard'
-  AND tn.assignee_id IS NOT NULL
-ORDER BY tn.sort_order DESC LIMIT 1
-`
-
-type GetPrevStandardNodeAssigneeParams struct {
-	TaskID int32     `db:"task_id" json:"task_id"`
-	ID     uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *Queries) GetPrevStandardNodeAssignee(ctx context.Context, arg GetPrevStandardNodeAssigneeParams) (uuid.NullUUID, error) {
-	row := q.db.QueryRowContext(ctx, getPrevStandardNodeAssignee, arg.TaskID, arg.ID)
-	var assignee_id uuid.NullUUID
-	err := row.Scan(&assignee_id)
-	return assignee_id, err
-}
-
-const getPrevTaskNode = `-- name: GetPrevTaskNode :one
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes tn
-WHERE tn.task_id = $1 AND tn.sort_order < (SELECT sub.sort_order FROM task_nodes sub WHERE sub.id = $2)
-ORDER BY tn.sort_order DESC LIMIT 1
-`
-
-type GetPrevTaskNodeParams struct {
-	TaskID int32     `db:"task_id" json:"task_id"`
-	ID     uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *Queries) GetPrevTaskNode(ctx context.Context, arg GetPrevTaskNodeParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, getPrevTaskNode, arg.TaskID, arg.ID)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getReadyNodes = `-- name: GetReadyNodes :many
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes
-WHERE task_nodes.task_id = $1
-  AND task_nodes.status = 'pending'
-  AND (
-    task_nodes.depends_on = '{}'
-    OR NOT EXISTS (
-      SELECT 1 FROM unnest(task_nodes.depends_on) AS dep_id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM task_nodes dep
-        WHERE dep.id = dep_id AND dep.status = 'completed'
-      )
-    )
-  )
-ORDER BY task_nodes.sort_order
-`
-
-func (q *Queries) GetReadyNodes(ctx context.Context, taskID int32) ([]TaskNode, error) {
-	rows, err := q.db.QueryContext(ctx, getReadyNodes, taskID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TaskNode{}
-	for rows.Next() {
-		var i TaskNode
-		if err := rows.Scan(
-			&i.ID,
-			&i.TaskID,
-			&i.Name,
-			&i.Description,
-			&i.SortOrder,
-			&i.NodeType,
-			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
-			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
-			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getTask = `-- name: GetTask :one
-SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE id = $1
 `
 
@@ -942,6 +441,11 @@ func (q *Queries) GetTask(ctx context.Context, id int32) (Task, error) {
 		&i.ProjectID,
 		&i.WorkflowName,
 		&i.WorkflowTemplateID,
+		&i.WorkflowVersion,
+		&i.SourceEventID,
+		&i.TriggerPayload,
+		&i.Context,
+		&i.Failure,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -962,7 +466,7 @@ func (q *Queries) GetTask(ctx context.Context, id int32) (Task, error) {
 }
 
 const getTaskNode = `-- name: GetTaskNode :one
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes
+SELECT id, task_id, template_node_id, name, sort_order, type_key, config, status, activation_mode, input, output, error, attempt_count, max_attempts, next_retry_at, wait_key, wait_expires_at, version, reserved_for_agent_id, summary, readonly_dirs, full_control_dirs, completed_at, created_at, updated_at FROM task_nodes
 WHERE id = $1
 `
 
@@ -972,140 +476,31 @@ func (q *Queries) GetTaskNode(ctx context.Context, id uuid.UUID) (TaskNode, erro
 	err := row.Scan(
 		&i.ID,
 		&i.TaskID,
+		&i.TemplateNodeID,
 		&i.Name,
-		&i.Description,
 		&i.SortOrder,
-		&i.NodeType,
+		&i.TypeKey,
+		&i.Config,
 		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
+		&i.ActivationMode,
+		&i.Input,
+		&i.Output,
+		&i.Error,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.NextRetryAt,
+		&i.WaitKey,
+		&i.WaitExpiresAt,
 		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
+		&i.ReservedForAgentID,
 		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
 		&i.ReadonlyDirs,
 		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const getTaskNodeBySortOrder = `-- name: GetTaskNodeBySortOrder :one
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes WHERE task_id = $1 AND sort_order = $2
-`
-
-type GetTaskNodeBySortOrderParams struct {
-	TaskID    int32 `db:"task_id" json:"task_id"`
-	SortOrder int32 `db:"sort_order" json:"sort_order"`
-}
-
-func (q *Queries) GetTaskNodeBySortOrder(ctx context.Context, arg GetTaskNodeBySortOrderParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, getTaskNodeBySortOrder, arg.TaskID, arg.SortOrder)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getTaskNodeCount = `-- name: GetTaskNodeCount :one
-SELECT COUNT(*) FROM task_nodes WHERE task_id = $1
-`
-
-func (q *Queries) GetTaskNodeCount(ctx context.Context, taskID int32) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getTaskNodeCount, taskID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getTimedOutNodes = `-- name: GetTimedOutNodes :many
-SELECT tn.id, tn.task_id, tn.name, tn.description, tn.sort_order, tn.node_type, tn.status, tn.assignee_type, tn.assignee_id, tn.reserved_for_agent_id, tn.reject_count, tn.max_reject_cycles, tn.timeout_minutes, tn.version, tn.completed_at, tn.completed_by, tn.summary, tn.previous_summary, tn.reservation_expires_at, tn.readonly_dirs, tn.full_control_dirs, tn.depends_on, tn.created_at, tn.updated_at
-FROM task_nodes tn
-WHERE tn.status = 'in_progress'
-  AND tn.node_type != 'manual'
-  AND tn.assignee_type != 'human'
-  AND tn.timeout_minutes > 0
-  AND ($1 - tn.updated_at) > (tn.timeout_minutes * interval '1 minute')
-`
-
-func (q *Queries) GetTimedOutNodes(ctx context.Context, updatedAt time.Time) ([]TaskNode, error) {
-	rows, err := q.db.QueryContext(ctx, getTimedOutNodes, updatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TaskNode{}
-	for rows.Next() {
-		var i TaskNode
-		if err := rows.Scan(
-			&i.ID,
-			&i.TaskID,
-			&i.Name,
-			&i.Description,
-			&i.SortOrder,
-			&i.NodeType,
-			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
-			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
-			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getTokenUsageByAgent = `-- name: GetTokenUsageByAgent :one
@@ -1249,43 +644,6 @@ func (q *Queries) GetTokenUsageByTaskNodes(ctx context.Context, dollar_1 []uuid.
 	return items, nil
 }
 
-const incrementRejectCount = `-- name: IncrementRejectCount :one
-UPDATE task_nodes SET reject_count = reject_count + 1, version = version + 1, updated_at = now()
-WHERE id = $1 RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-func (q *Queries) IncrementRejectCount(ctx context.Context, id uuid.UUID) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, incrementRejectCount, id)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const isAgentProjectMember = `-- name: IsAgentProjectMember :one
 SELECT EXISTS(
   SELECT 1 FROM project_members
@@ -1306,7 +664,7 @@ func (q *Queries) IsAgentProjectMember(ctx context.Context, arg IsAgentProjectMe
 }
 
 const listAllTasks = `-- name: ListAllTasks :many
-SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
 ORDER BY created_at DESC
 `
@@ -1325,6 +683,11 @@ func (q *Queries) ListAllTasks(ctx context.Context, projectID uuid.UUID) ([]Task
 			&i.ProjectID,
 			&i.WorkflowName,
 			&i.WorkflowTemplateID,
+			&i.WorkflowVersion,
+			&i.SourceEventID,
+			&i.TriggerPayload,
+			&i.Context,
+			&i.Failure,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1538,6 +901,47 @@ func (q *Queries) ListNodeTransitions(ctx context.Context, taskNodeID uuid.UUID)
 	return items, nil
 }
 
+const listTaskEdgesByTask = `-- name: ListTaskEdgesByTask :many
+SELECT id, task_id, source_node_id, source_port, target_node_id, target_port, label, config, resolution, resolved_at, created_at FROM task_edges
+WHERE task_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListTaskEdgesByTask(ctx context.Context, taskID int32) ([]TaskEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskEdgesByTask, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskEdge{}
+	for rows.Next() {
+		var i TaskEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.SourceNodeID,
+			&i.SourcePort,
+			&i.TargetNodeID,
+			&i.TargetPort,
+			&i.Label,
+			&i.Config,
+			&i.Resolution,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTaskLevelComments = `-- name: ListTaskLevelComments :many
 SELECT id, task_id, node_id, source_node_id, parent_id, author_type, author_id, content, comment_type, metadata, mentions, edited_at, created_at, updated_at FROM comments
 WHERE task_id = $1 AND node_id IS NULL
@@ -1582,14 +986,14 @@ func (q *Queries) ListTaskLevelComments(ctx context.Context, taskID int32) ([]Co
 	return items, nil
 }
 
-const listTaskNodes = `-- name: ListTaskNodes :many
-SELECT id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at FROM task_nodes
-WHERE task_id = $1
-ORDER BY sort_order
+const listTaskNodesByProject = `-- name: ListTaskNodesByProject :many
+SELECT tn.id, tn.task_id, tn.template_node_id, tn.name, tn.sort_order, tn.type_key, tn.config, tn.status, tn.activation_mode, tn.input, tn.output, tn.error, tn.attempt_count, tn.max_attempts, tn.next_retry_at, tn.wait_key, tn.wait_expires_at, tn.version, tn.reserved_for_agent_id, tn.summary, tn.readonly_dirs, tn.full_control_dirs, tn.completed_at, tn.created_at, tn.updated_at FROM task_nodes tn
+WHERE tn.task_id IN (SELECT id FROM tasks WHERE project_id = $1)
+ORDER BY tn.sort_order
 `
 
-func (q *Queries) ListTaskNodes(ctx context.Context, taskID int32) ([]TaskNode, error) {
-	rows, err := q.db.QueryContext(ctx, listTaskNodes, taskID)
+func (q *Queries) ListTaskNodesByProject(ctx context.Context, projectID uuid.UUID) ([]TaskNode, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskNodesByProject, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1600,26 +1004,137 @@ func (q *Queries) ListTaskNodes(ctx context.Context, taskID int32) ([]TaskNode, 
 		if err := rows.Scan(
 			&i.ID,
 			&i.TaskID,
+			&i.TemplateNodeID,
 			&i.Name,
-			&i.Description,
 			&i.SortOrder,
-			&i.NodeType,
+			&i.TypeKey,
+			&i.Config,
 			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
+			&i.ActivationMode,
+			&i.Input,
+			&i.Output,
+			&i.Error,
+			&i.AttemptCount,
+			&i.MaxAttempts,
+			&i.NextRetryAt,
+			&i.WaitKey,
+			&i.WaitExpiresAt,
 			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
+			&i.ReservedForAgentID,
 			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
 			&i.ReadonlyDirs,
 			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskNodesByStatus = `-- name: ListTaskNodesByStatus :many
+SELECT id, task_id, template_node_id, name, sort_order, type_key, config, status, activation_mode, input, output, error, attempt_count, max_attempts, next_retry_at, wait_key, wait_expires_at, version, reserved_for_agent_id, summary, readonly_dirs, full_control_dirs, completed_at, created_at, updated_at FROM task_nodes
+WHERE status = $1
+ORDER BY updated_at
+`
+
+func (q *Queries) ListTaskNodesByStatus(ctx context.Context, status TaskNodeStatus) ([]TaskNode, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskNodesByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskNode{}
+	for rows.Next() {
+		var i TaskNode
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.TemplateNodeID,
+			&i.Name,
+			&i.SortOrder,
+			&i.TypeKey,
+			&i.Config,
+			&i.Status,
+			&i.ActivationMode,
+			&i.Input,
+			&i.Output,
+			&i.Error,
+			&i.AttemptCount,
+			&i.MaxAttempts,
+			&i.NextRetryAt,
+			&i.WaitKey,
+			&i.WaitExpiresAt,
+			&i.Version,
+			&i.ReservedForAgentID,
+			&i.Summary,
+			&i.ReadonlyDirs,
+			&i.FullControlDirs,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskNodesByTask = `-- name: ListTaskNodesByTask :many
+SELECT id, task_id, template_node_id, name, sort_order, type_key, config, status, activation_mode, input, output, error, attempt_count, max_attempts, next_retry_at, wait_key, wait_expires_at, version, reserved_for_agent_id, summary, readonly_dirs, full_control_dirs, completed_at, created_at, updated_at FROM task_nodes
+WHERE task_id = $1
+ORDER BY sort_order
+`
+
+func (q *Queries) ListTaskNodesByTask(ctx context.Context, taskID int32) ([]TaskNode, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskNodesByTask, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskNode{}
+	for rows.Next() {
+		var i TaskNode
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.TemplateNodeID,
+			&i.Name,
+			&i.SortOrder,
+			&i.TypeKey,
+			&i.Config,
+			&i.Status,
+			&i.ActivationMode,
+			&i.Input,
+			&i.Output,
+			&i.Error,
+			&i.AttemptCount,
+			&i.MaxAttempts,
+			&i.NextRetryAt,
+			&i.WaitKey,
+			&i.WaitExpiresAt,
+			&i.Version,
+			&i.ReservedForAgentID,
+			&i.Summary,
+			&i.ReadonlyDirs,
+			&i.FullControlDirs,
+			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1637,7 +1152,7 @@ func (q *Queries) ListTaskNodes(ctx context.Context, taskID int32) ([]TaskNode, 
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
   AND ($2::task_status IS NULL OR status = $2)
   AND (
@@ -1672,6 +1187,11 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, e
 			&i.ProjectID,
 			&i.WorkflowName,
 			&i.WorkflowTemplateID,
+			&i.WorkflowVersion,
+			&i.SourceEventID,
+			&i.TriggerPayload,
+			&i.Context,
+			&i.Failure,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1702,7 +1222,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]Task, e
 }
 
 const listTasksPaginated = `-- name: ListTasksPaginated :many
-SELECT id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
+SELECT id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at FROM tasks
 WHERE project_id = $1
   AND ($2::task_status IS NULL OR status = $2)
   AND ($3::text IS NULL OR title ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
@@ -1739,6 +1259,11 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 			&i.ProjectID,
 			&i.WorkflowName,
 			&i.WorkflowTemplateID,
+			&i.WorkflowVersion,
+			&i.SourceEventID,
+			&i.TriggerPayload,
+			&i.Context,
+			&i.Failure,
 			&i.Title,
 			&i.Description,
 			&i.Constraints,
@@ -1766,158 +1291,6 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 		return nil, err
 	}
 	return items, nil
-}
-
-const reclaimTaskNode = `-- name: ReclaimTaskNode :one
-UPDATE task_nodes
-SET version = version + 1,
-    updated_at = now()
-WHERE task_nodes.id = $1
-  AND status = 'in_progress'
-  AND reserved_for_agent_id = $2
-  AND version = $3
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type ReclaimTaskNodeParams struct {
-	ID                 uuid.UUID     `db:"id" json:"id"`
-	ReservedForAgentID uuid.NullUUID `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
-	Version            int32         `db:"version" json:"version"`
-}
-
-func (q *Queries) ReclaimTaskNode(ctx context.Context, arg ReclaimTaskNodeParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, reclaimTaskNode, arg.ID, arg.ReservedForAgentID, arg.Version)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const releaseClaimTimeoutNodes = `-- name: ReleaseClaimTimeoutNodes :many
-UPDATE task_nodes SET
-  status = 'manual_intervention',
-  assignee_type = 'human',
-  version = version + 1,
-  updated_at = now()
-WHERE status = 'in_progress'
-  AND node_type != 'manual'
-  AND assignee_type != 'human'
-  AND updated_at < $1
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-func (q *Queries) ReleaseClaimTimeoutNodes(ctx context.Context, updatedAt time.Time) ([]TaskNode, error) {
-	rows, err := q.db.QueryContext(ctx, releaseClaimTimeoutNodes, updatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TaskNode{}
-	for rows.Next() {
-		var i TaskNode
-		if err := rows.Scan(
-			&i.ID,
-			&i.TaskID,
-			&i.Name,
-			&i.Description,
-			&i.SortOrder,
-			&i.NodeType,
-			&i.Status,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.ReservedForAgentID,
-			&i.RejectCount,
-			&i.MaxRejectCycles,
-			&i.TimeoutMinutes,
-			&i.Version,
-			&i.CompletedAt,
-			&i.CompletedBy,
-			&i.Summary,
-			&i.PreviousSummary,
-			&i.ReservationExpiresAt,
-			&i.ReadonlyDirs,
-			&i.FullControlDirs,
-			pq.Array(&i.DependsOn),
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const resetRejectCount = `-- name: ResetRejectCount :one
-UPDATE task_nodes SET reject_count = 0, version = version + 1, status = 'in_progress', updated_at = now()
-WHERE id = $1 AND version = $2 RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type ResetRejectCountParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	Version int32     `db:"version" json:"version"`
-}
-
-func (q *Queries) ResetRejectCount(ctx context.Context, arg ResetRejectCountParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, resetRejectCount, arg.ID, arg.Version)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const updateComment = `-- name: UpdateComment :one
@@ -1954,49 +1327,6 @@ func (q *Queries) UpdateComment(ctx context.Context, arg UpdateCommentParams) (C
 	return i, err
 }
 
-const updateNodeSummary = `-- name: UpdateNodeSummary :one
-UPDATE task_nodes SET summary = $2, updated_at = now()
-WHERE id = $1
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type UpdateNodeSummaryParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	Summary string    `db:"summary" json:"summary"`
-}
-
-func (q *Queries) UpdateNodeSummary(ctx context.Context, arg UpdateNodeSummaryParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, updateNodeSummary, arg.ID, arg.Summary)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const updateTask = `-- name: UpdateTask :one
 UPDATE tasks
 SET title = $2,
@@ -2008,7 +1338,7 @@ SET title = $2,
     status = $8,
     updated_at = now()
 WHERE id = $1
-RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+RETURNING id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type UpdateTaskParams struct {
@@ -2039,6 +1369,11 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.ProjectID,
 		&i.WorkflowName,
 		&i.WorkflowTemplateID,
+		&i.WorkflowVersion,
+		&i.SourceEventID,
+		&i.TriggerPayload,
+		&i.Context,
+		&i.Failure,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,
@@ -2072,82 +1407,8 @@ func (q *Queries) UpdateTaskGitBranch(ctx context.Context, arg UpdateTaskGitBran
 	return err
 }
 
-const updateTaskNodeStatus = `-- name: UpdateTaskNodeStatus :one
-UPDATE task_nodes
-SET status = $2,
-    assignee_type = $3,
-    assignee_id = $4,
-    reserved_for_agent_id = $5,
-    reject_count = $6,
-    version = version + 1,
-    completed_at = $7,
-    completed_by = $8,
-    reservation_expires_at = $9,
-    updated_at = now()
-WHERE id = $1 AND version = $10 AND status = $11
-RETURNING id, task_id, name, description, sort_order, node_type, status, assignee_type, assignee_id, reserved_for_agent_id, reject_count, max_reject_cycles, timeout_minutes, version, completed_at, completed_by, summary, previous_summary, reservation_expires_at, readonly_dirs, full_control_dirs, depends_on, created_at, updated_at
-`
-
-type UpdateTaskNodeStatusParams struct {
-	ID                   uuid.UUID      `db:"id" json:"id"`
-	Status               TaskNodeStatus `db:"status" json:"status"`
-	AssigneeType         AssigneeType   `db:"assignee_type" json:"assignee_type"`
-	AssigneeID           uuid.NullUUID  `db:"assignee_id" json:"assignee_id"`
-	ReservedForAgentID   uuid.NullUUID  `db:"reserved_for_agent_id" json:"reserved_for_agent_id"`
-	RejectCount          int32          `db:"reject_count" json:"reject_count"`
-	CompletedAt          sql.NullTime   `db:"completed_at" json:"completed_at"`
-	CompletedBy          uuid.NullUUID  `db:"completed_by" json:"completed_by"`
-	ReservationExpiresAt sql.NullTime   `db:"reservation_expires_at" json:"reservation_expires_at"`
-	Version              int32          `db:"version" json:"version"`
-	Status_2             TaskNodeStatus `db:"status_2" json:"status_2"`
-}
-
-func (q *Queries) UpdateTaskNodeStatus(ctx context.Context, arg UpdateTaskNodeStatusParams) (TaskNode, error) {
-	row := q.db.QueryRowContext(ctx, updateTaskNodeStatus,
-		arg.ID,
-		arg.Status,
-		arg.AssigneeType,
-		arg.AssigneeID,
-		arg.ReservedForAgentID,
-		arg.RejectCount,
-		arg.CompletedAt,
-		arg.CompletedBy,
-		arg.ReservationExpiresAt,
-		arg.Version,
-		arg.Status_2,
-	)
-	var i TaskNode
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.Name,
-		&i.Description,
-		&i.SortOrder,
-		&i.NodeType,
-		&i.Status,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.ReservedForAgentID,
-		&i.RejectCount,
-		&i.MaxRejectCycles,
-		&i.TimeoutMinutes,
-		&i.Version,
-		&i.CompletedAt,
-		&i.CompletedBy,
-		&i.Summary,
-		&i.PreviousSummary,
-		&i.ReservationExpiresAt,
-		&i.ReadonlyDirs,
-		&i.FullControlDirs,
-		pq.Array(&i.DependsOn),
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
-UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, project_id, workflow_name, workflow_template_id, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
+UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, project_id, workflow_name, workflow_template_id, workflow_version, source_event_id, trigger_payload, context, failure, title, description, constraints, type, priority, status, author_type, author_id, due_date, labels, sequence, parent_task_id, git_branch, created_at, updated_at
 `
 
 type UpdateTaskStatusParams struct {
@@ -2163,6 +1424,11 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		&i.ProjectID,
 		&i.WorkflowName,
 		&i.WorkflowTemplateID,
+		&i.WorkflowVersion,
+		&i.SourceEventID,
+		&i.TriggerPayload,
+		&i.Context,
+		&i.Failure,
 		&i.Title,
 		&i.Description,
 		&i.Constraints,

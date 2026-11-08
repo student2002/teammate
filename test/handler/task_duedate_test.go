@@ -21,7 +21,7 @@ func TestTaskDueDateValidation(t *testing.T) {
 	client := server.Client()
 	token, wsID := registerTestUser(t, client, server.URL)
 	projID := createProject(t, client, server.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, server.URL, wsID, token)
+	tplID, _ := createV2WorkflowTemplate(t, client, server.URL, wsID, token)
 
 	taskBaseURL := fmt.Sprintf("%s/api/projects/%s/tasks", server.URL, projID)
 

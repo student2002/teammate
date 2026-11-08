@@ -29,6 +29,16 @@ func NewCommentService(svc *Service) *CommentService {
 	return &CommentService{svc: svc}
 }
 
+// uuidFromStr parses a domain-style string into a uuid.UUID, returning uuid.Nil on failure.
+// Used to pass types domain ID strings to Store methods that accept uuid.UUID.
+func uuidFromStr(s string) uuid.UUID {
+	u, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil
+	}
+	return u
+}
+
 // Create creates a comment on the specified task, supporting the associated mentioned member list.
 func (s *CommentService) Create(ctx context.Context, params types.CreateCommentParams) (types.Comment, error) {
 	comment, err := s.svc.Store.CreateComment(ctx, params)

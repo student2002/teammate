@@ -1,0 +1,36 @@
+{
+  "doc": "Save response contract (plan §12.2): {template, nodes, edges} with server-assigned version; node/edge IDs stay stable across whole-graph replacement.",
+  "template": {
+    "id": "c0000000-0000-4000-8000-000000000001",
+    "workspace_id": "d0000000-0000-4000-8000-000000000001",
+    "name": "GitHub Issue 自动修复",
+    "description": "Issue 带 bug 标签时自动分析修复，跑测试后创建 PR",
+    "is_builtin": false,
+    "version": 3,
+    "enabled": true,
+    "created_at": "2026-11-07T00:00:00Z",
+    "updated_at": "2026-11-07T00:00:00Z"
+  },
+  "nodes": [
+    { "id": "a1000000-0000-4000-8000-000000000001", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "trigger.github", "name": "开始", "sort_order": 0, "config": { "integration_id": "b1000000-0000-4000-8000-000000000001", "event": "issues", "actions": ["opened"] }, "ui_config": { "x": 80, "y": 240 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000002", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "flow.condition", "name": "Issue 是否带 bug 标签", "sort_order": 1, "config": { "condition": { "all": [ { "path": "trigger.issue.labels", "op": "contains", "value": "bug" } ] } }, "ui_config": { "x": 360, "y": 240 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000003", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "agent.task", "name": "分析并修复", "sort_order": 2, "config": { "instruction": "分析 Issue 并完成修复", "assignee": { "mode": "any_agent", "agent_id": null }, "input_map": { "title": "{{ trigger.issue.title }}", "body": "{{ trigger.issue.body }}", "repository": "{{ trigger.repository.full_name }}" }, "timeout_minutes": 60, "retry": { "max_attempts": 2, "backoff_seconds": 30 }, "readonly_dirs": [], "full_control_dirs": ["."] }, "ui_config": { "x": 640, "y": 120 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000004", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "action.command", "name": "运行测试", "sort_order": 3, "config": { "command": { "program": "go", "args": ["test", "./..."], "workdir": "." }, "timeout_minutes": 30, "retry": { "max_attempts": 1 } }, "ui_config": { "x": 920, "y": 120 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000005", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "flow.condition", "name": "测试是否通过", "sort_order": 4, "config": { "condition": { "all": [ { "path": "nodes.a1000000-0000-4000-8000-000000000004.output.exit_code", "op": "eq", "value": "0" } ] } }, "ui_config": { "x": 1200, "y": 120 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000006", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "action.github", "name": "创建 PR 并评论 Issue", "sort_order": 5, "config": { "operation": "create_pull_request", "title": "Fix Issue #{{ trigger.issue.number }}", "head": "teammate/task-{{ task.id }}", "base": "{{ trigger.repository.default_branch }}", "body": "由工作流自动创建", "comment_issue": "{{ trigger.issue.number }}" }, "ui_config": { "x": 1480, "y": 40 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" },
+    { "id": "a1000000-0000-4000-8000-000000000007", "template_id": "c0000000-0000-4000-8000-000000000001", "type_key": "flow.end", "name": "完成", "sort_order": 6, "config": {}, "ui_config": { "x": 1760, "y": 240 }, "created_at": "2026-11-07T00:00:00Z", "updated_at": "2026-11-07T00:00:00Z" }
+  ],
+  "edges": [
+    { "id": "e1000000-0000-4000-8000-000000000001", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000001", "source_port": "success", "target_node_id": "a1000000-0000-4000-8000-000000000002", "target_port": "input", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000002", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000002", "source_port": "true", "target_node_id": "a1000000-0000-4000-8000-000000000003", "target_port": "input", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000003", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000002", "source_port": "false", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "failed", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000004", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000003", "source_port": "success", "target_node_id": "a1000000-0000-4000-8000-000000000004", "target_port": "input", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000005", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000003", "source_port": "failed", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "failed", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000006", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000004", "source_port": "success", "target_node_id": "a1000000-0000-4000-8000-000000000005", "target_port": "input", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000007", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000004", "source_port": "failed", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "failed", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000008", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000005", "source_port": "true", "target_node_id": "a1000000-0000-4000-8000-000000000006", "target_port": "input", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000009", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000005", "source_port": "false", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "failed", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000010", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000006", "source_port": "success", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "completed", "label": "", "sort_order": 0, "config": {} },
+    { "id": "e1000000-0000-4000-8000-000000000011", "template_id": "c0000000-0000-4000-8000-000000000001", "source_node_id": "a1000000-0000-4000-8000-000000000006", "source_port": "failed", "target_node_id": "a1000000-0000-4000-8000-000000000007", "target_port": "failed", "label": "", "sort_order": 0, "config": {} }
+  ]
+}

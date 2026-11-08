@@ -3,18 +3,13 @@
 // A Workspace is the top-level organizational unit of a team, containing projects, Agents, and members.
 // Each member has a role within the workspace (owner/admin/member/viewer).
 //
-// When a new workspace is created, 5 built-in workflow templates are seeded:
-//   - Standard development flow (7 nodes)
-//   - Quick fix flow (3 nodes)
-//   - Review-only flow (1 node)
-//   - Documentation writing flow (3 nodes)
-//   - Data processing flow (4 nodes)
+// When a new workspace is created, one built-in workflow template is seeded:
+// a manually triggered agent task (trigger.manual → agent.task → flow.end).
 package store
 
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -24,7 +19,7 @@ import (
 	"github.com/teammate/server/internal/types"
 )
 
-// CreateWorkspace creates a workspace and seeds the 5 built-in workflow templates.
+// CreateWorkspace creates a workspace and seeds the built-in workflow template.
 //
 // Parameters:
 //   - ctx: request context
@@ -386,144 +381,126 @@ func (s *Store) GetWorkspaceOwner(ctx context.Context, workspaceID uuid.UUID) (t
 	return types.ListMembersByWorkspaceRow{}, fmt.Errorf("no owner found for workspace %s", workspaceID)
 }
 
-// SeedBuiltinTemplates creates 5 built-in workflow templates for a new workspace.
+// SeedBuiltinTemplates creates the built-in workflow template for a new workspace:
+// a manually triggered agent task (trigger.manual → agent.task → flow.end).
 //
-// Each template is created within its own transaction to avoid concurrent deadlocks; a single template/node failure does not affect subsequent template creation.
-//
-// Built-in templates:
-//  1. Standard development flow (7 nodes): requirements analysis → technical design → coding → self-test verification → code review → integration test → deployment
-//  2. Quick fix flow (3 nodes): problem triage → fix coding → code review
-//  3. Review-only flow (1 node): code review
-//  4. Documentation writing flow (3 nodes): material collection → document drafting → document proofreading
-//  5. Data processing flow (4 nodes): data collection → data cleaning → data analysis → result verification
+// The template is created within its own transaction; node ids are generated
+// per seed run and the edges reference the inserted rows.
 //
 // Parameters:
 //   - ctx: request context
 //   - workspaceID: workspace UUID
 //
 // Returns:
-//   - error: aggregated error returned when all template creations fail
+//   - error: error returned when the template creation fails
 func (s *Store) SeedBuiltinTemplates(ctx context.Context, workspaceID uuid.UUID) error {
-	type nodeDef struct {
-		Name         string
-		Description  string
-		SortOrder    int32
-		NodeType     db.NodeType
-		AssigneeType db.AssigneeType
-		Timeout      int32
+	// 模板节点 id 是表主键，必须每次播种生成新的 UUID，多个工作区才能共存
+	triggerNodeID := uuid.New()
+	agentNodeID := uuid.New()
+	endNodeID := uuid.New()
+
+	agentConfig := []byte(`{
+		"instruction": "根据任务输入完成工作",
+		"assignee": {"mode": "any_agent", "agent_id": null},
+		"input_map": {},
+		"timeout_minutes": 60,
+		"retry": {"max_attempts": 1, "backoff_seconds": 30},
+		"readonly_dirs": [],
+		"full_control_dirs": ["."]
+	}`)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx for builtin template: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := s.q.WithTx(tx)
+
+	tpl, err := qtx.CreateWorkflowTemplate(ctx, db.CreateWorkflowTemplateParams{
+		WorkspaceID: workspaceID,
+		Name:        "手动触发的 Agent 任务",
+		Description: sql.NullString{String: "手动创建任务后由 Agent 执行指令的单步工作流", Valid: true},
+		IsBuiltin:   true,
+		Version:     1,
+		Enabled:     true,
+	})
+	if err != nil {
+		return fmt.Errorf("create builtin template: %w", err)
 	}
 
-	type templateDef struct {
-		Name        string
-		Description string
-		Nodes       []nodeDef
-	}
-
-	templates := []templateDef{
+	nodes := []db.CreateTemplateNodeParams{
 		{
-			Name:        "Standard Development Workflow",
-			Description: "Complete standard development workflow with 7 execution nodes from requirements analysis to deployment",
-			Nodes: []nodeDef{
-				{Name: "Requirement Analysis", Description: "Analyze requirement documents, clarify functional scope and acceptance criteria", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Technical Design", Description: "Design technical solution, define architecture and interfaces", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Implementation", Description: "Write code according to the design", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "Unit Testing", Description: "Write and run unit tests to verify basic functionality", SortOrder: 4, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Code Review", Description: "Review code quality, standards compliance, and potential issues", SortOrder: 5, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Integration Testing", Description: "Run integration tests to verify cross-module collaboration", SortOrder: 6, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Deployment", Description: "Deploy code to the production environment", SortOrder: 7, NodeType: db.NodeTypeManual, AssigneeType: db.AssigneeTypeHuman, Timeout: 0},
-			},
+			NodeID:     uuid.NullUUID{UUID: triggerNodeID, Valid: true},
+			TemplateID: tpl.ID,
+			Name:       "开始",
+			SortOrder:  0,
+			TypeKey:    "trigger.manual",
+			Config:     []byte(`{}`),
+			UiConfig:   []byte(`{"x":160,"y":200}`),
 		},
 		{
-			Name:        "Quick Fix Workflow",
-			Description: "Streamlined workflow for bug fixes with 3 execution nodes for rapid turnaround",
-			Nodes: []nodeDef{
-				{Name: "Issue Triage", Description: "Reproduce and identify the root cause", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
-				{Name: "Fix Implementation", Description: "Write the fix code", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Code Review", Description: "Review the correctness of the fix", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
-			},
+			NodeID:     uuid.NullUUID{UUID: agentNodeID, Valid: true},
+			TemplateID: tpl.ID,
+			Name:       "执行 Agent 指令",
+			SortOrder:  1,
+			TypeKey:    "agent.task",
+			Config:     agentConfig,
+			UiConfig:   []byte(`{"x":440,"y":200}`),
 		},
 		{
-			Name:        "Review-Only Workflow",
-			Description: "Lightweight workflow containing only a code review node",
-			Nodes: []nodeDef{
-				{Name: "Code Review", Description: "Review code quality, standards compliance, and potential issues", SortOrder: 1, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-			},
-		},
-		{
-			Name:        "Documentation Workflow",
-			Description: "3-execution-node workflow for documentation tasks",
-			Nodes: []nodeDef{
-				{Name: "Research", Description: "Collect and organize relevant materials and information", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Writing", Description: "Write the document content", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "Review", Description: "Proofread for accuracy and completeness", SortOrder: 3, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
-			},
-		},
-		{
-			Name:        "Data Processing Workflow",
-			Description: "4-execution-node workflow for data processing tasks",
-			Nodes: []nodeDef{
-				{Name: "Data Collection", Description: "Collect raw data from data sources", SortOrder: 1, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Data Cleaning", Description: "Clean and preprocess data", SortOrder: 2, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 60},
-				{Name: "Data Analysis", Description: "Analyze data and generate insights", SortOrder: 3, NodeType: db.NodeTypeStandard, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 120},
-				{Name: "Result Validation", Description: "Validate the accuracy of analysis results", SortOrder: 4, NodeType: db.NodeTypeReview, AssigneeType: db.AssigneeTypeAnyAgent, Timeout: 30},
-			},
+			NodeID:     uuid.NullUUID{UUID: endNodeID, Valid: true},
+			TemplateID: tpl.ID,
+			Name:       "完成",
+			SortOrder:  2,
+			TypeKey:    "flow.end",
+			Config:     []byte(`{}`),
+			UiConfig:   []byte(`{"x":720,"y":200}`),
 		},
 	}
-
-	var errs []error
-	for _, t := range templates {
-		// Each template uses its own transaction to avoid deadlocks when creating workspaces concurrently
-		tx, txErr := s.db.BeginTx(ctx, nil)
-		if txErr != nil {
-			slog.Warn("SeedBuiltinTemplates: failed to begin tx", "name", t.Name, "err", txErr)
-			errs = append(errs, fmt.Errorf("begin tx for template %q: %w", t.Name, txErr))
-			continue
-		}
-		qtx := s.q.WithTx(tx)
-
-		tpl, err := qtx.CreateWorkflowTemplate(ctx, normalizeCreateWorkflowTemplateParams(db.CreateWorkflowTemplateParams{
-			WorkspaceID: workspaceID,
-			Name:        t.Name,
-			Description: sql.NullString{String: t.Description, Valid: true},
-			IsBuiltin:   true,
-		}))
-		if err != nil {
-			tx.Rollback()
-			slog.Warn("SeedBuiltinTemplates: failed to create template", "name", t.Name, "err", err)
-			errs = append(errs, fmt.Errorf("template %q: %w", t.Name, err))
-			continue
-		}
-
-		nodeErr := false
-		for _, n := range t.Nodes {
-			_, err := qtx.CreateTemplateNode(ctx, db.CreateTemplateNodeParams{
-				TemplateID:     tpl.ID,
-				Name:           n.Name,
-				Description:    sql.NullString{String: n.Description, Valid: true},
-				SortOrder:      n.SortOrder,
-				NodeType:       n.NodeType,
-				AssigneeType:   n.AssigneeType,
-				TimeoutMinutes: n.Timeout,
-				DependsOn:      []uuid.UUID{},
-			})
-			if err != nil {
-				slog.Warn("SeedBuiltinTemplates: failed to create node", "node", n.Name, "template", t.Name, "err", err)
-				errs = append(errs, fmt.Errorf("node %q in template %q: %w", n.Name, t.Name, err))
-				nodeErr = true
-				break
-			}
-		}
-		if nodeErr {
-			tx.Rollback()
-			continue
-		}
-		if err := tx.Commit(); err != nil {
-			slog.Warn("SeedBuiltinTemplates: failed to commit tx", "name", t.Name, "err", err)
-			errs = append(errs, fmt.Errorf("commit template %q: %w", t.Name, err))
+	for _, n := range nodes {
+		if _, err := qtx.CreateTemplateNode(ctx, n); err != nil {
+			return fmt.Errorf("create builtin template node %q: %w", n.Name, err)
 		}
 	}
-	if len(errs) > 0 {
-		return errors.Join(errs...)
+
+	edges := []db.CreateTemplateEdgeParams{
+		{
+			TemplateID:   tpl.ID,
+			SourceNodeID: triggerNodeID,
+			SourcePort:   "success",
+			TargetNodeID: agentNodeID,
+			TargetPort:   "input",
+			SortOrder:    0,
+			Config:       []byte(`{}`),
+		},
+		{
+			TemplateID:   tpl.ID,
+			SourceNodeID: agentNodeID,
+			SourcePort:   "success",
+			TargetNodeID: endNodeID,
+			TargetPort:   "completed",
+			SortOrder:    0,
+			Config:       []byte(`{}`),
+		},
+		{
+			TemplateID:   tpl.ID,
+			SourceNodeID: agentNodeID,
+			SourcePort:   "failed",
+			TargetNodeID: endNodeID,
+			TargetPort:   "failed",
+			SortOrder:    0,
+			Config:       []byte(`{}`),
+		},
+	}
+	for _, e := range edges {
+		if _, err := qtx.CreateTemplateEdge(ctx, e); err != nil {
+			return fmt.Errorf("create builtin template edge %s->%s: %w", e.SourcePort, e.TargetPort, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit builtin template: %w", err)
 	}
 	return nil
 }

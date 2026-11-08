@@ -37,8 +37,6 @@ const (
 	workspaceContextKey
 	// taskContextKey stores the task object injected by the task access middleware in the request context.
 	taskContextKey
-	// nodeContextKey stores the node object injected by the node access middleware in the request context.
-	nodeContextKey
 )
 
 // AuthClaims holds the authenticated identity extracted from a JWT or API Key.
@@ -608,82 +606,6 @@ func TaskAccessMiddlewareWithChecker(checker TaskWorkspaceCheckerFunc, workspace
 
 			ctx := withWorkspaceContext(r.Context(), WorkspaceContext{WorkspaceID: workspaceID, Role: role})
 			ctx = context.WithValue(ctx, taskContextKey, task)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-// --- Node access middleware ---
-
-// NodeWorkspaceCheckerFunc verifies that a node exists and returns the node object and its workspace.
-type NodeWorkspaceCheckerFunc func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
-
-// GetNodeFromContext retrieves the node object from the request context (injected by NodeAccessMiddleware).
-//
-// Returns:
-//   - interface{}: the node object
-//   - bool: whether a valid node object exists
-func GetNodeFromContext(ctx context.Context) (interface{}, bool) {
-	node := ctx.Value(nodeContextKey)
-	return node, node != nil
-}
-
-// NodeAccessMiddlewareWithChecker verifies that the node in URL parameter {id} belongs to the authenticated user's workspace.
-// On success it injects the node into the context, retrievable via GetNodeFromContext.
-// This middleware prevents users from accessing task nodes of other workspaces by tampering with the URL.
-//
-// Parameters:
-//   - checker: node workspace verification function, verifies node ownership and returns the node object
-//   - workspaceChecker: workspace access check function, verifies the current identity can access the node's workspace
-//
-// Returns:
-//   - func(http.Handler) http.Handler: chi middleware function
-func NodeAccessMiddlewareWithChecker(checker NodeWorkspaceCheckerFunc, workspaceChecker WorkspaceAccessCheckerFunc) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, ok := GetAuthFromContext(r.Context())
-			if !ok {
-				response.Forbidden(w, "authentication required")
-				return
-			}
-
-			nodeIDStr := chi.URLParam(r, "id")
-			if nodeIDStr == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			nodeID, err := uuid.Parse(nodeIDStr)
-			if err != nil {
-				// The parent test route may use {id} as a task ID before the node subroutes match.
-				// The node handler will still validate a malformed node ID on the concrete node route.
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if checker == nil {
-				response.InternalServerError(w, fmt.Errorf("node access checker not configured"))
-				return
-			}
-
-			node, workspaceID, err := checker(r.Context(), nodeID)
-			if err != nil {
-				response.NotFound(w, "node not found")
-				return
-			}
-
-			if workspaceChecker == nil {
-				response.InternalServerError(w, fmt.Errorf("workspace access checker not configured"))
-				return
-			}
-			role, err := workspaceChecker(r.Context(), claims.UserID, claims.UserType, workspaceID)
-			if err != nil {
-				response.Forbidden(w, "access denied")
-				return
-			}
-
-			ctx := withWorkspaceContext(r.Context(), WorkspaceContext{WorkspaceID: workspaceID, Role: role})
-			ctx = context.WithValue(ctx, nodeContextKey, node)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

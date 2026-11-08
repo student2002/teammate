@@ -128,16 +128,11 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	defer tx.Rollback()
 
 	// After 002_remove_fks, the following columns no longer have foreign keys and must be explicitly nulled (FK strategy: integrity enforced at the application layer):
-	//   memories.source_task_id, workflow_trigger_runs.task_id
+	//   memories.source_task_id
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE memories SET source_task_id = NULL
 		 WHERE source_task_id IN (SELECT id FROM tasks WHERE project_id = $1)`, id); err != nil {
 		return fmt.Errorf("clear memories.source_task_id: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE workflow_trigger_runs SET task_id = NULL
-		 WHERE project_id = $1`, id); err != nil {
-		return fmt.Errorf("clear workflow_trigger_runs.task_id: %w", err)
 	}
 
 	if err := s.q.WithTx(tx).DeleteProject(ctx, id); err != nil {

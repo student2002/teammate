@@ -84,54 +84,11 @@ type ListMentionCommentsRow struct {
 	TaskTitle  string    `json:"task_title"`
 }
 
-// GetReviewQueueRow is the domain Row for fetching the review queue (JOIN tasks+task_nodes+agents).
-type GetReviewQueueRow struct {
-	TaskID       int32     `json:"task_id"`
-	TaskTitle    string    `json:"task_title"`
-	NodeID       string    `json:"node_id"`
-	NodeName     string    `json:"node_name"`
-	NodeStatus   string    `json:"node_status"`
-	AssigneeType string    `json:"assignee_type"`
-	AssigneeID   *string   `json:"assignee_id"`
-	AgentName    *string   `json:"agent_name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
 // GetCompletedTasksOlderThanRow is the domain Row for querying completed tasks older than a given point in time.
 type GetCompletedTasksOlderThanRow struct {
 	ID          int32  `json:"id"`
 	ProjectID   string `json:"project_id"`
 	WorkspaceID string `json:"workspace_id"`
-}
-
-// GetInProgressNodesByAgentRow is the domain Row for querying in-progress nodes for an Agent (JOIN tasks to get project_id).
-type GetInProgressNodesByAgentRow struct {
-	ID                   string     `json:"id"`
-	TaskID               int32      `json:"task_id"`
-	Name                 string     `json:"name"`
-	Description          string     `json:"description"`
-	SortOrder            int32      `json:"sort_order"`
-	NodeType             string     `json:"node_type"`
-	Status               string     `json:"status"`
-	AssigneeType         string     `json:"assignee_type"`
-	AssigneeID           *string    `json:"assignee_id"`
-	ReservedForAgentID   *string    `json:"reserved_for_agent_id"`
-	RejectCount          int32      `json:"reject_count"`
-	MaxRejectCycles      int32      `json:"max_reject_cycles"`
-	TimeoutMinutes       int32      `json:"timeout_minutes"`
-	Version              int32      `json:"version"`
-	CompletedAt          *time.Time `json:"completed_at"`
-	CompletedBy          *string    `json:"completed_by"`
-	Summary              string     `json:"summary"`
-	PreviousSummary      string     `json:"previous_summary"`
-	ReservationExpiresAt *time.Time `json:"reservation_expires_at"`
-	ReadonlyDirs         json.RawMessage `json:"readonly_dirs"`
-	FullControlDirs      json.RawMessage `json:"full_control_dirs"`
-	DependsOn            []string   `json:"depends_on"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
-	ProjectID            string     `json:"project_id"`
 }
 
 // GetTokenUsageByAgentRow is the domain Row for a single Agent's token usage aggregation.
@@ -169,7 +126,6 @@ type GetTokenUsageByTaskNodesRow struct {
 type GetTemplateStatsRow struct {
 	UsageCount           int64   `json:"usage_count"`
 	AvgCompletionSeconds float64 `json:"avg_completion_seconds"`
-	RejectRate           float64 `json:"reject_rate"`
 }
 
 // ListMembersByWorkspaceRow is the domain Row for listing members by workspace (JOIN workspace_members).

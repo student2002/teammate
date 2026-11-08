@@ -94,7 +94,7 @@ func checkNodeWorkspace(svc *service.Service, w http.ResponseWriter, r *http.Req
 	}
 
 	// query the node
-	node, err := service.NewNodeService(svc).GetTaskNode(r.Context(), nodeID)
+	node, err := service.NewTaskService(svc).GetTaskNode(r.Context(), nodeID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.NotFound(w, "node not found")

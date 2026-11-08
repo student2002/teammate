@@ -27,7 +27,6 @@ type routeRegistrar struct {
 	effectiveAgentChk svcmw.EffectiveAgentResolverFunc
 	projectChk        func(ctx context.Context, userID uuid.UUID, userType string, projectID uuid.UUID) (svcmw.WorkspaceContext, error)
 	taskChk           func(ctx context.Context, taskID int32) (interface{}, uuid.UUID, error)
-	nodeChk           func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error)
 }
 
 // newRouteRegistrar creates the route registrar, initializing all shared permission-check functions.
@@ -139,42 +138,28 @@ func newRouteRegistrar(s *Server, svc *service.Service) *routeRegistrar {
 		return task, wsUUID, nil
 	}
 
-	nodeWorkspaceChecker := func(ctx context.Context, nodeID uuid.UUID) (interface{}, uuid.UUID, error) {
-		nodeSvc := service.NewNodeService(svc)
-		node, err := nodeSvc.GetTaskNode(ctx, nodeID)
-		if err != nil {
-			return nil, uuid.Nil, err
-		}
-		taskSvc := service.NewTaskService(svc)
-		task, err := taskSvc.Get(ctx, node.TaskID)
-		if err != nil {
-			return nil, uuid.Nil, fmt.Errorf("node task not found: %w", err)
-		}
-		taskProjectID, _ := uuid.Parse(task.ProjectID)
-		project, err := projSvc.Get(ctx, taskProjectID)
-		if err != nil {
-			return nil, uuid.Nil, fmt.Errorf("node project not found: %w", err)
-		}
-		wsUUID, _ := uuid.Parse(project.WorkspaceID)
-		return node, wsUUID, nil
-	}
-
 	return &routeRegistrar{
-		server:              s,
-		svc:                 svc,
-		apiKeyAuth:          apiKeyAuthenticator,
-		agentPerm:           agentPerm,
-		wsChk:               wsAccessChecker,
-		effectiveAgentChk:   effectiveAgentResolver,
-		projectChk:          projectAccessChecker,
-		taskChk:             taskWorkspaceChecker,
-		nodeChk:             nodeWorkspaceChecker,
+		server:            s,
+		svc:               svc,
+		apiKeyAuth:        apiKeyAuthenticator,
+		agentPerm:         agentPerm,
+		wsChk:             wsAccessChecker,
+		effectiveAgentChk: effectiveAgentResolver,
+		projectChk:        projectAccessChecker,
+		taskChk:           taskWorkspaceChecker,
 	}
 }
 
 // setupRoutes configures all HTTP routes and middleware (using the default service).
 func (s *Server) setupRoutes() chi.Router {
 	svc := service.New(s.DB, s.Hub, s.Redis)
+	svc.GitHubAPIURL = s.Config.GitHubAPIURL
+	svc.HTTPNodeAllowHTTP = s.Config.HTTPNodeAllowHTTP
+	s.Scheduler.WorkflowRuns = service.NewWorkflowRunService(svc)
+	s.Scheduler.WorkflowEvents = service.NewWorkflowEventService(svc)
+	s.Scheduler.WorkflowNodeActions = service.NewWorkflowNodeActionService(svc)
+	s.Scheduler.WorkflowSchedules = service.NewWorkflowScheduleService(svc)
+	s.Scheduler.WorkflowAsyncNodes = service.NewWorkflowAsyncNodeService(svc)
 	return s.buildRouter(svc)
 }
 

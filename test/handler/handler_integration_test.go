@@ -2,7 +2,6 @@
 package handler_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
-	dbgen "github.com/teammate/server/internal/db/generated"
 )
 
 // ---------- Workspace API ----------
@@ -114,29 +111,8 @@ func TestWorkflowAPI(t *testing.T) {
 
 	baseURL := srv.URL + "/api/workspaces/" + wsID + "/workflows"
 
-	// 1. Create a workflow template with nodes
-	createBody := map[string]interface{}{
-		"name":        "test-workflow",
-		"description": "integration test workflow",
-		"nodes": []map[string]interface{}{
-			{
-				"name":            "code-node",
-				"description":     "write code",
-				"sort_order":      1,
-				"node_type":       "standard",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 60,
-			},
-			{
-				"name":            "review-node",
-				"description":     "review code",
-				"sort_order":      2,
-				"node_type":       "review",
-				"assignee_type":   "any_agent",
-				"timeout_minutes": 30,
-			},
-		},
-	}
+	// 1. Create a workflow template with its full graph (V2 contract sample)
+	createBody := workflowContractGraph()
 	_, status, body := doRequestWithToken(t, client, http.MethodPost, baseURL, token, createBody)
 	if status != http.StatusCreated {
 		t.Fatalf("CreateWorkflowTemplate: expected 201, got %d, body: %s", status, body)
@@ -146,8 +122,17 @@ func TestWorkflowAPI(t *testing.T) {
 	if err := json.Unmarshal(body, &wfResult); err != nil {
 		t.Fatalf("decode workflow: %v", err)
 	}
-	tplMap := wfResult["template"].(map[string]interface{})
+	tplMap, ok := wfResult["template"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("CreateWorkflowTemplate: expected template in response, got %s", body)
+	}
 	tplID := tplMap["id"].(string)
+	if nodes, _ := wfResult["nodes"].([]interface{}); len(nodes) != 7 {
+		t.Errorf("CreateWorkflowTemplate: expected 7 nodes, got %d", len(nodes))
+	}
+	if edges, _ := wfResult["edges"].([]interface{}); len(edges) != 11 {
+		t.Errorf("CreateWorkflowTemplate: expected 11 edges, got %d", len(edges))
+	}
 	t.Logf("Created workflow template: %s", tplID)
 
 	// 2. List templates
@@ -341,8 +326,8 @@ func TestTaskAPI(t *testing.T) {
 	// Create project
 	projID := createProject(t, client, srv.URL, wsID, token)
 
-	// Create a workflow template with nodes
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
+	// Create a workflow template with the V2 contract graph
+	tplID, _ := createV2WorkflowTemplate(t, client, srv.URL, wsID, token)
 
 	// Setup
 	updateBody := map[string]interface{}{
@@ -356,15 +341,13 @@ func TestTaskAPI(t *testing.T) {
 
 	taskBaseURL := srv.URL + "/api/projects/" + projID + "/tasks"
 
-	// 1. Create a task (should auto-create task_nodes)
-	authorID := uuid.New().String()
+	// 1. Create a task main record (V2: node instantiation is the engine's job;
+	// the author identity is derived from the auth claims, not the body)
 	createBody := map[string]interface{}{
 		"title":                "Test task",
 		"description":          "Integration test task",
 		"type":                 "task",
 		"priority":             "high",
-		"author_type":          "agent",
-		"author_id":            authorID,
 		"workflow_template_id": tplID,
 	}
 	_, status, body := doRequestWithToken(t, client, http.MethodPost, taskBaseURL, token, createBody)
@@ -379,13 +362,6 @@ func TestTaskAPI(t *testing.T) {
 	taskMap := taskResult["task"].(map[string]interface{})
 	taskID := int32(taskMap["id"].(float64))
 	t.Logf("Created task: %d", taskID)
-
-	// Verify task_nodes were auto-created
-	nodesArr, ok := taskResult["nodes"].([]interface{})
-	if !ok || len(nodesArr) == 0 {
-		t.Fatal("CreateTask: expected task_nodes to be auto-created, got none")
-	}
-	t.Logf("Auto-created %d task nodes", len(nodesArr))
 
 	// 2. List tasks (pass status filter to avoid empty string causing SQL enum conversion error)
 	_, status, body = doRequestWithToken(t, client, http.MethodGet, taskBaseURL+"?status=active", token, nil)
@@ -413,154 +389,11 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatalf("expected title 'Test task', got %q", taskGet["title"])
 	}
 
-	// 4. List task nodes (task-scoped endpoint)
-	_, status, body = doRequestWithToken(t, client, http.MethodGet, fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID), token, nil)
-	if status != http.StatusOK {
-		t.Fatalf("ListTaskNodes: expected 200, got %d", status)
-	}
-	var taskNodes []map[string]interface{}
-	if err := json.Unmarshal(body, &taskNodes); err != nil {
-		t.Fatalf("decode task nodes: %v", err)
-	}
-	if len(taskNodes) == 0 {
-		t.Fatal("ListTaskNodes: expected at least 1 node")
-	}
-
 	// Cleanup: delete task
 	_, status, _ = doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/%d", taskBaseURL, taskID), token, nil)
 	if status != http.StatusNoContent {
 		t.Fatalf("DeleteTask: expected 204, got %d", status)
 	}
-}
-
-// ---------- Node Operations API ----------
-
-func TestNodeOperationsAPI(t *testing.T) {
-	router, db, _ := setupTestRouter(t)
-	defer db.Close()
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-	client := srv.Client()
-
-	token, wsID := registerTestUser(t, client, srv.URL)
-
-	// Full setup: project, workflow, task
-	projID := createProject(t, client, srv.URL, wsID, token)
-	tplID := createWorkflowTemplate2Nodes(t, client, srv.URL, wsID, token)
-
-	// Setup
-	updateBody := map[string]interface{}{
-		"name":              "test-project",
-		"description":       "integration test project",
-		"status":            "active",
-		"max_review_cycles": 3,
-	}
-	_, _, _ = doRequestWithToken(t, client, http.MethodPut,
-		srv.URL+"/api/workspaces/"+wsID+"/projects/"+projID, token, updateBody)
-
-	// Create agent for claiming
-	agentID, agentAPIToken := createAgent(t, client, srv.URL, wsID, token)
-	// Add agent to project (required for node claiming)
-	q := dbQueries(t, db)
-	_, err := q.CreateProjectMember(context.Background(), dbgen.CreateProjectMemberParams{
-		ProjectID:  uuid.MustParse(projID),
-		MemberType: "agent",
-		AgentID:    uuid.NullUUID{UUID: uuid.MustParse(agentID), Valid: true},
-		Role:       "member",
-	})
-	if err != nil {
-		t.Fatalf("addAgentToProject: %v", err)
-	}
-	grantAgentAllTaskPermissions(t, client, srv.URL, wsID, agentID, token)
-
-	// Create task
-	taskBaseURL := srv.URL + "/api/projects/" + projID + "/tasks"
-	authorID := uuid.New().String()
-	createTaskBody := map[string]interface{}{
-		"title":                "Node ops task",
-		"description":          "Test node operations",
-		"type":                 "task",
-		"priority":             "medium",
-		"author_type":          "agent",
-		"author_id":            authorID,
-		"workflow_template_id": tplID,
-	}
-	_, status, body := doRequestWithToken(t, client, http.MethodPost, taskBaseURL, token, createTaskBody)
-	if status != http.StatusCreated {
-		t.Fatalf("CreateTask: expected 201, got %d, body: %s", status, body)
-	}
-
-	var taskResult map[string]interface{}
-	if err := json.Unmarshal(body, &taskResult); err != nil {
-		t.Fatalf("decode task: %v", err)
-	}
-	taskMap := taskResult["task"].(map[string]interface{})
-	taskID := int32(taskMap["id"].(float64))
-	nodesArr := taskResult["nodes"].([]interface{})
-	if len(nodesArr) == 0 {
-		t.Fatal("expected task nodes to be created")
-	}
-
-	// Get the first pending node
-	firstNode := nodesArr[0].(map[string]interface{})
-	nodeID := firstNode["id"].(string)
-	t.Logf("Task %d, first node: %s", taskID, nodeID)
-
-	nodeBaseURL := fmt.Sprintf("%s/api/tasks/%d/nodes", srv.URL, taskID)
-
-	// 1. Claim node
-	claimBody := map[string]interface{}{
-		"agent_id": agentID,
-	}
-	_, status, body = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, claimBody)
-	if status != http.StatusOK {
-		t.Fatalf("ClaimNode: expected 200, got %d, body: %s", status, body)
-	}
-	var claimedNode map[string]interface{}
-	if err := json.Unmarshal(body, &claimedNode); err != nil {
-		t.Fatalf("decode claimed node: %v", err)
-	}
-	if claimedNode["status"] != "in_progress" {
-		t.Fatalf("expected status 'in_progress', got %q", claimedNode["status"])
-	}
-	t.Logf("Node claimed successfully, status: %v", claimedNode["status"])
-
-	// 2. Duplicate claim by the same agent is idempotent (returns 200)
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, claimBody)
-	if status != http.StatusOK {
-		t.Fatalf("Same-agent double-claim: expected 200 (idempotent), got %d", status)
-	}
-	t.Log("Same-agent double-claim is idempotent (200)")
-
-	// 3. Approve node
-	approveBody := map[string]interface{}{
-		"operator_id":   agentID,
-		"operator_type": "agent",
-		"comment":       "Looks good",
-	}
-	_, status, body = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/approve", agentAPIToken, approveBody)
-	if status != http.StatusOK {
-		t.Fatalf("ApproveNode: expected 200, got %d, body: %s", status, body)
-	}
-	var approvedNode map[string]interface{}
-	if err := json.Unmarshal(body, &approvedNode); err != nil {
-		t.Fatalf("decode approved node: %v", err)
-	}
-	if approvedNode["status"] != "completed" {
-		t.Fatalf("expected status 'completed', got %q", approvedNode["status"])
-	}
-	t.Logf("Node approved, status: %v", approvedNode["status"])
-
-	// 4. Test optimistic locking — claiming a completed node should fail
-	_, status, _ = doRequestWithAPIKey(t, client, http.MethodPost, nodeBaseURL+"/"+nodeID+"/claim", agentAPIToken, claimBody)
-	if status != http.StatusConflict {
-		t.Fatalf("Claim completed node: expected 409, got %d", status)
-	}
-	t.Log("Claim on completed node correctly rejected with 409 (optimistic lock via status guard)")
-
-	// Cleanup: delete task
-	_, _, _ = doRequestWithToken(t, client, http.MethodDelete, fmt.Sprintf("%s/%d", taskBaseURL, taskID), token, nil)
 }
 
 // ---------- Daemon API ----------

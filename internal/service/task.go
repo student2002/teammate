@@ -1,10 +1,9 @@
 // task.go implements the business logic for Task management, including Task creation, query, update, delete,
-// as well as the state transitions of task nodes (task_nodes) and subtask management.
+// as well as task node queries and subtask management.
 //
 // This file is the Service layer entry point for the Task domain, relying on data access methods
-// provided by the Store layer. All types use the domain types from internal/types; only a few
-// nullable enum references such as db.NullTaskStatus remain (can be cleaned up once
-// types.NullTaskStatus is introduced in the future).
+// provided by the Store layer. All types use the domain types from internal/types.
+// Task node instantiation and lifecycle transitions belong to the workflow engine.
 package service
 
 import (
@@ -59,85 +58,28 @@ func NewTaskService(svc *Service) *TaskService {
 	return &TaskService{svc: svc}
 }
 
-// CreateTaskResult stores the result of a create Task operation.
-type CreateTaskResult struct {
-	Task  types.Task       // the created Task
-	Nodes []types.TaskNode // Workflow nodes generated from the Workflow template
-}
-
-// Create creates a Task and generates ordered nodes from the Workflow template.
-// After creation, it notifies agents via SSE events that there are nodes to claim.
-//
-// Steps:
-//  1. Query the node definitions of the Workflow template
-//  2. Call the Store to create the Task and generate Workflow nodes (within a transaction)
-//  3. Publish node:pending SSE events to notify agents
+// Create creates the Task main record. Instantiating the template graph into
+// task nodes is the workflow engine's responsibility (Start), not part of
+// task creation.
 //
 // Parameters:
 //   - ctx: request context
 //   - projectID: Project ID
 //   - params: parameters for creating the Task, including title, description, priority, Workflow name, etc.
-//   - workflowTemplateID: Workflow template ID
+//   - workflowTemplateID: Workflow template ID (recorded on the task row)
 //
 // Returns:
-//   - *CreateTaskResult: contains the Task and the generated node list
-//   - error: possible errors (template not found, database write failure)
-func (s *TaskService) Create(ctx context.Context, projectID uuid.UUID, params types.CreateTaskParams, workflowTemplateID uuid.UUID) (*CreateTaskResult, error) {
+//   - types.Task: the created Task
+//   - error: possible errors (database write failure)
+func (s *TaskService) Create(ctx context.Context, projectID uuid.UUID, params types.CreateTaskParams, workflowTemplateID uuid.UUID) (types.Task, error) {
 	templateIDStr := workflowTemplateID.String()
 	params.WorkflowTemplateID = &templateIDStr
 
-	templateNodes, err := s.svc.Store.ListTemplateNodes(ctx, workflowTemplateID)
+	task, err := s.svc.Store.CreateTask(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list template nodes: %w", err)
+		return types.Task{}, fmt.Errorf("create task: %w", err)
 	}
-
-	task, nodes, err := s.svc.Store.CreateTask(ctx, params, templateNodes)
-	if err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
-	}
-
-	s.publishNodePendingEvents(ctx, projectID, nodes)
-
-	return &CreateTaskResult{Task: task, Nodes: nodes}, nil
-}
-
-// publishNodePendingEvents publishes node:pending or
-// node:continuation_invite SSE events for newly created task nodes.
-//
-// Steps:
-//  1. Query project info to get the Workspace ID
-//  2. Iterate nodes to find the first node that needs handling:
-//     - pending status: publish node:pending event (broadcast to Workspace)
-//     - in_progress with continuation rights: publish node:continuation_invite event (directed)
-//  3. A single event is enough to trigger all agents to poll, so return after the first one
-//
-// Parameters:
-//   - ctx: request context
-//   - projectID: Project ID
-//   - nodes: the newly created node list
-func (s *TaskService) publishNodePendingEvents(ctx context.Context, projectID uuid.UUID, nodes []types.TaskNode) {
-	for _, node := range nodes {
-		if node.Status == types.TaskNodeStatusPending {
-			s.svc.publishToProject(ctx, projectID, types.EventNodePending, map[string]interface{}{
-				"task_id":    node.TaskID,
-				"node_id":    node.ID,
-				"project_id": projectID.String(),
-			})
-			return
-		}
-		if node.Status == types.TaskNodeStatusInProgress && node.ReservedForAgentID != nil {
-			reservedID, err := uuid.Parse(*node.ReservedForAgentID)
-			if err != nil {
-				continue
-			}
-			s.svc.publishToAgent(ctx, reservedID, types.EventNodeContinuationInvite, map[string]interface{}{
-				"task_id":    node.TaskID,
-				"node_id":    node.ID,
-				"project_id": projectID.String(),
-			})
-			return
-		}
-	}
+	return task, nil
 }
 
 // Get retrieves Task info by ID.
@@ -157,8 +99,8 @@ func (s *TaskService) Get(ctx context.Context, id int32) (types.Task, error) {
 type TaskWithNodes struct {
 	Task         types.Task                `json:"task"`          // basic Task info
 	Nodes        []types.TaskNode          `json:"nodes"`         // Workflow node list
-	WorkflowName string                   `json:"workflow_name"` // Workflow template name
-	GitBranch    string                   `json:"git_branch"`    // associated Git branch
+	WorkflowName string                    `json:"workflow_name"` // Workflow template name
+	GitBranch    string                    `json:"git_branch"`    // associated Git branch
 	NodeTokens   map[string]NodeTokenUsage `json:"node_tokens"`   // Token usage per node
 }
 
@@ -416,18 +358,17 @@ func (s *TaskService) ListTaskNodes(ctx context.Context, taskID int32) ([]types.
 	return s.svc.Store.ListTaskNodes(ctx, taskID)
 }
 
-// ListNodeTransitions lists all state-transition records of the specified node.
-// Transition records are used to track the full state-change history of a node.
+// GetTaskNode fetches a single workflow node by ID.
 //
 // Parameters:
 //   - ctx: request context
 //   - nodeID: node ID
 //
 // Returns:
-//   - []types.NodeTransition: state-transition record list
-//   - error: possible errors (database query failure)
-func (s *TaskService) ListNodeTransitions(ctx context.Context, nodeID uuid.UUID) ([]types.NodeTransition, error) {
-	return s.svc.Store.ListNodeTransitions(ctx, nodeID)
+//   - types.TaskNode: node info
+//   - error: possible errors (node does not exist)
+func (s *TaskService) GetTaskNode(ctx context.Context, nodeID uuid.UUID) (types.TaskNode, error) {
+	return s.svc.Store.GetTaskNode(ctx, nodeID)
 }
 
 // CreateSubtask creates a subtask under a parent task.

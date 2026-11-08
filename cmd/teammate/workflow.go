@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -50,53 +51,49 @@ var workflowGetCmd = &cobra.Command{
 	},
 }
 
-var workflowCreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a workflow template",
-	Long: `Create a workflow template with optional node definitions.
+// readGraphPayload loads the full-graph JSON payload (name/description/enabled/
+// nodes/edges) shared by create and update; the server validates the graph.
+func readGraphPayload(path string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read graph file: %w", err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("parse graph JSON: %w", err)
+	}
+	return payload, nil
+}
 
-Nodes are specified as a JSON array via --nodes. Each node object supports:
-  name            - node display name (required)
-  sort_order      - position in workflow (1-based, required)
-  node_type       - standard | review | manual (default: standard)
-  assignee_type   - any_agent | specific_agent | human (default: any_agent)
-  timeout_minutes - execution timeout in minutes (default: 0 = no timeout)
-  max_reject_cycles - max reject count before escalation (default: 5)
-  description     - node description
+var workflowCreateCmd = &cobra.Command{
+	Use:   "create --file <graph.json>",
+	Short: "Create a workflow template from a full-graph JSON file",
+	Long: `Create a workflow template from a full-graph JSON payload.
+
+The file holds the V2 write contract: {name, description, enabled, nodes, edges}.
+Every node needs a stable "id", a registry-known "type_key" and a valid "config";
+edges reference node ids with explicit source/target ports. The server validates
+the whole graph and rejects invalid ones.
 
 Example:
-  teammate workflow create --workspace WS_ID --name "My Flow" --nodes '[
-    {"name":"Requirement Analysis","sort_order":1,"node_type":"standard","timeout_minutes":30},
-    {"name":"Code Review","sort_order":2,"node_type":"review","timeout_minutes":30}
-  ]'`,
+  teammate workflow create --workspace WS_ID --file graph.json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wsID, err := resolveWorkspaceID(cmd)
 		if err != nil {
 			return err
 		}
-		name, _ := cmd.Flags().GetString("name")
-		desc, _ := cmd.Flags().GetString("description")
-		nodesJSON, _ := cmd.Flags().GetString("nodes")
-
-		if name == "" {
-			return fmt.Errorf("--name is required")
+		file, _ := cmd.Flags().GetString("file")
+		if file == "" {
+			return fmt.Errorf("--file is required")
 		}
-
-		body := map[string]interface{}{"name": name}
-		if desc != "" {
-			body["description"] = desc
-		}
-		if nodesJSON != "" {
-			var nodes []map[string]interface{}
-			if err := json.Unmarshal([]byte(nodesJSON), &nodes); err != nil {
-				return fmt.Errorf("invalid --nodes JSON: %w", err)
-			}
-			body["nodes"] = nodes
+		payload, err := readGraphPayload(file)
+		if err != nil {
+			return err
 		}
 
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Post(fmt.Sprintf("/api/workspaces/%s/workflows", wsID), body, &result); err != nil {
+		if err := client.Post(fmt.Sprintf("/api/workspaces/%s/workflows", wsID), payload, &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -104,28 +101,31 @@ Example:
 }
 
 var workflowUpdateCmd = &cobra.Command{
-	Use:   "update <id>",
-	Short: "Update a workflow template",
-	Args:  cobra.ExactArgs(1),
+	Use:   "update <id> --file <graph.json>",
+	Short: "Replace a workflow template's whole graph from a JSON file",
+	Long: `Replace a workflow template's whole graph from a full-graph JSON payload
+(same shape as create). The template version bumps on every save; node/edge ids
+in the file stay stable across replaces.
+
+Example:
+  teammate workflow update WS_WORKFLOW_ID --workspace WS_ID --file graph.json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wsID, err := resolveWorkspaceID(cmd)
 		if err != nil {
 			return err
 		}
-		name, _ := cmd.Flags().GetString("name")
-		desc, _ := cmd.Flags().GetString("description")
-
-		body := map[string]string{}
-		if name != "" {
-			body["name"] = name
+		file, _ := cmd.Flags().GetString("file")
+		if file == "" {
+			return fmt.Errorf("--file is required")
 		}
-		if desc != "" {
-			body["description"] = desc
+		payload, err := readGraphPayload(file)
+		if err != nil {
+			return err
 		}
 
 		client := newAPIClient()
 		var result interface{}
-		if err := client.Put(fmt.Sprintf("/api/workspaces/%s/workflows/%s", wsID, args[0]), body, &result); err != nil {
+		if err := client.Put(fmt.Sprintf("/api/workspaces/%s/workflows/%s", wsID, args[0]), payload, &result); err != nil {
 			return err
 		}
 		return printOutput(result, getOutputFormat())
@@ -172,12 +172,9 @@ func init() {
 	workflowListCmd.Flags().String("workspace", "", "workspace ID")
 	workflowGetCmd.Flags().String("workspace", "", "workspace ID")
 	workflowCreateCmd.Flags().String("workspace", "", "workspace ID")
-	workflowCreateCmd.Flags().String("name", "", "workflow name")
-	workflowCreateCmd.Flags().String("description", "", "workflow description")
-	workflowCreateCmd.Flags().String("nodes", "", "nodes as JSON array")
+	workflowCreateCmd.Flags().String("file", "", "full-graph JSON payload file")
 	workflowUpdateCmd.Flags().String("workspace", "", "workspace ID")
-	workflowUpdateCmd.Flags().String("name", "", "workflow name")
-	workflowUpdateCmd.Flags().String("description", "", "workflow description")
+	workflowUpdateCmd.Flags().String("file", "", "full-graph JSON payload file")
 	workflowDeleteCmd.Flags().String("workspace", "", "workspace ID")
 	workflowStatsCmd.Flags().String("workspace", "", "workspace ID")
 

@@ -1,11 +1,10 @@
--- Workflow template queries
+-- Workflow template queries (V2 event-driven graph: nodes by type_key, edges by ports)
 
 -- name: CreateWorkflowTemplate :one
 INSERT INTO workflow_templates (
-  workspace_id, name, description, is_builtin,
-  trigger_type, trigger_config, trigger_enabled, next_run_at, last_triggered_at
+  workspace_id, name, description, is_builtin, version, enabled
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetWorkflowTemplate :one
@@ -17,14 +16,14 @@ SELECT * FROM workflow_templates
 WHERE workspace_id = $1
 ORDER BY created_at DESC;
 
--- name: UpdateWorkflowTemplate :one
+-- name: UpdateWorkflowTemplateGraph :one
+-- Full-graph save: bumps version in the same transaction as the metadata
+-- write so in-flight task snapshots can pin the version they started from.
 UPDATE workflow_templates
 SET name = $2,
     description = $3,
-    trigger_type = $4,
-    trigger_config = $5,
-    trigger_enabled = $6,
-    next_run_at = $7,
+    enabled = $4,
+    version = version + 1,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
@@ -35,9 +34,9 @@ WHERE id = $1;
 
 -- name: CreateTemplateNode :one
 -- id comes from the caller so template node identity is stable across full
--- node-list replacement (depends_on references survive template updates).
-INSERT INTO workflow_template_nodes (id, template_id, name, description, sort_order, node_type, assignee_type, assignee_id, timeout_minutes, readonly_dirs, full_control_dirs, artifact, max_reject_cycles, depends_on)
-VALUES (COALESCE(sqlc.narg('node_id')::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+-- graph replacement (edges reference node ids).
+INSERT INTO workflow_template_nodes (id, template_id, name, sort_order, type_key, config, ui_config)
+VALUES (COALESCE(sqlc.narg('node_id')::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: GetTemplateNode :one
@@ -49,19 +48,25 @@ SELECT * FROM workflow_template_nodes
 WHERE template_id = $1
 ORDER BY sort_order;
 
--- name: UpdateTemplateNode :one
-UPDATE workflow_template_nodes
-SET name = $2, description = $3, sort_order = $4, node_type = $5, assignee_type = $6, assignee_id = $7, timeout_minutes = $8, readonly_dirs = $9, full_control_dirs = $10, artifact = $11, max_reject_cycles = $12, depends_on = $13
-WHERE id = $1
-RETURNING *;
-
--- name: DeleteTemplateNode :exec
-DELETE FROM workflow_template_nodes
-WHERE id = $1;
-
 -- name: DeleteTemplateNodesByTemplate :exec
 DELETE FROM workflow_template_nodes
 WHERE template_id = $1;
 
--- name: GetMaxRejectCyclesByNodeID :one
-SELECT max_reject_cycles FROM workflow_template_nodes WHERE id = $1;
+-- name: CreateTemplateEdge :one
+-- id comes from the caller so edge identity is stable across full graph replacement.
+INSERT INTO workflow_template_edges (id, template_id, source_node_id, source_port, target_node_id, target_port, label, sort_order, config)
+VALUES (COALESCE(sqlc.narg('edge_id')::uuid, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: GetTemplateEdge :one
+SELECT * FROM workflow_template_edges
+WHERE id = $1;
+
+-- name: ListTemplateEdges :many
+SELECT * FROM workflow_template_edges
+WHERE template_id = $1
+ORDER BY sort_order, created_at;
+
+-- name: DeleteTemplateEdgesByTemplate :exec
+DELETE FROM workflow_template_edges
+WHERE template_id = $1;
