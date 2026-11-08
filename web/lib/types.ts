@@ -1,51 +1,13 @@
 // types.ts 定义前端共享的类型定义。
+import type { RunNodeStatus } from "./workflow/types";
+
 // ── Task Types ──────────────────────────────────────────────
 export type TaskType = "story" | "bug" | "task";
-export type TaskStatus = "active" | "completed" | "cancelled";
-export type TaskNodeStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "rejected"
-  | "manual_intervention";
-export type NodeType = "standard" | "review" | "manual";
-export type WorkflowTriggerType = "manual" | "schedule" | "github_issue";
-export type AssigneeType = "any_agent" | "specific_agent" | "human" | "auto";
+export type TaskStatus = "active" | "completed" | "failed" | "cancelled";
+// 运行八态机（waiting/ready/running/succeeded/failed/skipped/cancelled/manual_intervention）
+export type TaskNodeStatus = RunNodeStatus;
 export type AgentStatus = "online" | "offline" | "busy" | "paused" | "pending";
 export type Priority = "low" | "medium" | "high" | "urgent";
-
-export interface TaskNode {
-  id: string;
-  task_id: number;
-  name: string;
-  nodeType: NodeType;
-  assigneeType: AssigneeType;
-  assigneeId?: string;
-  status: TaskNodeStatus;
-  description: string;
-  timeout: number;
-  maxRejectCycles: number;
-  timeoutMinutes: number;
-  readonlyDirs: string;
-  fullControlDirs: string;
-  artifact: string;
-  rejectCount: number;
-  sortOrder: number;
-  summary?: string;
-}
-
-export interface NodeTransition {
-  id: string;
-  taskNodeId: string;
-  fromStatus: TaskNodeStatus;
-  toStatus: TaskNodeStatus;
-  action: "approve" | "reject" | "manual" | "reclaim" | "timeout";
-  targetNodeId?: string;
-  comment?: string;
-  operatorId?: string;
-  operatorType: string;
-  createdAt: string;
-}
 
 export interface Task {
   id: number;
@@ -59,12 +21,10 @@ export interface Task {
   labels: string[];
   projectId: string;
   workflowName: string;
-  nodes: TaskNode[];
   comments: Comment[];
   subTasks: Task[];
   parentTaskId?: number;
   gitBranch: string;
-  interrupted: boolean;
 }
 
 export interface Agent {
@@ -102,44 +62,6 @@ export interface McpServer {
   workspaceId: string;
 }
 
-export interface WorkflowTemplate {
-  id: string;
-  name: string;
-  description: string;
-  isBuiltIn: boolean;
-  triggerType: WorkflowTriggerType;
-  triggerConfig: WorkflowTriggerConfig;
-  triggerEnabled: boolean;
-  nextRunAt?: string;
-  lastTriggeredAt?: string;
-  nodes: WorkflowTemplateNode[];
-  workspaceId: string;
-}
-
-export interface WorkflowTriggerConfig {
-  projectId?: string;
-  intervalMinutes?: number;
-  title?: string;
-  description?: string;
-  repoOwner?: string;
-  repoName?: string;
-  secret?: string;
-}
-
-export interface WorkflowTemplateNode {
-  id: number;
-  name: string;
-  nodeType: NodeType;
-  assigneeType: AssigneeType;
-  assigneeId?: string;
-  description: string;
-  timeout: number;
-  readonlyDirs: string;
-  fullControlDirs: string;
-  artifact: string;
-  maxRejectCycles: number;
-}
-
 export interface Workspace {
   id: string;
   name: string;
@@ -155,6 +77,22 @@ export interface Project {
   name: string;
   description: string;
   workspaceId: string;
+}
+
+// 工程 GitHub 集成（服务端只回传掩码后的 PAT 与 webhook secret 是否已设置）
+export interface GitHubIntegration {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  provider: string;
+  name: string;
+  repo_owner: string;
+  repo_name: string;
+  status: string;
+  pat_masked: string;
+  webhook_secret_set: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GitCredential {
@@ -206,30 +144,28 @@ export interface MappedTask {
   title: string;
   type: TaskType;
   priority: Priority;
-  priorityState: string;
+  // 任务级展示状态：任务状态(active/completed/failed/cancelled)与当前节点状态的合成
+  priorityState: TaskNodeStatus;
   description: string;
   constraints: string;
   currentNode: number;
-  currentNodeType: NodeType;
+  // 当前节点 type_key（如 agent.task / human.input）
+  currentNodeType: string;
   agent: string | null;
   message: string;
   nodesStatus: TaskNodeStatus[];
   nodeAgents: string[];
   nodeNames: string[];
-  nodeTokens: Record<string, unknown>;
-  nodeTimeouts: Record<string, unknown>;
+  // 节点级 Token 用量:键为节点 UUID,值为该节点的输入/输出 Token 计数
+  nodeTokens: Record<string, { input_tokens: number; output_tokens: number }>;
   dueDate: string;
   labels: string[];
-  rejectCount: number;
   logs: Record<string, string[]>;
   comments: Comment[];
-  reviewHistory: unknown[];
   subTasks: unknown[];
   gitBranch: string;
   parentTask: string;
-  interrupted: boolean;
   reservedForAgent: string | null;
-  reservationExpiresAt: string | null;
   nodeSummaries: Record<string, string>;
   workflowName: string;
   _rawNodes: unknown[];
@@ -295,17 +231,4 @@ export interface MappedDaemon {
   createdAt: string;
   agents: DaemonReportedAgent[];
   providers: DaemonProvider[];
-}
-
-export interface MappedTemplate {
-  id: string;
-  name: string;
-  description: string;
-  isBuiltIn: boolean;
-  triggerType: WorkflowTriggerType;
-  triggerConfig: WorkflowTriggerConfig;
-  triggerEnabled: boolean;
-  nextRunAt?: string;
-  lastTriggeredAt?: string;
-  nodes: WorkflowTemplateNode[];
 }

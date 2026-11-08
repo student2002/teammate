@@ -5,17 +5,16 @@ import type {
   Project,
   MappedAgent,
   MappedTask,
-  MappedTemplate,
   Skill,
   McpServer,
   User,
 } from "@/lib/types";
+import type { TemplateListItem } from "@/lib/workflow/types";
 import type { LogMessage } from "@/lib/use-task-logs";
-import api from "@/lib/api";
+import api, { type WorkspaceIntegration } from "@/lib/api";
 import {
   mapTaskFromApi,
   mapAgentFromApi,
-  mapTemplateFromApi,
   mapSkillFromApi,
   mapMcpServerFromApi,
   mapWorkspaceFromApi,
@@ -24,7 +23,8 @@ import {
 // API 响应的类型辅助
 type ProjectList = Project[];
 type AgentList = { id: string; name: string; provider: string; status: string; instructions: string }[];
-type WorkflowList = { id: string; name: string; description: string; is_builtin: boolean; nodes: unknown[]; template?: { id: string; name: string; description: string; is_builtin: boolean } }[];
+type IntegrationList = WorkspaceIntegration[];
+type WorkflowList = TemplateListItem[];
 type SkillList = unknown[];
 type McpList = unknown[];
 type TaskWithNodesList = { task: Record<string, unknown>; nodes: Record<string, unknown>[] }[];
@@ -53,15 +53,21 @@ interface AppState {
   agents: MappedAgent[];
   setAgents: (agents: MappedAgent[]) => void;
 
+  // 工作区集成(工作流节点的集成下拉数据源)
+  integrations: WorkspaceIntegration[];
+  setIntegrations: (integrations: WorkspaceIntegration[]) => void;
+  refreshIntegrations: () => Promise<void>;
+
   // 任务
   tasks: MappedTask[];
   setTasks: (tasks: MappedTask[]) => void;
   // 最近一次任务列表加载是否失败(失败时保留 last-good 数据,视图据此显示降级提示)
   loadError: boolean;
 
-  // 模板
-  templates: MappedTemplate[];
-  setTemplates: (templates: MappedTemplate[]) => void;
+  // 模板(整图列表,snake_case 原样保存)
+  templates: TemplateListItem[];
+  setTemplates: (templates: TemplateListItem[]) => void;
+  refreshTemplates: () => Promise<void>;
 
   // 技能与 MCP
   skills: Skill[];
@@ -166,6 +172,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentWs: ws,
       projects: [],
       agents: [],
+      integrations: [],
       tasks: [],
       templates: [],
       skills: [],
@@ -173,10 +180,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentProjectId: null,
     });
     if (ws) {
-      const [projList, agentList, wfList, skillList, mcpList] =
+      const [projList, agentList, integrationList, wfList, skillList, mcpList] =
         await Promise.all([
           api.listProjects(id).catch(() => []) as Promise<ProjectList>,
           api.listAgents(id).catch(() => []) as Promise<AgentList>,
+          api.listWorkspaceIntegrations(id).catch(() => ({ integrations: [] })) as Promise<{ integrations: IntegrationList }>,
           api.listWorkflows(id).catch(() => []) as Promise<WorkflowList>,
           api.listSkills(id).catch(() => []) as Promise<SkillList>,
           api.listMcpServers(id).catch(() => []) as Promise<McpList>,
@@ -184,8 +192,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ projects: projList || [] });
       const mappedAgents = (agentList || []).map(mapAgentFromApi);
       set({ agents: mappedAgents });
-      const mappedTemplates = (wfList || []).map(mapTemplateFromApi);
-      set({ templates: mappedTemplates });
+      set({ integrations: integrationList.integrations || [] });
+      set({ templates: wfList || [] });
       set({ skills: (skillList || []).map(mapSkillFromApi) });
       set({ mcpServers: (mcpList || []).map(mapMcpServerFromApi) });
       if (projList && projList.length > 0) {
@@ -209,14 +217,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   agents: [],
   setAgents: (agents) => set({ agents }),
 
+  // 工作区集成
+  integrations: [],
+  setIntegrations: (integrations) => set({ integrations }),
+  refreshIntegrations: async () => {
+    const wsId = get().currentWorkspaceId;
+    if (!wsId) return;
+    try {
+      const result = (await api.listWorkspaceIntegrations(wsId)) as { integrations: IntegrationList };
+      set({ integrations: result.integrations || [] });
+    } catch {
+      // 失败时保留 last-good 集成数据
+    }
+  },
+
   // 任务
   tasks: [],
   setTasks: (tasks) => set({ tasks }),
   loadError: false,
 
-  // 模板
+  // 模板(整图列表)
   templates: [],
   setTemplates: (templates) => set({ templates }),
+  refreshTemplates: async () => {
+    const wsId = get().currentWorkspaceId;
+    if (!wsId) return;
+    try {
+      const wfList = (await api.listWorkflows(wsId).catch(() => [])) as WorkflowList;
+      set({ templates: wfList || [] });
+    } catch {
+      // 保留 last-good 模板数据
+    }
+  },
 
   // 技能与 MCP
   skills: [],
@@ -291,10 +323,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         } catch {
           // 工作区列表刚由服务端加载；若此处失败，后续加载会暴露问题。
         }
-        const [projList, agentList, wfList, skillList, mcpList] =
+        const [projList, agentList, integrationList, wfList, skillList, mcpList] =
           await Promise.all([
             api.listProjects(wsId).catch(() => []) as Promise<ProjectList>,
             api.listAgents(wsId).catch(() => []) as Promise<AgentList>,
+            api.listWorkspaceIntegrations(wsId).catch(() => ({ integrations: [] })) as Promise<{ integrations: IntegrationList }>,
             api.listWorkflows(wsId).catch(() => []) as Promise<WorkflowList>,
             api.listSkills(wsId).catch(() => []) as Promise<SkillList>,
             api.listMcpServers(wsId).catch(() => []) as Promise<McpList>,
@@ -302,8 +335,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ projects: projList || [] });
         const mappedAgents = (agentList || []).map(mapAgentFromApi);
         set({ agents: mappedAgents });
-        const mappedTemplates = (wfList || []).map(mapTemplateFromApi);
-        set({ templates: mappedTemplates });
+        set({ integrations: integrationList.integrations || [] });
+        set({ templates: wfList || [] });
         set({ skills: (skillList || []).map(mapSkillFromApi) });
         set({ mcpServers: (mcpList || []).map(mapMcpServerFromApi) });
         if (projList && projList.length > 0) {

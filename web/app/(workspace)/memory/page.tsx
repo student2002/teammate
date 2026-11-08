@@ -1,23 +1,24 @@
 "use client";
-// 共享记忆页：查看与搜索工作区共享记忆。
+// 共享记忆页：查看与搜索工作区共享记忆。条目为文档式列表（分隔线，非重卡片）；
+// 新增在页头下方内联展开（同一时刻只此一个表单），删除用原位二次确认。
 
-import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
   Brain,
   Plus,
-  X,
   Search,
   BookOpen,
   Trash2,
   Save,
   Loader2,
-  ArrowLeft,
 } from "lucide-react";
-import ModalPortal from "@/lib/ModalPortal";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import PageHeader from "@/lib/ui/PageHeader";
+import Button from "@/lib/ui/Button";
+import EmptyState from "@/lib/ui/EmptyState";
+import InlineConfirm from "@/lib/ui/InlineConfirm";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
 
 // ── Types ──
@@ -30,20 +31,13 @@ interface MemoryEntry {
   created_at: string;
 }
 
-// ==========================================
-// 添加知识条目弹窗
-// ==========================================
-function AddMemoryDialog({
-  onClose,
+// 内联新增表单：label 在输入框上方，文档流推开列表
+function AddMemoryInline({
   onAdd,
+  onClose,
 }: {
+  onAdd: (memory: { title: string; content: string; tags: string[]; type: string }) => Promise<void>;
   onClose: () => void;
-  onAdd: (memory: {
-    title: string;
-    content: string;
-    tags: string[];
-    type: string;
-  }) => Promise<void>;
 }) {
   const t = useTranslations("memory.dialog");
   const [title, setTitle] = useState("");
@@ -61,7 +55,7 @@ function AddMemoryDialog({
         content: content.trim(),
         tags: tags
           .split(",")
-          .map((t) => t.trim())
+          .map((s) => s.trim())
           .filter(Boolean),
         type,
       });
@@ -71,113 +65,79 @@ function AddMemoryDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[500px] shadow-2xl modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line flex items-center">
-          <BookOpen className="w-5 h-5 text-accent-fg mr-3" />
-          <h3 className="text-lg font-bold text-fg flex-1">
-            {t("title")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg"
-          >
-            <X className="w-5 h-5 text-fg-subtle" />
-          </button>
+    <div className="mx-6 mb-4 border border-line rounded-[var(--radius-card)] bg-surface-2/40 p-4 space-y-3 animate-fade-in shrink-0">
+      <div className="text-sm font-semibold text-fg flex items-center gap-2">
+        <BookOpen className="w-4 h-4 text-accent-fg" />
+        {t("title")}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">
+            {t("titleLabel")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 text-fg text-sm focus:outline-none focus:border-accent transition-colors-fast"
+            placeholder={t("titlePlaceholder")}
+          />
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("titleLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-accent transition-colors-fast"
-              placeholder={t("titlePlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("contentLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={4}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-accent resize-none transition-colors-fast"
-              placeholder={t("contentPlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("typeLabel")}
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg text-sm focus:outline-none focus:border-accent transition-colors-fast"
-            >
-              <option value="architecture">{t("typeArchitecture")}</option>
-              <option value="command">{t("typeCommand")}</option>
-              <option value="convention">{t("typeConvention")}</option>
-              <option value="decision">{t("typeDecision")}</option>
-              <option value="insight">{t("typeInsight")}</option>
-              <option value="environment">{t("typeEnvironment")}</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("tagsLabel")}
-            </label>
-            <input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg text-sm focus:outline-none focus:border-accent transition-colors-fast"
-              placeholder={t("tagsPlaceholder")}
-            />
-          </div>
-        </div>
-        <div className="p-5 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">{t("typeLabel")}</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 text-fg text-sm focus:outline-none focus:border-accent transition-colors-fast"
           >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!title.trim() || !content.trim() || saving}
-            className="flex items-center px-5 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            {t("save")}
-          </button>
+            <option value="architecture">{t("typeArchitecture")}</option>
+            <option value="command">{t("typeCommand")}</option>
+            <option value="convention">{t("typeConvention")}</option>
+            <option value="decision">{t("typeDecision")}</option>
+            <option value="insight">{t("typeInsight")}</option>
+            <option value="environment">{t("typeEnvironment")}</option>
+          </select>
         </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs font-medium text-fg-muted mb-1">
+            {t("contentLabel")} <span className="text-danger-fg">*</span>
+          </label>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={4}
+            className="w-full bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 py-2 text-sm text-fg-muted focus:outline-none focus:border-accent resize-none transition-colors-fast"
+            placeholder={t("contentPlaceholder")}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">{t("tagsLabel")}</label>
+          <input
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            className="w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 text-fg text-sm focus:outline-none focus:border-accent transition-colors-fast"
+            placeholder={t("tagsPlaceholder")}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {t("cancel")}
+        </Button>
+        <Button variant="primary" size="sm" loading={saving} onClick={handleSave} disabled={!title.trim() || !content.trim()}>
+          <Save className="w-3.5 h-3.5 mr-1" />
+          {t("save")}
+        </Button>
       </div>
     </div>
   );
 }
 
-// ==========================================
-// 共享记忆页面（从弹窗改为独立页面）
-// ==========================================
 export default function MemoryPage() {
   const t = useTranslations("memory");
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<MemoryEntry | null>(null);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const currentWorkspaceId = useAppStore((s) => s.currentWorkspaceId);
 
@@ -224,12 +184,7 @@ export default function MemoryPage() {
     return () => clearTimeout(timer);
   }, [search, handleSearch]);
 
-  const handleAdd = async (m: {
-    title: string;
-    content: string;
-    tags: string[];
-    type: string;
-  }) => {
+  const handleAdd = async (m: { title: string; content: string; tags: string[]; type: string }) => {
     if (!currentWorkspaceId) return;
     try {
       const data = {
@@ -253,8 +208,8 @@ export default function MemoryPage() {
     try {
       await api.deleteMemory(id);
       setEntries((prev) => prev.filter((e) => e.id !== id));
-      if (selectedEntry?.id === id) {
-        setSelectedEntry(null);
+      if (selectedEntryId === id) {
+        setSelectedEntryId(null);
       }
     } catch (err) {
       console.error("Failed to delete memory:", err);
@@ -262,139 +217,112 @@ export default function MemoryPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
-      {/* Header — 用 Link 返回代替 onClose */}
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="p-2 hover:bg-surface-2 rounded-lg transition-colors-fast"
-          >
-            <ArrowLeft className="w-5 h-5 text-fg-subtle" />
-          </Link>
-          <div className="flex items-center">
-            <Brain className="w-6 h-6 text-accent-fg mr-3" />
-            <div>
-              <h2 className="text-2xl font-bold text-fg">{t("title")}</h2>
-              <p className="text-xs text-fg-subtle">
-                {t("subtitle")}
-              </p>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center px-4 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-sm font-medium transition-colors-fast btn-press"
-        >
-          <Plus className="w-4 h-4 mr-1.5" /> {t("add")}
-        </button>
-      </div>
+    <div className="h-full flex flex-col overflow-y-auto page-enter">
+      <PageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button variant="primary" onClick={() => setShowAdd(!showAdd)}>
+            <Plus className="w-4 h-4 mr-1.5" /> {t("add")}
+          </Button>
+        }
+      />
+
+      {/* 内联新增区 */}
+      {showAdd && <AddMemoryInline onAdd={handleAdd} onClose={() => setShowAdd(false)} />}
 
       {/* 搜索栏 */}
-      <div className="mb-6 shrink-0">
-        <div className="relative">
+      <div className="px-6 mb-4 shrink-0">
+        <div className="relative max-w-xl">
           <Search className="w-4 h-4 text-fg-faint absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-bg border border-line-strong rounded-lg pl-9 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-accent transition-colors-fast"
+            className="w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] pl-9 pr-3 text-sm text-fg focus:outline-none focus:border-accent transition-colors-fast"
             placeholder={t("searchPlaceholder")}
           />
         </div>
       </div>
 
-      {/* 条目列表 */}
-      <div className="flex-1 space-y-3">
+      {/* 条目列表：文档式，分隔线分隔 */}
+      <div className="px-6 pb-4 flex-1 min-h-0">
         {loading ? (
           <div className="text-center py-10 text-fg-faint text-sm flex items-center justify-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" /> {t("loading")}
           </div>
         ) : entries.length === 0 ? (
-          <div className="text-center py-10 text-fg-faint text-sm">
-            <div className="flex flex-col items-center">
-              {t("empty")}
-            </div>
-            <div className="mt-6 w-full max-w-2xl text-left mx-auto">
+          <div>
+            <EmptyState icon={Brain} title={t("empty")} />
+            <div className="max-w-2xl mx-auto">
               <EmptyStateGuide page="memory" />
             </div>
           </div>
         ) : (
-          entries.map((e) => (
-            <div
-              key={e.id}
-              onClick={() =>
-                setSelectedEntry(
-                  selectedEntry?.id === e.id ? null : e
-                )
-              }
-              className={`bg-surface-2/30 border rounded-xl p-4 cursor-pointer transition-colors-normal card-hover ${
-                selectedEntry?.id === e.id
-                  ? "border-accent/50 bg-accent/5"
-                  : "border-line-strong/60 hover:border-line-strong"
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-fg">
-                    {e.title}
-                  </h4>
-                  <p
-                    className={`text-xs text-fg-subtle mt-1 ${selectedEntry?.id === e.id ? "" : "line-clamp-2"}`}
-                  >
-                    {e.content}
-                  </p>
-                  {selectedEntry?.id === e.id && (
-                    <div className="mt-3 flex items-center gap-3 text-[10px] text-fg-faint">
-                      <span>{t("typeLabel", { type: e.type })}</span>
-                      <span>
-                        {t("createdAt", {
-                          date: e.created_at
-                            ? new Date(e.created_at).toLocaleDateString()
-                            : "",
-                        })}
-                      </span>
-                      <button
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          handleDelete(e.id);
-                        }}
-                        className="text-danger-fg hover:text-danger-fg flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3 h-3" /> {t("delete")}
-                      </button>
+          <div className="divide-y divide-line">
+            {entries.map((e) => {
+              const expanded = selectedEntryId === e.id;
+              return (
+                <div
+                  key={e.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedEntryId(expanded ? null : e.id)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      setSelectedEntryId(expanded ? null : e.id);
+                    }
+                  }}
+                  className={`py-3 cursor-pointer transition-colors-fast focus-visible:outline-none ${expanded ? "" : "hover:bg-surface-2/40"}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-fg">{e.title}</h4>
+                      <p className={`text-xs text-fg-subtle mt-1 leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>
+                        {e.content}
+                      </p>
+                      {expanded && (
+                        <div className="mt-2.5 flex items-center gap-3 text-[10px] text-fg-faint">
+                          <span>{t("typeLabel", { type: e.type })}</span>
+                          <span>
+                            {t("createdAt", {
+                              date: e.created_at ? new Date(e.created_at).toLocaleDateString() : "",
+                            })}
+                          </span>
+                          <span onClick={(ev) => ev.stopPropagation()}>
+                            <InlineConfirm
+                              label={
+                                <span className="flex items-center gap-1">
+                                  <Trash2 className="w-3 h-3" />
+                                  {t("delete")}
+                                </span>
+                              }
+                              confirmLabel={t("delete")}
+                              cancelLabel={t("dialog.cancel")}
+                              onConfirm={() => handleDelete(e.id)}
+                            />
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-4 shrink-0">
-                  <div className="flex flex-wrap gap-1">
-                    {(e.tags || []).map((t) => (
-                      <span
-                        key={t}
-                        className="text-[10px] px-1.5 py-0.5 bg-accent/10 text-accent-fg rounded"
-                      >
-                        {t}
-                      </span>
-                    ))}
+                    <div className="flex flex-wrap gap-1 shrink-0 max-w-[200px] justify-end">
+                      {(e.tags || []).map((tag) => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-accent/10 text-accent-fg rounded">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ))
+              );
+            })}
+          </div>
         )}
-      </div>
 
-      <div className="mt-6 pt-4 border-t border-line text-[10px] text-fg-faint">
-        {t("footer", { count: entries.length })}
+        <div className="mt-5 pt-3 border-t border-line text-[10px] text-fg-faint">
+          {t("footer", { count: entries.length })}
+        </div>
       </div>
-
-      {showAdd && (
-        <ModalPortal>
-        <AddMemoryDialog
-          onClose={() => setShowAdd(false)}
-          onAdd={handleAdd}
-        />
-        </ModalPortal>
-      )}
     </div>
   );
 }

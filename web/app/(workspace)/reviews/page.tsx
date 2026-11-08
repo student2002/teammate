@@ -1,506 +1,227 @@
 "use client";
-// 审查队列页：展示待审查任务及审查记录。
+// 人工待办页：读看板 manual_intervention 列(任务级状态=需人工介入的任务),
+// 左侧 360px 待办列表,右侧任务上下文;处理动作在任务详情(工作台 cockpit)完成,
+// 本页只提供入口链接。路由名 /reviews 保持不变。
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  Shield,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Filter,
-  Clock,
-  User,
-  Bot,
-  ChevronDown,
-  Eye,
-} from "lucide-react";
-import ModalPortal from "@/lib/ModalPortal";
+import { ArrowRight, Clock, Bot, ShieldAlert, FileText, Lock, Inbox } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { usePermission } from "@/lib/use-permission";
-import api from "@/lib/api";
+import PageHeader from "@/lib/ui/PageHeader";
+import Button from "@/lib/ui/Button";
+import EmptyState from "@/lib/ui/EmptyState";
+import TaskStateBadge from "@/lib/product/TaskStateBadge";
+import CollaborationChain from "@/lib/product/CollaborationChain";
 import type { MappedTask } from "@/lib/types";
-import EmptyStateGuide from "@/lib/EmptyStateGuide";
 
-// ==========================================
-// 退回原因弹窗
-// ==========================================
-interface RejectReasonDialogProps {
-  task: MappedTask;
-  onConfirm: (taskId: number, reason: string) => void;
-  onClose: () => void;
-}
-
-function RejectReasonDialog({
-  task,
-  onConfirm,
-  onClose,
-}: RejectReasonDialogProps) {
-  const t = useTranslations("reviews.rejectDialog");
-  const [reason, setReason] = useState("");
-
-  const handleSubmit = () => {
-    if (!reason.trim()) return;
-    onConfirm(task.id, reason);
-    setReason("");
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[480px] shadow-2xl modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line flex justify-between items-center">
-          <h3 className="text-lg font-bold text-fg flex items-center">
-            <XCircle className="w-5 h-5 mr-2 text-orange-400" /> {t("title")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
-          >
-            <XCircle className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="text-sm text-fg-muted">
-            <span className="text-primary-fg font-mono mr-2">{task.taskRef}</span>
-            {task.title}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("reasonLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              autoFocus
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-3 text-sm text-fg-muted focus:outline-none focus:border-orange-500 resize-none transition-colors-fast"
-              placeholder={t("reasonPlaceholder")}
-            />
-          </div>
-        </div>
-        <div className="p-5 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!reason.trim()}
-            className="flex items-center px-5 py-2 bg-orange-600 hover:bg-orange-500 text-fg rounded-lg text-sm font-medium disabled:opacity-50 btn-press transition-colors-fast"
-          >
-            <XCircle className="w-4 h-4 mr-2" /> {t("confirm")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 自我审查风险检测（本地逻辑）
-// ==========================================
-function checkSelfReviewRisk(task: MappedTask): string | null {
-  const currentNodeIdx = task.currentNode;
-  const currentAgent = task.nodeAgents?.[currentNodeIdx];
-  if (!currentAgent) return null;
-
-  // 检查当前审查节点的代理是否也出现在之前的"standard"节点
-  for (let i = 0; i < currentNodeIdx; i++) {
-    const nodeStatus = task.nodesStatus?.[i];
-    // 只看已完成或进行中的标准节点（排除 pending）
-    if (nodeStatus === "completed" || nodeStatus === "in_progress") {
-      if (task.nodeAgents?.[i] === currentAgent) {
-        return currentAgent;
-      }
-    }
-  }
-  return null;
-}
-
-// ==========================================
-// 自我审查 API 检测徽章
-// ==========================================
-interface SelfReviewBadgeProps {
-  task: MappedTask;
-}
-
-function SelfReviewBadge({ task }: SelfReviewBadgeProps) {
-  const t = useTranslations("reviews");
-  const [isSelfReview, setIsSelfReview] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // 从 _rawNodes 中查找当前审查节点 ID
-    const rawNodes = task._rawNodes as Array<{
-      id?: string;
-      status?: string;
-    }> | undefined;
-    const currentNode = (rawNodes || []).find(
-      (n) => n.status === "in_progress" || n.status === "pending"
-    );
-    if (!currentNode || !currentNode.id) {
-      setLoading(false);
-      return;
-    }
-    api
-      .checkSelfReview(task.id, currentNode.id)
-      .then((data) => {
-        setIsSelfReview(
-          (data as Record<string, unknown>).is_self_review === true
-        );
-      })
-      .catch(() => {
-        setIsSelfReview(false);
-      })
-      .finally(() => setLoading(false));
-  }, [task.id, task._rawNodes]);
-
-  if (loading || !isSelfReview) return null;
-
-  return (
-    <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-warning/10 text-warning-fg border-warning/30">
-      <AlertTriangle className="w-3 h-3" /> {t("selfReviewBadge")}
-    </span>
-  );
-}
-
-// ==========================================
-// 审查队列主视图 (Next.js Page)
-// ==========================================
 export default function ReviewsPage() {
   const t = useTranslations("reviews");
+  const router = useRouter();
   const tasks = useAppStore((s) => s.tasks);
   const currentProjectId = useAppStore((s) => s.currentProjectId);
   const loadProjectData = useAppStore((s) => s.loadProjectData);
-  const { canEdit } = usePermission();
 
-  const [filter, setFilter] = useState<"all" | "rejected" | "pending_review">(
-    "all"
-  );
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [rejectingTask, setRejectingTask] = useState<MappedTask | null>(null);
-  const [reviewTaskIds, setReviewTaskIds] = useState<Set<number>>(new Set());
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // 从后端获取审查队列（review 类型节点中 pending/in_progress 的任务）
+  // 需人工任务来自任务数据(与看板 manual_intervention 列同源),轮询保持新鲜
   useEffect(() => {
     if (!currentProjectId) return;
-    api
-      .getReviewQueue(currentProjectId)
-      .then((items: unknown) => {
-        const list = Array.isArray(items)
-          ? (items as Array<{ task_id: number }>)
-          : [];
-        setReviewTaskIds(new Set(list.map((i) => i.task_id)));
-      })
-      .catch(() => setReviewTaskIds(new Set()));
-  }, [currentProjectId]);
+    loadProjectData(currentProjectId);
+    const interval = setInterval(() => loadProjectData(currentProjectId), 10000);
+    return () => clearInterval(interval);
+  }, [currentProjectId, loadProjectData]);
 
-  // 审查任务 = 后端审查队列（待审查节点）∪ 本地被退回的任务
-  const reviewTasks = tasks
-    .filter((t) => {
-      const nodeStatus = t.nodesStatus?.[t.currentNode];
-      const isRejected =
-        t.priorityState === "rejected" || nodeStatus === "rejected";
-      return reviewTaskIds.has(t.id) || isRejected;
-    })
-    .filter((t) => {
-      // 进一步筛选：只保留当前节点是审查相关或被退回的
-      const nodeName = t.nodeNames?.[t.currentNode] || "";
-      const nodeStatus = t.nodesStatus?.[t.currentNode];
-      return (
-        nodeStatus === "rejected" ||
-        nodeName.includes("审查") ||
-        nodeName.includes("Review") ||
-        t.priorityState === "rejected"
-      );
-    });
+  const todoTasks = useMemo(
+    () => tasks.filter((task) => task.priorityState === "manual_intervention"),
+    [tasks]
+  );
 
-  const filteredTasks = reviewTasks.filter((t) => {
-    if (filter === "rejected")
-      return (
-        t.priorityState === "rejected" ||
-        t.nodesStatus?.[t.currentNode] === "rejected"
-      );
-    if (filter === "pending_review")
-      return (
-        t.priorityState !== "rejected" &&
-        t.nodesStatus?.[t.currentNode] !== "rejected"
-      );
-    return true;
-  });
+  const selectedTask = todoTasks.find((task) => task.id === selectedId) || null;
 
-  const filterLabels: Record<string, string> = {
-    all: t("filterAll"),
-    rejected: t("filterRejected"),
-    pending_review: t("filterPending"),
-  };
-
-  const handleApprove = async (taskId: number) => {
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task) return;
-    const rawNodes = task._rawNodes as Array<{
-      id?: string;
-      status?: string;
-    }> | undefined;
-    const currentNode = (rawNodes || []).find(
-      (n) =>
-        n.status === "manual_intervention" ||
-        n.status === "rejected" ||
-        n.status === "in_progress"
-    );
-    const nodeId = currentNode?.id;
-    if (!nodeId) return;
-    try {
-      await api.approveNode(taskId, nodeId);
-      if (task._projectId) {
-        await loadProjectData(task._projectId);
-      }
-    } catch (err) {
-      console.error("Approve failed:", err);
+  // 首次进入/选中项被处理后自动选中第一项
+  useEffect(() => {
+    if (todoTasks.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
     }
-  };
-
-  const handleRejectConfirm = async (taskId: number, reason: string) => {
-    const task = rejectingTask;
-    if (!task) return;
-    const rawNodes = task._rawNodes as Array<{
-      id?: string;
-      status?: string;
-    }> | undefined;
-    const currentNode = (rawNodes || []).find(
-      (n) => n.status === "manual_intervention" || n.status === "rejected"
-    );
-    const nodeId = currentNode?.id || undefined;
-    try {
-      await api.rejectNode(taskId, nodeId!, { reason });
-      if (task._projectId) {
-        await loadProjectData(task._projectId);
-      }
-    } catch (err) {
-      console.error("Reject failed:", err);
+    if (!todoTasks.some((task) => task.id === selectedId)) {
+      setSelectedId(todoTasks[0].id);
     }
-    setRejectingTask(null);
-  };
+  }, [todoTasks, selectedId]);
+
+  // 当前人工节点:第一个 manual_intervention 状态的节点
+  const humanNode = useMemo(() => {
+    if (!selectedTask) return null;
+    const rawNodes = (selectedTask._rawNodes || []) as Array<{
+      id?: string;
+      name?: string;
+      type_key?: string;
+      status?: string;
+      config?: { prompt?: unknown };
+    }>;
+    return rawNodes.find((n) => n.status === "manual_intervention") ?? null;
+  }, [selectedTask]);
+
+  const humanPrompt = typeof humanNode?.config?.prompt === "string" ? humanNode.config.prompt : "";
+
+  const rawTypeKeys = (task: MappedTask) =>
+    ((task._rawNodes || []) as Array<{ type_key?: string }>).map((n) => n.type_key || "");
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
-      {/* 页头 */}
-      <div className="flex justify-between items-center mb-8 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-fg mb-2 flex items-center">
-            <Shield className="w-7 h-7 mr-3 text-warning-fg" />
-            {t("title")}
-          </h1>
-          <p className="text-sm text-fg-subtle">
-            {t("subtitle", { count: reviewTasks.length })}
-          </p>
-        </div>
+    <div className="h-full flex flex-col page-enter">
+      <PageHeader
+        title={t("title")}
+        meta={<span className="text-xs text-fg-faint">{t("subtitle", { count: todoTasks.length })}</span>}
+      />
 
-        {/* 筛选器 */}
-        <div className="relative">
-          <button
-            onClick={() => setShowFilterMenu(!showFilterMenu)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-2/60 border border-line-strong/60 rounded-xl text-sm text-fg-muted hover:bg-surface-3/60 hover:border-line-strong transition-colors-fast backdrop-blur-sm"
-          >
-            <Filter className="w-4 h-4 text-fg-subtle" />
-            <span>{filterLabels[filter]}</span>
-            <ChevronDown
-              className={`w-4 h-4 text-fg-faint transition-transform ${showFilterMenu ? "rotate-180" : ""}`}
-            />
-          </button>
-          {showFilterMenu && (
-            <>
-              <ModalPortal>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowFilterMenu(false)}
-                />
-              </ModalPortal>
-              <div className="absolute right-0 top-full mt-2 bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-xl shadow-2xl z-50 min-w-[160px] overflow-hidden animate-scale-in">
-                {Object.entries(filterLabels).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setFilter(
-                        key as "all" | "rejected" | "pending_review"
-                      );
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors-fast ${
-                      filter === key
-                        ? "bg-primary/10 text-primary-fg"
-                        : "text-fg-muted hover:bg-surface-2"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 任务列表 */}
-      {filteredTasks.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-fg-faint">
-          <Shield className="w-16 h-16 mb-4 text-fg-faint" />
-          <div className="text-lg font-medium mb-1">{t("emptyTitle")}</div>
-          <div className="text-sm">
-            {t("emptyDesc")}
-          </div>
-          <div className="mt-8 w-full max-w-2xl text-left">
-            <EmptyStateGuide page="reviews" />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredTasks.map((task) => {
-            const selfReviewAgent = checkSelfReviewRisk(task);
-            const isRejected =
-              task.priorityState === "rejected" ||
-              task.nodesStatus?.[task.currentNode] === "rejected";
-            const currentNodeName =
-              task.nodeNames?.[task.currentNode] || t("unknownNode");
-            const currentAgent =
-              task.nodeAgents?.[task.currentNode] || t("unassigned");
-
-            return (
-              <div
-                key={task.id}
-                className={`bg-surface-2/40 border rounded-xl backdrop-blur-sm p-5 transition-all hover:shadow-lg card-hover ${
-                  isRejected
-                    ? "border-orange-500/40 hover:border-orange-500/60 hover:shadow-orange-500/5"
-                    : "border-line-strong/60 hover:border-line-strong/60 hover:shadow-primary/5"
-                }`}
-              >
-                {/* 顶部：任务ID + 标题 + 状态 */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="text-primary-fg font-mono text-sm bg-primary-fg/10 px-2 py-1 rounded shrink-0">
-                      {task.taskRef}
-                    </span>
-                    <h3 className="text-fg font-medium truncate">
-                      {task.title}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
-                    {isRejected ? (
-                      <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-orange-500/10 text-orange-400 border-orange-500/30">
-                        <XCircle className="w-3.5 h-3.5" /> {t("statusRejected")}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium bg-primary/10 text-primary-fg border-primary/30">
-                        <Clock className="w-3.5 h-3.5" /> {t("statusPending")}
-                      </span>
-                    )}
-                    {task.rejectCount > 0 && (
-                      <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium bg-danger/10 text-danger-fg border-danger/20">
-                        <AlertTriangle className="w-3 h-3" /> {t("rejectCount", { count: task.rejectCount })}
-                      </span>
-                    )}
-                    <SelfReviewBadge task={task} />
-                  </div>
-                </div>
-
-                {/* 中间：节点信息 + 代理 */}
-                <div className="flex items-center gap-6 mb-4 text-sm">
-                  <div className="flex items-center gap-2 text-fg-muted">
-                    <Eye className="w-4 h-4 text-fg-faint" />
-                    <span className="text-fg-faint">{t("currentNode")}</span>
-                    <span className="font-medium">{currentNodeName}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-fg-muted">
-                    {currentAgent.includes("Bot") ||
-                    currentAgent.includes("Claude") ||
-                    currentAgent.includes("GPT") ? (
-                      <Bot className="w-4 h-4 text-primary-fg" />
-                    ) : (
-                      <User className="w-4 h-4 text-success-fg" />
-                    )}
-                    <span className="text-fg-faint">{t("reviewer")}</span>
-                    <span className="font-medium">{currentAgent}</span>
-                  </div>
-                  {task.message && (
-                    <div
-                      className="text-xs text-fg-subtle truncate max-w-[300px]"
-                      title={task.message}
-                    >
-                      {task.message}
-                    </div>
+      <div className="flex-1 flex min-h-0 px-6 pb-6">
+        {/* 左侧待办列表 */}
+        <div className="w-[360px] shrink-0 border border-line rounded-[var(--radius-card)] bg-surface-2/20 flex flex-col min-h-0 mr-5">
+          <div className="flex-1 overflow-y-auto py-1.5">
+            {todoTasks.map((task) => {
+              const active = task.id === selectedId;
+              return (
+                <button
+                  key={task.id}
+                  onClick={() => setSelectedId(task.id)}
+                  className={`relative w-full text-left px-4 py-3 flex items-start gap-2.5 transition-colors-fast focus-visible:outline-none ${
+                    active ? "bg-primary/10" : "hover:bg-surface-2/60"
+                  }`}
+                >
+                  {active && (
+                    <span className="absolute left-0 top-2 bottom-2 w-0.5 bg-primary-fg rounded-r-full" />
                   )}
+                  <span className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-warning-fg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-fg-faint shrink-0">{task.taskRef}</span>
+                    </div>
+                    <div className={`text-xs truncate mt-0.5 ${active ? "text-primary-fg font-medium" : "text-fg-muted"}`}>
+                      {task.title}
+                    </div>
+                    {task.nodeNames?.[task.currentNode] && (
+                      <div className="text-[10px] text-fg-faint truncate mt-0.5">
+                        {task.nodeNames[task.currentNode]}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 右侧上下文 */}
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          {!selectedTask ? (
+            <div className="h-full flex items-center justify-center">
+              <EmptyState icon={Inbox} title={t("emptyTitle")} description={t("emptyDesc")} />
+            </div>
+          ) : (
+            <div className="border border-line rounded-[var(--radius-card)] bg-surface-2/20 divide-y divide-line">
+              {/* 1. 任务头 */}
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-primary-fg font-mono text-sm bg-primary/10 px-2 py-0.5 rounded shrink-0">
+                      {selectedTask.taskRef}
+                    </span>
+                    <h2 className="text-base font-semibold text-fg truncate">{selectedTask.title}</h2>
+                  </div>
+                  <TaskStateBadge state={selectedTask.priorityState} className="shrink-0" />
+                </div>
+              </div>
+
+              {/* 2. 完整协作链:明确人工节点位置 */}
+              <div className="p-5">
+                <CollaborationChain
+                  density="full"
+                  names={selectedTask.nodeNames || []}
+                  statuses={selectedTask.nodesStatus || []}
+                  agents={selectedTask.nodeAgents || []}
+                  currentIndex={selectedTask.currentNode}
+                  typeKeys={rawTypeKeys(selectedTask)}
+                />
+              </div>
+
+              {/* 3. 上下文 */}
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-5 text-sm flex-wrap">
+                  <div className="flex items-center gap-2 text-fg-muted">
+                    <Clock className="w-4 h-4 text-fg-faint" />
+                    <span className="text-fg-faint text-xs">{t("currentNode")}</span>
+                    <span className="font-medium text-xs">
+                      {selectedTask.nodeNames?.[selectedTask.currentNode] || t("unknownNode")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-fg-muted">
+                    <Bot className="w-4 h-4 text-primary-fg" />
+                    <span className="text-fg-faint text-xs">{t("executor")}</span>
+                    <span className="font-medium text-xs">
+                      {selectedTask.nodeAgents?.[selectedTask.currentNode] || t("unassigned")}
+                    </span>
+                  </div>
+                  <span className="text-xs text-fg-faint font-mono">
+                    {t("progress", {
+                      completed: (selectedTask.nodesStatus || []).filter((s) => s === "succeeded").length,
+                      total: selectedTask.nodeNames?.length || 0,
+                    })}
+                  </span>
                 </div>
 
-                {/* 自我审查风险警告 */}
-                {selfReviewAgent && (
-                  <div className="flex items-center gap-3 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3 mb-4">
-                    <AlertTriangle className="w-5 h-5 text-warning-fg shrink-0" />
-                    <span className="text-sm text-warning-fg font-medium">
-                      {"\u26A0"} {t("selfReviewRisk", { agent: selfReviewAgent })}
-                    </span>
-                    <span className="text-xs text-warning-fg/70 ml-auto shrink-0">
-                      {t("suggestChange")}
-                    </span>
+                {humanPrompt && (
+                  <div className="bg-warning/5 border border-warning/20 rounded-[var(--radius-control)] px-3.5 py-2.5 text-xs text-warning-fg whitespace-pre-wrap">
+                    {humanPrompt}
                   </div>
                 )}
 
-                {/* 底部：操作按钮 */}
-                <div className="flex items-center gap-3 pt-3 border-t border-line-strong/40">
-                  <button
-                    onClick={() => handleApprove(task.id)}
-                    disabled={!canEdit}
-                    className="flex items-center gap-2 px-4 py-2 bg-success-strong/20 hover:bg-success-strong/30 text-success-fg rounded-lg text-sm font-medium border border-success/30 transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <CheckCircle2 className="w-4 h-4" /> {t("approve")}
-                  </button>
-                  <button
-                    onClick={() => setRejectingTask(task)}
-                    disabled={!canEdit}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600/10 hover:bg-orange-600/20 text-orange-400 rounded-lg text-sm font-medium border border-orange-500/30 transition-colors-fast btn-press disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <XCircle className="w-4 h-4" /> {t("reject")}
-                  </button>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-4 text-xs text-fg-faint">
-                    <span>
-                      {t("progress", {
-                        completed: (task.nodesStatus || []).filter(
-                          (s) => s === "completed"
-                        ).length,
-                        total: task.nodeNames?.length || 0,
-                      })}
-                    </span>
-                    {task.agent && (
-                      <span className="flex items-center gap-1">
-                        <Bot className="w-3 h-3" /> {task.agent}
-                      </span>
-                    )}
+                {selectedTask.message && (
+                  <div className="bg-warning/5 border border-warning/20 rounded-[var(--radius-control)] px-3.5 py-2.5 text-xs text-warning-fg whitespace-pre-wrap">
+                    {selectedTask.message}
                   </div>
+                )}
+
+                {selectedTask.description && (
+                  <div>
+                    <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      {t("description")}
+                    </div>
+                    <div className="text-sm text-fg-muted whitespace-pre-wrap leading-relaxed">
+                      {selectedTask.description}
+                    </div>
+                  </div>
+                )}
+
+                {selectedTask.constraints && (
+                  <div>
+                    <div className="text-xs font-semibold text-warning-fg uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      {t("constraints")}
+                    </div>
+                    <div className="text-sm text-warning-fg/90 whitespace-pre-wrap leading-relaxed">
+                      {selectedTask.constraints}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. 操作:前往任务详情处理(提交/取消在 cockpit 的人工表单完成) */}
+              <div className="p-5">
+                <div className="flex items-center gap-2.5">
+                  <Button variant="primary" onClick={() => router.push(`/dashboard?task=${selectedTask.id}`)}>
+                    <ShieldAlert className="w-4 h-4 mr-1.5" />
+                    {t("goHandle")}
+                    <ArrowRight className="w-4 h-4 ml-1.5" />
+                  </Button>
+                  <span className="text-xs text-fg-faint">{t("goHandleHint")}</span>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* 退回弹窗 */}
-      {rejectingTask && (
-        <ModalPortal>
-        <RejectReasonDialog
-          task={rejectingTask}
-          onConfirm={handleRejectConfirm}
-          onClose={() => setRejectingTask(null)}
-        />
-        </ModalPortal>
-      )}
+      </div>
     </div>
   );
 }

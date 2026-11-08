@@ -1,31 +1,31 @@
-/* 暗色主题（默认）：:root 与 [data-theme="dark"] 同值，未设置属性时兜底生效 */
+/* 暗色主题（默认）：石墨基底 + 紫色智能 + 青色执行流。:root 与 [data-theme="dark"] 同值，未设置属性时兜底生效 */
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #020617;
-  --surface: #0f172a;
-  --surface-2: #1e293b;
-  --surface-3: #334155;
-  --line: #1e293b;
-  --line-strong: #334155;
-  --fg: #ffffff;
-  --fg-muted: #cbd5e1;
-  --fg-subtle: #94a3b8;
-  --fg-faint: #64748b;
-  --primary: #3b82f6;
-  --primary-strong: #2563eb;
-  --primary-fg: #60a5fa;
-  --accent: #6366f1;
-  --accent-strong: #4f46e5;
-  --accent-fg: #818cf8;
-  --success: #10b981;
-  --success-strong: #059669;
-  --success-fg: #34d399;
-  --warning: #f59e0b;
-  --warning-strong: #d97706;
-  --warning-fg: #fbbf24;
-  --danger: #ef4444;
-  --danger-strong: #dc2626;
-  --danger-fg: #f87171;
-  --shadow: rgba(0, 0, 0, 0.2);
+  --bg: #080a0f;
+  --surface: #0d1119;
+  --surface-2: #131a25;
+  --surface-3: #1b2533;
+  --line: #202b3a;
+  --line-strong: #344258;
+  --fg: #f5f7fb;
+  --fg-muted: #b6c0cf;
+  --fg-subtle: #7f8b9e;
+  --fg-faint: #515d70;
+  --primary: #7c6cf2;
+  --primary-strong: #6958e8;
+  --primary-fg: #a99efa;
+  --accent: #19c7b0;
+  --accent-strong: #12ae9a;
+  --accent-fg: #5eead4;
+  --success: #3ccb7f;
+  --success-strong: #22a864;
+  --success-fg: #70e1a5;
+  --warning: #e7a93b;
+  --warning-strong: #c88a20;
+  --warning-fg: #f3c66e;
+  --danger: #e3616b;
+  --danger-strong: #c84754;
+  --danger-fg: #f08b93;
+  --shadow: rgba(0, 0, 0, 0.42);
 }

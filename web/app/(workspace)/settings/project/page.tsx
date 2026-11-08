@@ -17,6 +17,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import PageHeader from "@/lib/ui/PageHeader";
+import Button from "@/lib/ui/Button";
 import { useAppStore } from "@/lib/store";
 import api from "@/lib/api";
 import type { GitCredential } from "@/lib/types";
@@ -669,29 +671,17 @@ export default function ProjectSettingsPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
-      {/* 页头 */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-            <Settings className="w-5 h-5 text-accent-fg" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-fg">{t("title")}</h1>
-            <p className="text-xs text-fg-subtle mt-0.5">
-              {t("subtitle")}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={openNewProjectForm}
-            className="flex items-center px-4 py-2.5 bg-surface-2 hover:bg-surface-3 text-fg-muted hover:text-fg rounded-xl text-sm font-medium transition-colors-fast border border-line-strong"
-          >
-            <Plus className="w-4 h-4 mr-2" /> {t("newProject")}
-          </button>
-        </div>
-      </div>
+    <div className="h-full flex flex-col overflow-y-auto page-enter">
+      <PageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button variant="secondary" onClick={openNewProjectForm}>
+            <Plus className="w-4 h-4 mr-1.5" /> {t("newProject")}
+          </Button>
+        }
+      />
+      <div className="px-6 pb-8">
 
       {showNewProject && (
         <div className="mb-6">
@@ -711,7 +701,7 @@ export default function ProjectSettingsPage() {
       )}
 
       {/* 项目选择器 */}
-      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-5 mb-6">
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-medium text-fg-muted">
             {t("currentProject")}
@@ -779,7 +769,7 @@ export default function ProjectSettingsPage() {
       </div>
 
       {/* 开发人员与审查员(单列表双勾选) */}
-      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-success-fg" />
@@ -932,10 +922,10 @@ export default function ProjectSettingsPage() {
       </div>
 
       {/* Git 凭据 */}
-      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-5 mb-6 card-hover">
+      <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-violet-400" />
+            <GitBranch className="w-4 h-4 text-primary-fg" />
             <h2 className="text-sm font-bold text-fg">{t("gitCredentials")}</h2>
             <span className="text-[10px] text-fg-faint bg-surface-3/50 px-2 py-0.5 rounded-full">
               {t("credCount", { count: gitCredentials.length })}
@@ -990,8 +980,8 @@ export default function ProjectSettingsPage() {
               return (
                 <Fragment key={cred.id}>
                   <div className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-surface-2/30 border-line-strong/50 hover:bg-surface-2/50 transition-colors-normal group card-hover">
-                    <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-                      <GitBranch className="w-4 h-4 text-violet-400" />
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                      <GitBranch className="w-4 h-4 text-primary-fg" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 text-sm text-fg font-medium">
@@ -1046,6 +1036,7 @@ export default function ProjectSettingsPage() {
         )}
       </div>
 
+      </div>
     </div>
   );
 }

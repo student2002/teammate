@@ -1,30 +1,30 @@
-/* 纯黑主题：OLED 屏幕零发光底色，中性灰阶表面 */
+/* 纯黑主题：OLED 屏幕零发光底色，石墨基底 + 紫色智能 + 青色执行流 */
 [data-theme="oled"] {
   color-scheme: dark;
   --bg: #000000;
-  --surface: #0a0a0a;
-  --surface-2: #171717;
-  --surface-3: #262626;
-  --line: #1f1f1f;
-  --line-strong: #303030;
-  --fg: #fafafa;
-  --fg-muted: #d4d4d4;
-  --fg-subtle: #a3a3a3;
-  --fg-faint: #737373;
-  --primary: #3b82f6;
-  --primary-strong: #2563eb;
-  --primary-fg: #60a5fa;
-  --accent: #6366f1;
-  --accent-strong: #4f46e5;
-  --accent-fg: #818cf8;
-  --success: #10b981;
-  --success-strong: #059669;
-  --success-fg: #34d399;
-  --warning: #f59e0b;
-  --warning-strong: #d97706;
-  --warning-fg: #fbbf24;
-  --danger: #ef4444;
-  --danger-strong: #dc2626;
-  --danger-fg: #f87171;
-  --shadow: rgba(0, 0, 0, 0.6);
+  --surface: #07080a;
+  --surface-2: #0e1116;
+  --surface-3: #171c24;
+  --line: #1a2029;
+  --line-strong: #2a3442;
+  --fg: #fafbfc;
+  --fg-muted: #bdc4ce;
+  --fg-subtle: #858f9d;
+  --fg-faint: #565f6c;
+  --primary: #8172f5;
+  --primary-strong: #6f5fea;
+  --primary-fg: #b0a6fb;
+  --accent: #20d2ba;
+  --accent-strong: #16bda7;
+  --accent-fg: #67efdb;
+  --success: #43d487;
+  --success-strong: #28b56d;
+  --success-fg: #78e7ad;
+  --warning: #efb142;
+  --warning-strong: #d39424;
+  --warning-fg: #f6cc77;
+  --danger: #eb6872;
+  --danger-strong: #d24d5a;
+  --danger-fg: #f4939b;
+  --shadow: rgba(0, 0, 0, 0.75);
 }

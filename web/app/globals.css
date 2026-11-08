@@ -1,4 +1,4 @@
-/* globals.css 全局样式：语义 token 映射、动画、滚动条等。
+/* globals.css 全局样式：语义 token 映射、结构令牌、动画、滚动条等。
    主题变量位于 lib/themes 下各主题目录的 theme.css；新增主题见 lib/themes/registry.ts。 */
 @import "tailwindcss";
 
@@ -33,14 +33,24 @@
   --color-danger-fg: var(--danger-fg);
 }
 
+/* ── 固定结构令牌（不随主题切换；动态主题契约只含 26 个颜色变量） ── */
+:root {
+  --radius-control: 7px;
+  --radius-card: 10px;
+  --radius-panel: 12px;
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 /* ── 动画关键帧 ─────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.95); }
@@ -55,10 +65,10 @@
   50% { opacity: 0.6; }
 }
 
-/* ── 动画工具类 ───────────────────────────── */
-.animate-fade-in { animation: fade-in 0.3s ease-out both; }
-.animate-fade-in-up { animation: fade-in-up 0.35s ease-out both; }
-.animate-scale-in { animation: scale-in 0.25s ease-out both; }
+/* ── 动画工具类（页面进入统一为 180ms 纯淡入，无位移） ── */
+.animate-fade-in { animation: fade-in var(--duration-normal) var(--ease-standard) both; }
+.animate-fade-in-up { animation: fade-in-up var(--duration-normal) var(--ease-standard) both; }
+.animate-scale-in { animation: scale-in var(--duration-normal) var(--ease-standard) both; }
 .animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
 
 /* 子元素错落动画 */
@@ -74,10 +84,10 @@
 .stagger-children > *:nth-child(10) { animation-delay: 360ms; }
 
 /* ── 过渡工具类（替代全局 * 过渡） ─── */
-.transition-colors-fast { transition: color 0.15s, background-color 0.15s, border-color 0.15s; }
-.transition-colors-normal { transition: color 0.2s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
-.transition-all-normal { transition: all 0.2s ease; }
-.transition-transform-fast { transition: transform 0.15s ease; }
+.transition-colors-fast { transition: color var(--duration-fast), background-color var(--duration-fast), border-color var(--duration-fast); }
+.transition-colors-normal { transition: color var(--duration-normal), background-color var(--duration-normal), border-color var(--duration-normal), box-shadow var(--duration-normal); }
+.transition-all-normal { transition: all var(--duration-normal) var(--ease-standard); }
+.transition-transform-fast { transition: transform var(--duration-fast) var(--ease-standard); }
 
 /* ── 骨架屏加载 ────────────────────────────────────── */
 .skeleton {
@@ -92,34 +102,33 @@
   border-radius: 6px;
 }
 
-/* ── 卡片悬停浮起效果 ──────────────────────────────── */
+/* ── 卡片悬停：只变化背景亮度，不做上浮和阴影 ──────── */
 .card-hover {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--duration-fast), border-color var(--duration-fast);
 }
 .card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px var(--shadow);
+  background-color: color-mix(in oklab, var(--fg) 3%, transparent);
 }
 
 /* ── 按钮按压效果 ─────────────────────────────────── */
 .btn-press {
-  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 .btn-press:active {
-  transform: scale(0.96);
-}
-
-/* ── 弹窗遮罩与内容 ─────────────────────────────── */
-.modal-overlay {
-  animation: fade-in 0.2s ease-out both;
-}
-.modal-content {
-  animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform: scale(0.98);
 }
 
 /* ── 页面进入动画 ────────────────────────────────── */
 .page-enter {
-  animation: fade-in-up 0.4s ease-out both;
+  animation: fade-in var(--duration-normal) var(--ease-standard) both;
+}
+
+/* ── 指挥舱网格背景：仅用于登录品牌区、Dashboard 运行态、Workflow 画布 ── */
+.cockpit-grid {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--fg) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--fg) 4%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* ── 滚动条 ───────────────────────────────────────────── */
@@ -168,4 +177,30 @@
 /* ── 底部面板阴影 ─────────────────────────────────── */
 .panel-shadow {
   box-shadow: 0 -4px 24px var(--shadow);
+}
+
+/* ── 减弱动效：关闭位移、脉冲与错落入场 ───────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .page-enter,
+  .stagger-children > * {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+  .animate-pulse-soft,
+  .animate-pulse {
+    animation: none;
+  }
+  .btn-press:active {
+    transform: none;
+  }
+  .card-hover,
+  .transition-colors-fast,
+  .transition-colors-normal,
+  .transition-all-normal,
+  .transition-transform-fast {
+    transition: none;
+  }
 }

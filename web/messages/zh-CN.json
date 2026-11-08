@@ -56,7 +56,14 @@
     "errPwdMin": "密码至少8位",
     "errPwdMax": "密码最多128位",
     "errPwdComplex": "密码需包含大写字母、小写字母和数字",
-    "failed": "操作失败"
+    "failed": "操作失败",
+    "brandDesc": "多 Agent 接力执行，人工审查把关，每一步协作清晰可见。",
+    "chainCoding": "编码实现",
+    "chainCodingState": "执行中",
+    "chainVerify": "自动验证",
+    "chainVerifyState": "等待",
+    "chainReview": "人工审查",
+    "chainReviewState": "审查门"
   },
   "nav": {
     "dashboard": "任务监控",
@@ -65,7 +72,7 @@
     "agents": "AI 代理",
     "skills": "Skill & MCP",
     "memory": "共享记忆",
-    "reviews": "审查队列",
+    "reviews": "人工待办",
     "settings": "工程设置",
     "tokens": "Token 统计",
     "market": "社区市场",
@@ -98,7 +105,18 @@
     "cancel": "取消",
     "creating": "创建中...",
     "create": "创建",
-    "createFailed": "创建工作区失败"
+    "createFailed": "创建工作区失败",
+    "groupWork": "工作",
+    "groupOrchestration": "编排",
+    "groupInsight": "洞察",
+    "groupManage": "管理",
+    "projectSelector": "当前工程",
+    "selectProject": "选择工程",
+    "noProjects": "暂无工程",
+    "onlineAgentsCount": "{count} 个 Agent 在线",
+    "onlineLabel": "在线",
+    "loadFailedStale": "任务数据加载失败，当前显示上次结果",
+    "retry": "重试"
   },
   "history": {
     "title": "历史任务",
@@ -109,7 +127,6 @@
     "thTitle": "标题",
     "thType": "类型",
     "thPriority": "优先级",
-    "thWorkflow": "工作流",
     "thCompletedAt": "完成时间",
     "pageRange": "第 {from}-{to} 条，共 {count} 条",
     "typeStory": "需求",
@@ -120,7 +137,8 @@
       "high": "高",
       "medium": "中",
       "low": "低"
-    }
+    },
+    "thStatus": "状态"
   },
   "tokens": {
     "title": "算力与 Token 统计",
@@ -175,111 +193,387 @@
       "typeEnvironment": "环境"
     }
   },
+  "runFeedback": {
+    "errPermissionHint": "请检查该 Agent 的工程成员与权限授予(如 git:push)",
+    "skippedReason": "上游分支未走到该节点,连线未被激活,故跳过",
+    "unresolvedRefTitle": "标题含未解析的引用,上游数据可能没有传到"
+  },
   "workflows": {
+    "export": "导出",
+    "import": "导入工作流",
+    "importSuccess": "已导入:{name}",
+    "importInvalid": "文件不是有效的工作流文件",
+    "importFailed": "导入失败:{error}",
+    "importIssuesMore": "还有 {count} 个问题未列出",
     "editor": {
-      "back": "返回",
-      "namePlaceholder": "模板名称",
-      "descPlaceholder": "模板描述(可选)",
-      "layoutLR": "横向排列",
-      "layoutTB": "纵向排列",
-      "addNode": "添加节点",
-      "creating": "新建模板",
-      "editing": "编辑模板 {id}",
-      "nodeCount": "{count} 节点",
-      "edgeCount": "{count} 依赖",
-      "palette": {
-        "placeholder": "搜索节点类型…",
-        "noHit": "无匹配",
-        "standard": "标准节点",
-        "review": "审查节点",
-        "manual": "人工节点"
-      },
-      "reject": {
-        "self": "禁止自环",
-        "duplicate": "重复依赖",
-        "cycle": "会产生循环依赖,已拦截"
-      },
-      "title": "设计工作流程模板",
-      "subtitle": "模板定义了加工作业的协同与流转规则，可在不同的工程中重复使用。",
-      "saving": "保存中...",
-      "nameLabel": "模板名称",
-      "descLabel": "模板描述",
-      "stepNamePlaceholder": "输入加工步骤名称...",
-      "nodeTypeLabel": "节点类型",
-      "optionStandard": "普通节点 (Standard)",
-      "optionReview": "审查节点 (Review)",
-      "optionManual": "人工操作 (Manual)",
-      "assigneeLabel": "指派规则",
-      "optionAnyAgent": "任意空闲 AI 代理",
-      "optionSpecificAgent": "绑定特定 AI 代理",
-      "optionHuman": "人类成员",
-      "selectAgentPlaceholder": "-- 选择 Agent --",
-      "timeoutMinutesLabel": "超时时间 (分钟)",
-      "maxRejectCyclesLabel": "最大驳回次数",
-      "stepDescLabel": "步骤描述 (Markdown)",
-      "stepDescPlaceholder": "描述该节点需要做什么...",
-      "readonlyDirsLabel": "只读目录",
-      "readonlyDirsPlaceholder": "如 /docs,/README.md（逗号分隔）",
-      "readonlyDirsHint": "AI 代理可以读取但不能修改的目录/文件",
-      "fullControlDirsLabel": "完全控制目录",
-      "fullControlDirsPlaceholder": "如 /src（逗号分隔）",
-      "fullControlDirsHint": "AI 代理可以自由读写代码的目录",
-      "artifactLabel": "产物约束",
-      "save": "保存",
-      "saveFailed": "保存失败",
-      "needName": "请填写模板名称",
-      "needNode": "至少需要一个节点",
-      "loadFailed": "模板加载失败",
-      "deleteNode": "删除节点",
-      "deleteConfirm": "确认删除",
-      "inspectorEmpty": "点击画布中的节点编辑其属性",
+      "startTitle": "开始",
+      "endTitle": "完成",
+      "invalidBadge": "存在配置问题",
+      "inspectorEmpty": "点击画布中的节点编辑其配置",
       "inspectorUntitled": "未命名节点",
-      "stepName": "节点名称",
-      "assigneeIdLabel": "指派对象"
+      "dismiss": "知道了",
+      "topbar": {
+        "back": "返回",
+        "namePlaceholder": "模板名称",
+        "descPlaceholder": "模板描述(可选)",
+        "issues": "{count} 个校验问题",
+        "issuesOk": "校验通过",
+        "layoutLR": "横向排列",
+        "layoutTB": "纵向排列",
+        "save": "保存模板",
+        "startTemplate": "起始模板",
+        "nodeCount": "{count} 节点",
+        "edgeCount": "{count} 连线"
+      },
+      "library": {
+        "title": "节点库",
+        "fixedHint": "开始/完成节点固定存在于模板,不能重复添加",
+        "groups": {
+          "trigger": "触发",
+          "agent": "智能",
+          "integration": "集成",
+          "action": "执行",
+          "task": "任务",
+          "reuse": "复用",
+          "data": "数据",
+          "logic": "逻辑",
+          "wait": "等待",
+          "human": "人工"
+        }
+      },
+      "types": {
+        "trigger": {
+          "manual": {
+            "label": "手动触发",
+            "desc": "在运行页手动启动工作流"
+          },
+          "schedule": {
+            "label": "定时触发",
+            "desc": "按固定间隔自动启动工作流"
+          },
+          "github": {
+            "label": "GitHub 事件触发",
+            "desc": "监听 GitHub 仓库事件启动工作流"
+          },
+          "webhook": {
+            "label": "Webhook 触发",
+            "desc": "接收外部 Webhook 请求启动工作流"
+          }
+        },
+        "agent": {
+          "task": {
+            "label": "Agent 任务",
+            "desc": "由 Agent 执行的智能工作:分析、编码、测试、审查"
+          }
+        },
+        "action": {
+          "github": {
+            "label": "GitHub 操作",
+            "desc": "对 Issue/PR 执行确定性 GitHub 操作"
+          },
+          "http": {
+            "label": "HTTP 请求",
+            "desc": "调用外部 HTTP 接口"
+          },
+          "command": {
+            "label": "执行命令",
+            "desc": "在 Agent 机器上执行确定性命令"
+          },
+          "create_task": {
+            "label": "创建任务",
+            "desc": "创建一个新的 Teammate 任务"
+          }
+        },
+        "workflow": {
+          "call": {
+            "label": "调用工作流",
+            "desc": "以子工作流方式复用现有模板"
+          }
+        },
+        "data": {
+          "set": {
+            "label": "设置变量",
+            "desc": "向流程变量写入一个值"
+          },
+          "map": {
+            "label": "字段映射",
+            "desc": "把上游输出整理为流程变量"
+          }
+        },
+        "flow": {
+          "condition": {
+            "label": "条件判断",
+            "desc": "按条件选择 true/false 分支"
+          },
+          "switch": {
+            "label": "多路选择",
+            "desc": "按值匹配选择一个分支"
+          },
+          "parallel": {
+            "label": "并行分支",
+            "desc": "同时激活全部配置分支"
+          },
+          "join": {
+            "label": "汇合",
+            "desc": "等待多条分支汇合后继续"
+          },
+          "wait": {
+            "label": "等待",
+            "desc": "等待时长或外部事件后继续"
+          },
+          "end": {
+            "label": "完成",
+            "desc": "按入边端口决定任务成功或失败"
+          }
+        },
+        "human": {
+          "input": {
+            "label": "人工输入",
+            "desc": "等待人工提交或取消"
+          }
+        }
+      },
+      "ports": {
+        "input": "输入",
+        "success": "成功",
+        "failed": "失败",
+        "true": "是",
+        "false": "否",
+        "resumed": "恢复",
+        "timeout": "超时",
+        "submitted": "已提交",
+        "cancelled": "取消",
+        "completed": "成功结束",
+        "default": "默认"
+      },
+      "sum": {
+        "triggerManual": "在运行页手动启动",
+        "triggerSchedule": "每 {minutes} 分钟",
+        "triggerGithubEvent": "GitHub · {event}",
+        "triggerGithubActions": "动作:{actions}",
+        "triggerWebhook": "接收 Webhook 请求",
+        "instruction": "{text}",
+        "assigneeAny": "任意空闲 Agent",
+        "assigneeSpecific": "绑定特定 Agent",
+        "timeoutRetry": "超时 {timeout} 分钟 · 重试 {attempts} 次",
+        "githubOperation": "{operation}",
+        "targetExpr": "{text}",
+        "httpRequest": "{method} {url}",
+        "command": "{program} {args}",
+        "createTask": "{text}",
+        "callWorkflow": "{text}",
+        "setVar": "{name} = …",
+        "mapFields": "映射 {count} 个字段",
+        "condition": "{text}",
+        "branches": "分支:{names}",
+        "joinAll": "全部分支到达后继续",
+        "joinAny": "任一分支到达后继续",
+        "waitEvent": "等待 {event}",
+        "waitDuration": "等待 {minutes} 分钟",
+        "humanPrompt": "{text}"
+      },
+      "issues": {
+        "self": "禁止自环",
+        "edgeDuplicate": "重复连线",
+        "portMultiEdge": "该输出端口已连接,同一端口只能一条出线",
+        "cycle": "会产生循环,已拦截",
+        "triggerMissing": "缺少开始节点",
+        "triggerMultiple": "开始节点只能有一个",
+        "endMissing": "缺少完成节点",
+        "endMultiple": "完成节点只能有一个",
+        "typeUnknown": "未知节点类型 {type}",
+        "edgeDangling": "连线两端节点不存在",
+        "sourcePortInvalid": "源端口 {port} 不存在",
+        "targetPortInvalid": "目标端口 {port} 不存在",
+        "unreachableFromTrigger": "无法从开始节点到达",
+        "cannotReachEnd": "无法到达完成节点",
+        "noInput": "节点没有入线",
+        "noOutput": "节点没有出线",
+        "cfg": {
+          "scheduleInterval": "请填写定时间隔(分钟)",
+          "githubEvent": "请选择 GitHub 事件",
+          "githubActions": "请至少选择一个动作",
+          "githubIntegration": "请选择 GitHub 集成",
+          "instruction": "请填写 Agent 指令",
+          "githubOperation": "请选择操作类型",
+          "httpUrl": "请填写请求 URL",
+          "commandProgram": "请填写命令程序",
+          "taskTitle": "请填写任务标题",
+          "callTemplate": "请选择要调用的模板",
+          "varName": "请填写变量名",
+          "mappingRows": "请至少添加一条字段映射",
+          "conditionRules": "请至少添加一条条件规则",
+          "conditionConflict": "all 与 any 不能同时配置",
+          "conditionRule": "条件规则不完整(需要路径与操作符)",
+          "branches": "请至少添加一个分支",
+          "joinMode": "请选择汇合模式",
+          "waitMode": "请选择等待方式",
+          "waitMinutes": "请填写等待时长(分钟)",
+          "waitEvent": "请选择等待的 GitHub 事件",
+          "humanPromptRequired": "请填写人工提示文案",
+          "retryAttempts": "重试次数至少为 1",
+          "duplicateBranch": "分支名不能重复",
+          "duplicateName": "节点名需唯一",
+          "reservedBranchName": "分支名 default 为保留名,请改用其他名称",
+          "switchCondition": "每条分支的条件组至少需要一条规则",
+          "scheduleProject": "请选择定时触发落地的工程"
+        }
+      },
+      "fieldPicker": {
+        "title": "插入数据路径",
+        "filter": "搜索路径…",
+        "noHit": "无匹配路径"
+      },
+      "startPicker": {
+        "title": "选择起始模板",
+        "hint": "选择后将替换当前画布内容",
+        "presetTag": "预制",
+        "opt": {
+          "blank": {
+            "name": "空白模板",
+            "desc": "仅含固定的开始与完成节点,其余从节点库添加"
+          },
+          "manual": {
+            "name": "手动触发的 Agent 任务",
+            "desc": "手动启动 → Agent 按指令完成工作 → 完成"
+          },
+          "schedule": {
+            "name": "定时巡检与自动修复",
+            "desc": "定时执行巡检命令 → 条件判断 → 失败时 Agent 修复"
+          },
+          "issue-fix": {
+            "name": "GitHub Issue 自动修复",
+            "desc": "Issue 触发 → 条件 → Agent 修复 → 测试 → 创建 PR → 等待 Review"
+          },
+          "webhook": {
+            "name": "Webhook 请求处理",
+            "desc": "接收 Webhook → Agent 处理请求 → 完成"
+          }
+        }
+      },
+      "inspector": {
+        "nodeName": "节点名称",
+        "triggerKind": "触发方式",
+        "timeoutMinutes": "超时(分钟)",
+        "retryAttempts": "重试次数",
+        "retryBackoff": "重试间隔(秒)",
+        "inputMap": "输入映射",
+        "inputMapKey": "字段名",
+        "inputMapValue": "数据路径",
+        "addRow": "添加一行",
+        "remove": "删除",
+        "dirsPlaceholder": "逗号分隔,如 src,docs",
+        "readonlyDirs": "只读目录",
+        "readonlyDirsHint": "Agent 可以读取但不能修改的目录/文件",
+        "fullControlDirs": "完全控制目录",
+        "fullControlDirsHint": "Agent 可以自由读写的目录",
+        "instruction": "Agent 指令",
+        "assigneeMode": "Agent 选择",
+        "assigneeAny": "任意空闲 Agent",
+        "assigneeSpecific": "绑定特定 Agent",
+        "assigneeAgent": "指定 Agent",
+        "assigneeAgentEmpty": "工作区暂无 Agent,请先在「AI 代理」页创建",
+        "triggerManualHint": "该工作流将在运行页手动启动,无需额外配置。",
+        "webhookHint": "Webhook 触发将在后续阶段开放配置;当前保留节点类型。",
+        "scheduleInterval": "触发间隔(分钟)",
+        "githubIntegration": "GitHub 集成",
+        "githubEvent": "事件类型",
+        "githubActions": "触发动作",
+        "ghOperation": "操作类型",
+        "ghOp": {
+          "add_comment": "Issue 添加评论",
+          "add_labels": "Issue 添加标签",
+          "remove_labels": "Issue 移除标签",
+          "assign_issue": "Issue 指派",
+          "unassign_issue": "Issue 取消指派",
+          "close_issue": "Issue 关闭",
+          "reopen_issue": "Issue 重新打开",
+          "create_pull_request": "创建 Pull Request",
+          "request_reviewers": "请求 PR 审查人"
+        },
+        "ghField": {
+          "issue": "目标 Issue(编号表达式)",
+          "pr": "目标 PR(编号表达式)",
+          "title": "PR 标题",
+          "head": "源分支",
+          "base": "目标分支",
+          "body": "内容",
+          "labels": "标签(逗号分隔)",
+          "assignees": "指派对象(逗号分隔)",
+          "reviewers": "审查人(逗号分隔)",
+          "comment_issue": "同时评论的 Issue"
+        },
+        "httpMethod": "方法",
+        "httpUrl": "请求 URL",
+        "httpHeaders": "请求头",
+        "httpQuery": "查询参数",
+        "httpBody": "请求体",
+        "cmdProgram": "程序",
+        "cmdArgs": "参数",
+        "cmdArgsHint": "空格分隔;不经 shell 解释,特殊字符原样传递",
+        "cmdWorkdir": "工作目录",
+        "createTaskTitle": "任务标题",
+        "createTaskDesc": "任务说明",
+        "callTemplate": "目标模板",
+        "selectPlaceholder": "-- 请选择 --",
+        "callDepthHint": "子工作流嵌套最深 5 层,且调用链中不允许再次出现同一模板。",
+        "setVarName": "变量名",
+        "setVarValue": "变量值",
+        "mapRows": "字段映射",
+        "mapTarget": "目标变量",
+        "mapSource": "数据路径",
+        "condGroup": "规则组合",
+        "condGroupAll": "全部满足(且)",
+        "condGroupAny": "任一满足(或)",
+        "condRules": "条件规则",
+        "condPath": "数据路径",
+        "condValue": "比较值",
+        "addRule": "添加条件",
+        "branchNames": "分支名",
+        "switchRules": "分支与条件",
+        "branchHintSwitch": "每条分支是一组条件,按顺序求值,首个命中的分支路由;都不命中走默认分支",
+        "branchHintParallel": "每个分支是一个输出端口;执行时同时激活全部分支",
+        "addBranch": "添加分支",
+        "joinMode": "汇合模式",
+        "joinModeAll": "全部分支(all)",
+        "joinModeAny": "任一分支(any)",
+        "joinAllHint": "全部入线 resolved 且都激活后才继续,用于并行分支汇合。",
+        "joinAnyHint": "全部入线 resolved 且至少一条激活即继续,用于条件分支汇合。",
+        "waitMode": "等待方式",
+        "waitModeDuration": "等待时长",
+        "waitModeEvent": "等待 GitHub 事件",
+        "waitMinutes": "等待时长(分钟)",
+        "waitEvent": "事件类型",
+        "waitFilterHint": "事件筛选(如 PR 编号)将在后续阶段开放配置。",
+        "humanPrompt": "提示文案",
+        "humanFields": "请求填写的字段",
+        "humanFieldsHint": "人工提交后将作为该节点输出返回",
+        "endHint": "入线连接「成功结束」端口则任务完成;连接「失败结束」端口则任务失败;未连接的失败端口表示失败后任务直接失败。",
+        "failureHintConnected": "失败端口已连线:失败(含重试耗尽)后将路由到下游节点。",
+        "failureHintUnconnected": "失败端口未连线:重试耗尽后任务直接失败。",
+        "deleteNode": "删除节点",
+        "close": "关闭",
+        "callTemplateEmpty": "工作区暂无工作流模板,请先创建模板",
+        "githubIntegrationEmpty": "还没有 GitHub 集成,请先到工程页创建",
+        "useIntegration": "使用集成",
+        "integrationDefault": "默认(工程第一个)",
+        "scheduleProject": "运行工程",
+        "scheduleProjectHint": "定时触发的运行将落在该工程",
+        "scheduleProjectEmpty": "暂无工程,请先创建工程"
+      }
     },
-    "run": {
-      "title": "发起工作流任务",
-      "basedOn": "基于: {name}",
-      "subtitle": "填写需求信息后触发执行引擎，系统将自动驱动 AI 接管后续节点。",
-      "triggering": "正在触发执行引擎...",
-      "triggerButton": "触发执行引擎",
-      "stepOneHeader": "完成首个节点：{title}",
-      "stepOneTitle": "需求输入",
-      "titleLabel": "任务标题",
-      "titlePlaceholder": "如 实现用户注册页面的前后端逻辑",
-      "projectLabel": "目标工程",
-      "noProjects": "暂无工程，请先在工程设置中创建",
-      "goCreateProject": "请先前往「工程设置」页创建工程",
-      "taskTypeLabel": "任务类型",
-      "typeStory": "Story (用户故事)",
-      "typeBug": "Bug (缺陷)",
-      "typeTask": "Task (通用任务)",
-      "priorityLabel": "优先级",
-      "prioUrgent": "紧急 (Urgent)",
-      "prioHigh": "高 (High)",
-      "prioMedium": "中 (Medium)",
-      "prioLow": "低 (Low)",
-      "dueDateLabel": "截止日期",
-      "labelsLabel": "标签（逗号分隔）：",
-      "labelsPlaceholder": "如 前端, 认证, OAuth2",
-      "labelsHint": "最多 10 个标签",
-      "constraintsLabel": "约束与警告（红线要求）：",
-      "constraintsPlaceholder": "如 必须支持 OAuth2 标准协议；Token 必须加密存储...",
-      "constraintsHint": "这些约束将作为红线要求注入到 AI 代理的 system prompt 中",
-      "descRequiredLabel": "详细需求说明",
-      "descPlaceholder": "在此输入详细的需求上下文。AI 代理将基于这份文档进行理解、架构设计和编码落地..."
-    },
-    "stats": {
-      "title": "模板使用统计",
-      "refCount": "引用次数",
-      "tasksUnit": "个任务",
-      "avgCompletion": "平均完成时间",
-      "endToEnd": "端到端",
-      "nodeCountLabel": "节点数",
-      "stepsUnit": "个步骤",
-      "noStats": "暂无统计数据",
-      "noStatsHint": "运行此模板的任务完成后，统计数据将自动生成"
-    },
+    "runBack": "返回列表",
+    "runPageTitle": "发起运行",
+    "runProjectLabel": "发起工程",
+    "runProjectEmpty": "还没有工程,请先创建工程",
+    "runTitleLabel": "标题",
+    "runTitleRequired": "标题不能为空",
+    "runRequirementLabel": "需求",
+    "runRequirementPlaceholder": "描述你的需求,交给流水线执行",
+    "runJsonLabel": "高级:自定义入参 JSON",
+    "runJsonInvalid": "JSON 格式不合法",
+    "runSubmit": "发起运行",
+    "runSubmitFailed": "运行发起失败",
     "list": {
       "page": {
         "title": "工作流模板管理",
@@ -287,9 +581,6 @@
         "createButton": "新建自定义模板"
       },
       "builtInTag": "系统内置",
-      "nodeCount": "{count} 个节点",
-      "reviewCount": "审查 {count}",
-      "manualCount": "需人工 {count}",
       "preview": "预览",
       "stats": "统计",
       "edit": "编辑",
@@ -297,16 +588,80 @@
       "run": "运行",
       "customTemplates": "自定义模板",
       "noCustomTemplates": "当前工作区暂时没有自定义模板。",
-      "createFirst": "点击创建第一个模板",
-      "builtInTemplates": "系统内置模板"
+      "builtInTemplates": "系统内置模板",
+      "customTag": "自定义",
+      "emptyTitle": "还没有工作流模板",
+      "emptyDescription": "创建模板，把多 Agent 接力的协作流程固化成可复用的标准。",
+      "trigger": {
+        "manual": "手动触发",
+        "schedule": "每 {minutes} 分钟",
+        "github": "GitHub {event} · {actions}",
+        "webhook": "Webhook 触发"
+      },
+      "enabledOn": "已启用",
+      "enabledOff": "已停用",
+      "statsRef": "引用次数",
+      "statsTasksUnit": "个任务",
+      "statsAvgCompletion": "平均完成时间",
+      "statsEndToEnd": "端到端",
+      "statsNodeCount": "节点数",
+      "statsStepsUnit": "个步骤",
+      "statsNoStats": "暂无统计数据,任务运行后自动生成"
     },
     "view": {
       "back": "返回",
-      "loading": "加载中…",
-      "loadFailed": "模板加载失败",
-      "assigneeAny": "任意空闲代理",
-      "assigneeSpecific": "绑定代理",
-      "assigneeHuman": "人类成员"
+      "run": {
+        "status": {
+          "waiting": "等待中",
+          "ready": "待执行",
+          "running": "执行中",
+          "succeeded": "已成功",
+          "failed": "已失败",
+          "skipped": "已跳过",
+          "cancelled": "已取消",
+          "manual_intervention": "需人工处理"
+        },
+        "waitingFor": "等待事件:{event}",
+        "attemptCount": "共 {count} 次尝试",
+        "taskStatus": {
+          "active": "进行中",
+          "completed": "已完成",
+          "failed": "已失败",
+          "cancelled": "已取消"
+        },
+        "detail": {
+          "empty": "点击画布中的节点查看执行详情",
+          "waitExpires": "超时时间:{time}",
+          "attempts": "执行尝试",
+          "attemptNo": "第 {no} 次",
+          "attemptStatus": {
+            "running": "执行中",
+            "succeeded": "成功",
+            "failed": "失败",
+            "cancelled": "取消"
+          },
+          "input": "节点输入",
+          "output": "节点输出"
+        },
+        "humanPendingTitle": "此节点等待人工处理",
+        "submitAction": "提交",
+        "cancelNodeAction": "取消节点",
+        "waitKind": {
+          "duration": "定时等待",
+          "event": "事件等待",
+          "human": "人工处理"
+        }
+      },
+      "retry": "重试",
+      "enabledOn": "已启用",
+      "enabledOff": "已停用",
+      "builtInTag": "系统内置",
+      "noParam": "未指定任务或模板",
+      "backToList": "返回模板列表",
+      "preview": {
+        "detailEmpty": "点击画布中的节点查看配置",
+        "config": "节点配置"
+      }
     }
   },
   "market": {
@@ -398,8 +753,7 @@
     "skillPlusMcpTypes": "技能 + MCP 类型",
     "tabSkills": "技能 ({count})",
     "tabMcp": "MCP 服务器 ({count})",
-    "searchSkillsPlaceholder": "搜索技能名称或分类...",
-    "searchMcpPlaceholder": "搜索 MCP 名称或类型...",
+    "searchPlaceholder": "搜索技能或 MCP...",
     "addSkill": "新增技能",
     "addMcp": "新增 MCP",
     "usedByAgents": "{count} 个代理使用",
@@ -415,7 +769,7 @@
     "errDeleteSkill": "删除技能失败: ",
     "errDeleteMcp": "删除 MCP 服务器失败: ",
     "errToggleMcp": "更新 MCP 状态失败: ",
-    "skillModal": {
+    "skillForm": {
       "editTitle": "编辑技能",
       "addTitle": "新增技能",
       "nameLabel": "技能名称",
@@ -429,7 +783,7 @@
       "save": "保存",
       "saving": "保存中"
     },
-    "mcpModal": {
+    "mcpForm": {
       "editTitle": "编辑 MCP 服务器",
       "addTitle": "新增 MCP 服务器",
       "nameLabel": "服务器名称",
@@ -475,7 +829,8 @@
       "gitHint": "实例提交代码时的 Git 身份（user.name / user.email），必填。",
       "providerLabel": "运行工具",
       "cancel": "取消",
-      "submit": "创建"
+      "submit": "创建",
+      "targetLabel": "目标守护进程"
     },
     "personaBadge": "记忆标识 {key} · 与相同标识的实例共用记忆（同一台机器）",
     "personaLabel": "记忆标识（创建后不可修改）",
@@ -532,7 +887,14 @@
       "historyLabel": "近期执行历史",
       "historyCompleted": "已完成",
       "historyIntervention": "需介入",
-      "historyInProgress": "进行中"
+      "historyInProgress": "进行中",
+      "gitLabel": "Git 身份"
+    },
+    "meta": {
+      "online": "在线",
+      "busy": "忙碌",
+      "waiting": "暂停/待上线",
+      "offline": "离线"
     }
   },
   "daemons": {
@@ -540,10 +902,8 @@
     "noDevice": "未上报设备信息",
     "agentsCount": "{count} 个代理",
     "heartbeat": "心跳",
-    "noAgents": "该机器上还没有实例——在下方检测到的工具处点击「添加代理」创建。",
+    "noAgents": "该机器上还没有代理——点击分组头部的「添加代理」创建。",
     "noProviders": "该守护进程尚未上报工具检测，连接后会自动上报可用的编码工具。",
-    "noInstances": "尚未创建实例,点击「添加代理」在此工具下创建。",
-    "instancesCount": "{count} 个实例",
     "providerMissing": "工具未检测到",
     "deleteButton": "删除",
     "deleteFailed": "删除失败，请重试",
@@ -593,11 +953,8 @@
       "confirmDelete": "确认删除"
     },
     "empty": {
-      "title": "还没有接入守护进程",
-      "desc": "守护进程（agentd）运行在工作机上，一台机器一个。它用 token 注册并汇报机器与工具状态。",
-      "step1": "点击「接入新守护进程」，创建后会获得一个 daemon token（仅展示一次）",
-      "step2": "在工作机上安装 agentd，执行 teammate-agentd workspace add &lt;Token&gt; 接入该空间",
-      "step3": "启动 agentd 完成注册，然后在「AI 代理」页创建实例并配置指令/技能/MCP"
+      "title": "接入守护进程",
+      "desc": "接入一台守护进程后即可创建 AI 代理"
     }
   },
   "members": {
@@ -634,45 +991,29 @@
       "cancel": "取消",
       "confirm": "确认",
       "errChange": "修改角色失败: "
-    }
+    },
+    "confirmRemoveConfirm": "确认移除",
+    "cancelRemove": "取消"
   },
   "reviews": {
-    "title": "审查队列",
-    "subtitle": "{count} 个任务待审查 · 自动检测自我审查风险",
-    "filterAll": "全部",
-    "filterRejected": "已退回",
-    "filterPending": "待审查",
-    "emptyTitle": "暂无待审查任务",
-    "emptyDesc": "所有任务均已通过审查或无审查任务",
+    "title": "人工待办",
+    "subtitle": "{count} 个任务等待人工处理",
+    "emptyTitle": "暂无待人工处理的任务",
+    "emptyDesc": "任务等待人工处理时会出现在这里",
     "unknownNode": "未知节点",
     "unassigned": "未分配",
-    "statusRejected": "已退回",
-    "statusPending": "待审查",
-    "rejectCount": "退回 {count} 次",
     "currentNode": "当前节点:",
-    "reviewer": "审查者:",
-    "selfReviewBadge": "自审风险",
-    "selfReviewRisk": "自我审查风险: {agent} 同时参与了编码和审查",
-    "suggestChange": "建议更换审查者",
-    "approve": "通过",
-    "reject": "退回",
+    "executor": "执行人:",
     "progress": "进度 {completed}/{total}",
-    "rejectDialog": {
-      "title": "退回任务",
-      "reasonLabel": "退回原因",
-      "reasonPlaceholder": "请详细说明退回原因...",
-      "cancel": "取消",
-      "confirm": "确认退回"
-    }
+    "description": "任务描述",
+    "constraints": "约束",
+    "goHandle": "前往处理",
+    "goHandleHint": "提交或取消在任务详情的人工表单中完成"
   },
   "agentDetail": {
     "loading": "加载代理信息...",
     "notFound": "未找到该代理",
     "backToList": "返回列表",
-    "statusRunning": "运行中",
-    "statusIdle": "空闲",
-    "statusError": "异常",
-    "statusCompleted": "已完成",
     "identity": "身份指令",
     "identityEmpty": "未设置身份指令",
     "knowledge": "知识库",
@@ -751,24 +1092,6 @@
   },
   "dashboard": {
     "loadError": "任务数据加载失败，正在自动重试…",
-    "reassignDialog": {
-      "title": "重新分配节点",
-      "description": "选择要接管此节点的 AI 代理。节点将重置为待认领并保留给所选代理。",
-      "noAgents": "当前项目暂无 AI 代理",
-      "confirm": "重新分配"
-    },
-    "agentStatus": {
-      "online": "在线",
-      "busy": "忙碌",
-      "offline": "离线"
-    },
-    "rejectDialog": {
-      "title": "退回节点",
-      "selectTarget": "选择退回目标节点",
-      "reasonLabel": "退回原因",
-      "reasonPlaceholder": "请详细说明退回原因...",
-      "confirmTo": "确认退回至第 {targetNode} 节点"
-    },
     "editTask": {
       "title": "编辑任务",
       "titleLabel": "标题",
@@ -777,10 +1100,10 @@
       "save": "保存修改"
     },
     "priority": {
-      "urgent": "🔴 紧急",
-      "high": "🟠 高",
-      "medium": "🟡 中",
-      "low": "🟢 低"
+      "urgent": "紧急",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
     },
     "subTasks": {
       "header": "子任务 ({count})",
@@ -807,69 +1130,46 @@
       "header": "节点总结 — {nodeName}"
     },
     "dataFlow": {
-      "header": "数据传递",
-      "action": {
-        "approve": "通过",
-        "reject": "退回",
-        "manual": "人工介入",
-        "reclaim": "续作",
-        "timeout": "超时"
-      },
-      "transitionTitle": "节点流转",
+      "header": "执行历史",
+      "transitionTitle": "执行尝试",
+      "attemptNo": "第 {no} 次",
+      "statusRunning": "执行中",
+      "statusSucceeded": "已成功",
+      "statusFailed": "已失败",
+      "statusCancelled": "已取消",
       "nodeFallback": "节点 #{index}",
       "gitTransfer": "Git 传递",
       "continuationRight": "续作权",
-      "reservedFor": "已保留给"
-    },
-    "claimButton": {
-      "claimNode": "+ 认领此节点"
-    },
-    "reviewComment": {
-      "nodeApproved": "节点通过",
-      "adminInterrupt": "管理员强制中断",
-      "markManual": "标记需人工介入"
+      "reservedFor": "已保留给",
+      "executorAgent": "执行人:{name}",
+      "executorKind": "执行方:{kind}"
     },
     "status": {
-      "completed": "已完成",
+      "waiting": "等待中",
+      "ready": "待执行",
+      "running": "执行中",
+      "succeeded": "已成功",
+      "failed": "已失败",
+      "skipped": "已跳过",
       "cancelled": "已取消",
-      "manualIntervention": "需人工介入",
-      "rejected": "待返工",
-      "inProgress": "进行中",
-      "pending": "待认领"
+      "manualIntervention": "需人工介入"
     },
     "overdue": "已逾期",
-    "rejectCount": "退回 {count} 次",
     "actions": {
       "cancelTask": "取消任务",
-      "deleteTask": "删除任务",
-      "resume": "恢复执行",
-      "reassign": "重新分配",
-      "approve": "✅ 通过 (approve)",
-      "rejectTo": "❌ 退回至...",
-      "manualIntervention": "🚩 需人工介入",
-      "interrupt": "⏹ 中断",
-      "markManual": "🚩 标记需人工介入"
+      "deleteTask": "删除任务"
     },
     "workflow": {
       "progress": "工作流进度"
     },
-    "nodeStatus": {
-      "active": "活跃中",
-      "needsRework": "待返工",
-      "blocked": "阻断",
-      "timeout": "超时: {minutes}min"
-    },
-    "manualIntervention": {
-      "title": "需人工介入"
-    },
     "taskDescription": "任务描述",
     "terminal": {
       "nodeLabel": "节点 #{index}",
-      "noLogs": "暂无该节点的执行日志记录..."
+      "noLogs": "暂无该节点的执行日志记录...",
+      "live": "实时"
     },
     "nodeActions": {
       "title": "当前节点操作",
-      "status": "状态:",
       "readonlyDirs": "只读目录:",
       "fullControl": "完全控制:",
       "executor": "执行者:"
@@ -882,8 +1182,6 @@
       "dueDate": "截止日期",
       "labels": "标签",
       "labelCount": "{count} 个",
-      "rejectCount": "退回次数",
-      "rejectCountValue": "{count} 次",
       "progress": "进度"
     },
     "gitBranch": {
@@ -896,30 +1194,26 @@
     "tokenUsage": {
       "title": "Token 消耗"
     },
-    "continuationBadge": {
-      "waiting": "等待 {agentName} 续约中（剩余 {seconds}s）"
-    },
     "taskColumn": {
       "empty": "暂无任务"
     },
     "badge": {
       "urgent": "紧急",
-      "review": "审查"
+      "human": "需人工"
     },
     "taskCard": {
-      "priorityRenewal": "{agentName} 优先续约 {seconds}s",
-      "awaitingClaim": "等待认领",
-      "nodeTimeout": "节点超时: {minutes}min",
-      "rejectedCount": "已退回 {count} 次"
+      "awaitingAgent": "等待执行人"
     },
     "filters": {
       "allTypes": "全部类型",
       "allStatuses": "全部状态",
       "manualIntervention": "需人工介入",
-      "rejected": "待返工",
-      "inProgress": "进行中",
-      "pending": "待认领",
-      "completed": "已完成",
+      "failed": "已失败",
+      "running": "执行中",
+      "ready": "待执行",
+      "waiting": "等待中",
+      "succeeded": "已成功",
+      "skipped": "已跳过",
       "cancelled": "已取消",
       "taskCount": "共 {count} 个任务"
     },
@@ -929,12 +1223,9 @@
         "type": "类型",
         "priority": "优先级",
         "status": "状态",
-        "currentNode": "当前节点",
         "executor": "执行者",
-        "progress": "进度",
-        "actions": "操作"
-      },
-      "claim": "认领"
+        "chain": "协作链"
+      }
     },
     "tabs": {
       "active": "活跃",
@@ -944,31 +1235,58 @@
       "placeholder": "搜索任务编号或标题..."
     },
     "projects": {
-      "allProjects": "📁 全部工程"
+      "allProjects": "全部工程"
     },
     "agents": {
-      "allAgents": "🤖 全部代理"
+      "allAgents": "全部代理"
     },
     "view": {
-      "kanban": "看板视图"
+      "kanban": "看板视图",
+      "list": "列表视图"
     },
     "kanbanColumn": {
-      "manualIntervention": "🚩 需人工介入",
-      "inProgress": "🔧 进行中",
-      "pending": "⏳ 待认领",
-      "completed": "✅ 已完成"
+      "pending": "待执行",
+      "running": "执行中",
+      "succeeded": "已成功",
+      "failed": "已失败",
+      "manualIntervention": "需人工介入"
     },
     "common": {
-      "cancel": "取消",
-      "unassigned": "未分配"
+      "cancel": "取消"
     },
     "runCanvas": {
-      "executing": "执行中",
-      "waiting": "等待",
-      "done": "完成",
-      "rejected": "已驳回",
-      "manualIntervention": "待人工",
-      "current": "当前"
+      "refreshing": "刷新中…"
+    },
+    "title": "任务监控",
+    "retryLoad": "重试加载",
+    "empty": {
+      "title": "当前工程还没有任务",
+      "description": "从工作流模板发起一个任务，任务将按节点接力执行。"
+    },
+    "stats": {
+      "inProgress": "执行中",
+      "pendingClaim": "待执行",
+      "needManual": "需人工",
+      "onlineAgents": "在线 Agent"
+    },
+    "attention": {
+      "empty": "当前没有待人工处理事项",
+      "more": "另有 {count} 项待处理"
+    },
+    "cockpit": {
+      "trackTitle": "任务列表（{count}）",
+      "close": "关闭聚焦，返回任务视图"
+    },
+    "chain": {
+      "ariaLabel": "任务节点协作链",
+      "unnamedNode": "未命名节点",
+      "unassigned": "未分配",
+      "noNodes": "暂无节点信息"
+    },
+    "humanSubmit": {
+      "title": "等待人工处理",
+      "submit": "提交",
+      "cancelNode": "取消此节点"
     }
   },
   "settings": {
@@ -1062,7 +1380,8 @@
       "defaultCannotDelete": "默认工作区无法删除",
       "deleteConfirm": "确定要删除此工作空间吗？此操作不可撤销。",
       "deleteFailed": "删除失败",
-      "deleting": "删除中..."
+      "deleting": "删除中...",
+      "deleteCancel": "取消"
     }
   },
   "themeImporter": {

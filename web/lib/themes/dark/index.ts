@@ -6,7 +6,7 @@ const dark: ThemeDefinition = {
   id: "dark",
   name: { "zh-CN": "深色", "en-US": "Dark" },
   icon: "moon",
-  preview: { bg: "#020617", surface: "#1e293b", primary: "#3b82f6" },
+  preview: { bg: "#080a0f", surface: "#131a25", primary: "#7c6cf2" },
 };
 
 export default dark;

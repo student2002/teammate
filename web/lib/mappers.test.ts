@@ -6,7 +6,6 @@ import {
   mapMcpServerFromApi,
   mapAgentFromApi,
   mapTaskFromApi,
-  mapTemplateFromApi,
 } from "./mappers";
 
 describe("formatTaskRef", () => {
@@ -37,11 +36,11 @@ describe("mapSkillFromApi", () => {
 });
 
 describe("mapMcpServerFromApi", () => {
-  it("defaults type/auth and parses env_vars JSON string", () => {
+  it("defaults type/auth and keeps env_vars object", () => {
     const mcp = mapMcpServerFromApi({
       id: "m1",
       name: "mcp",
-      env_vars: '{"K":"V"}',
+      env_vars: { K: "V" },
     });
     expect(mcp.type).toBe("sse");
     expect(mcp.authType).toBe("none");
@@ -68,37 +67,38 @@ describe("mapAgentFromApi", () => {
 });
 
 describe("mapTaskFromApi", () => {
-  it("computes taskRef and current node status", () => {
+  it("computes taskRef and current node status for workflow nodes", () => {
     const task = mapTaskFromApi({
       task: { id: 7, title: "hi", status: "active" },
-      nodes: [{ status: "pending", node_type: "standard", name: "n1" }],
+      nodes: [{ status: "waiting", type_key: "agent.task", name: "n1" }],
     });
     expect(task.id).toBe(7);
     expect(task.taskRef).toBe("T-7");
     expect(task.title).toBe("hi");
-    expect(task.nodesStatus).toEqual(["pending"]);
+    expect(task.nodesStatus).toEqual(["waiting"]);
+    expect(task.currentNodeType).toBe("agent.task");
+    expect(task.priorityState).toBe("waiting");
   });
 
   it("maps the current node's reservation to task level with the agent name", () => {
-    const expires = "2099-01-01T00:00:00Z";
     const task = mapTaskFromApi(
       {
         task: { id: 8, title: "reserved", status: "active" },
         nodes: [
-          { status: "completed", node_type: "standard", name: "n1" },
+          { status: "succeeded", type_key: "agent.task", name: "n1" },
           {
-            status: "pending",
-            node_type: "standard",
+            status: "running",
+            type_key: "agent.task",
             name: "n2",
             reserved_for_agent_id: "agent-uuid-1",
-            reservation_expires_at: expires,
           },
         ],
       },
       [{ id: "agent-uuid-1", name: "claude-01" }]
     );
     expect(task.reservedForAgent).toBe("claude-01");
-    expect(task.reservationExpiresAt).toBe(expires);
+    expect(task.currentNode).toBe(1);
+    expect(task.priorityState).toBe("running");
   });
 
   it("falls back to the raw agent id when the agent list lacks it", () => {
@@ -106,40 +106,51 @@ describe("mapTaskFromApi", () => {
       task: { id: 9, title: "reserved", status: "active" },
       nodes: [
         {
-          status: "pending",
-          node_type: "standard",
+          status: "waiting",
+          type_key: "agent.task",
           name: "n1",
           reserved_for_agent_id: "agent-uuid-2",
-          reservation_expires_at: "2099-01-01T00:00:00Z",
         },
       ],
     });
     expect(task.reservedForAgent).toBe("agent-uuid-2");
   });
 
-  it("keeps reservation null when no node holds one", () => {
+  it("marks manual_intervention when any node needs a human", () => {
     const task = mapTaskFromApi({
-      task: { id: 10, title: "plain", status: "active" },
-      nodes: [{ status: "pending", node_type: "standard", name: "n1" }],
+      task: { id: 10, title: "manual", status: "active" },
+      nodes: [
+        { status: "succeeded", type_key: "agent.task", name: "n1" },
+        { status: "manual_intervention", type_key: "human.input", name: "n2" },
+      ],
     });
-    expect(task.reservedForAgent).toBeNull();
-    expect(task.reservationExpiresAt).toBeNull();
+    expect(task.priorityState).toBe("manual_intervention");
   });
-});
 
-describe("mapTemplateFromApi", () => {
-  it("maps trigger config snake_case keys", () => {
-    const tpl = mapTemplateFromApi({
-      template: {
-        id: "t1",
-        name: "tpl",
-        trigger_config: { project_id: "p1", interval_minutes: 15, repo_name: "r" },
-      },
-      nodes: [],
+  it("maps terminal task statuses directly", () => {
+    expect(
+      mapTaskFromApi({
+        task: { id: 11, status: "cancelled" },
+        nodes: [{ status: "cancelled", type_key: "agent.task", name: "n1" }],
+      }).priorityState
+    ).toBe("cancelled");
+    expect(
+      mapTaskFromApi({
+        task: { id: 12, status: "failed" },
+        nodes: [{ status: "failed", type_key: "agent.task", name: "n1" }],
+      }).priorityState
+    ).toBe("failed");
+  });
+
+  it("treats the last node as current when every node is terminal", () => {
+    const task = mapTaskFromApi({
+      task: { id: 13, status: "completed" },
+      nodes: [
+        { status: "succeeded", type_key: "agent.task", name: "n1" },
+        { status: "skipped", type_key: "data.set", name: "n2" },
+      ],
     });
-    expect(tpl.id).toBe("t1");
-    expect(tpl.triggerConfig.projectId).toBe("p1");
-    expect(tpl.triggerConfig.intervalMinutes).toBe(15);
-    expect(tpl.triggerConfig.repoName).toBe("r");
+    expect(task.currentNode).toBe(1);
+    expect(task.priorityState).toBe("succeeded");
   });
 });

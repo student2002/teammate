@@ -1,11 +1,20 @@
 "use client";
-// 历史任务页：分页展示已完成/已取消任务。
+// 历史任务页：分页展示已完成/已取消任务。标题列下方显示紧凑协作链（或工作流名 · 节点数）；
+// 类型/状态用统一徽章，优先级只用文字色；行点击进入运行视图(/workflows/view?taskId=)。
 
 import { useEffect, useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { useAppStore } from "@/lib/store";
+import PageHeader from "@/lib/ui/PageHeader";
+import Button from "@/lib/ui/Button";
+import EmptyState from "@/lib/ui/EmptyState";
+import StatusBadge from "@/lib/ui/StatusBadge";
+import TaskStateBadge from "@/lib/product/TaskStateBadge";
+import CollaborationChain from "@/lib/product/CollaborationChain";
+import { priorityTextCls } from "@/lib/product/presentation";
+import type { MappedTask, TaskType } from "@/lib/types";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
-import type { MappedTask, TaskType, Priority } from "@/lib/types";
 import {
   Search,
   ChevronLeft,
@@ -16,23 +25,16 @@ import {
 
 const PAGE_SIZE = 20;
 
-const typeCls: Record<TaskType, string> = {
-  story: "bg-primary/20 text-primary-fg",
-  bug: "bg-danger/20 text-danger-fg",
-  task: "bg-green-500/20 text-green-400",
+const typeTone: Record<TaskType, "primary" | "danger" | "neutral"> = {
+  story: "primary",
+  bug: "danger",
+  task: "neutral",
 };
 
 const typeKeys: Record<TaskType, string> = {
   story: "typeStory",
   bug: "typeBug",
   task: "typeTask",
-};
-
-const priorityCls: Record<Priority, string> = {
-  urgent: "bg-danger/20 text-danger-fg",
-  high: "bg-orange-500/20 text-orange-400",
-  medium: "bg-yellow-500/20 text-yellow-400",
-  low: "bg-gray-500/20 text-gray-400",
 };
 
 export default function HistoryPage() {
@@ -95,93 +97,92 @@ export default function HistoryPage() {
     doSearch(page);
   };
 
-  const projectName =
-    projects.find((p) => p.id === selectedProjectId)?.name || "";
+  const projectName = projects.find((p) => p.id === selectedProjectId)?.name || "";
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部标题栏 */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-line/80">
-        <div className="flex items-center gap-3">
-          <FileCheck className="w-5 h-5 text-fg-subtle" />
-          <h1 className="text-lg font-semibold text-fg">{t("title")}</h1>
-          {projectName && (
-            <span className="text-sm text-fg-subtle">— {projectName}</span>
-          )}
-          {historyTotal > 0 && (
-            <span className="text-xs text-fg-faint">{t("total", { count: historyTotal })}</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* 项目选择器 */}
-          {projects.length > 1 && (
-            <select
-              value={selectedProjectId || ""}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="h-8 px-2 text-sm rounded-md border border-line-strong bg-surface-2 text-fg-muted"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* 搜索框 */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={t("searchPlaceholder")}
-              className="h-8 pl-8 pr-3 text-sm rounded-md border border-line-strong bg-surface-2 text-fg-muted placeholder:text-fg-faint w-56 focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-col h-full page-enter">
+      <PageHeader
+        title={t("title")}
+        meta={
+          <>
+            {projectName && <span className="text-xs text-fg-subtle">{projectName}</span>}
+            {historyTotal > 0 && (
+              <>
+                <span className="text-fg-faint">·</span>
+                <span className="text-xs text-fg-faint">{t("total", { count: historyTotal })}</span>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <>
+            {projects.length > 1 && (
+              <select
+                value={selectedProjectId || ""}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="h-[34px] px-2.5 text-sm rounded-[var(--radius-control)] border border-line-strong bg-surface-2 text-fg-muted focus:outline-none focus:border-primary cursor-pointer"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={t("searchPlaceholder")}
+                className="h-[34px] w-56 pl-8 pr-3 text-sm rounded-[var(--radius-control)] border border-line-strong bg-surface-2 text-fg-muted placeholder:text-fg-faint focus:outline-none focus:border-primary"
+              />
+            </div>
+          </>
+        }
+      />
 
       {/* 任务列表 */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-6 pb-4">
         {historyLoading && historyTasks.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-6 h-6 animate-spin text-fg-faint" />
           </div>
         ) : historyTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-fg-faint">
-            <FileCheck className="w-12 h-12 mb-3 opacity-30" />
-            <p className="text-sm">{t("empty")}</p>
-            <div className="mt-8 w-full max-w-2xl text-left">
+          <div className="flex flex-col items-center justify-center h-full">
+            <EmptyState icon={FileCheck} title={t("empty")} />
+            <div className="w-full max-w-2xl">
               <EmptyStateGuide page="history" />
             </div>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-fg-subtle">
-                <th className="text-left px-6 py-3 font-medium w-20">{t("thRef")}</th>
-                <th className="text-left px-4 py-3 font-medium">{t("thTitle")}</th>
-                <th className="text-left px-4 py-3 font-medium w-20">{t("thType")}</th>
-                <th className="text-left px-4 py-3 font-medium w-20">{t("thPriority")}</th>
-                <th className="text-left px-4 py-3 font-medium w-32">{t("thWorkflow")}</th>
-                <th className="text-left px-4 py-3 font-medium w-40">{t("thCompletedAt")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historyTasks.map((task) => (
-                <TaskRow key={task.id} task={task} />
-              ))}
-            </tbody>
-          </table>
+          <div className="rounded-[var(--radius-card)] border border-line overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-2/80">
+                <tr className="text-xs text-fg-subtle">
+                  <th className="text-left px-4 py-2.5 font-medium w-24">{t("thRef")}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t("thTitle")}</th>
+                  <th className="text-left px-4 py-2.5 font-medium w-20">{t("thType")}</th>
+                  <th className="text-left px-4 py-2.5 font-medium w-24">{t("thPriority")}</th>
+                  <th className="text-left px-4 py-2.5 font-medium w-24">{t("thStatus")}</th>
+                  <th className="text-left px-4 py-2.5 font-medium w-40">{t("thCompletedAt")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {historyTasks.map((task) => (
+                  <TaskRow key={task.id} task={task} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* 分页 */}
       {historyTotal > PAGE_SIZE && (
-        <div className="flex items-center justify-between px-6 py-3 border-t border-line/80">
+        <div className="flex items-center justify-between px-6 py-3 border-t border-line shrink-0">
           <span className="text-xs text-fg-faint">
             {t("pageRange", {
               from: (historyPage - 1) * PAGE_SIZE + 1,
@@ -190,21 +191,13 @@ export default function HistoryPage() {
             })}
           </span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => goToPage(historyPage - 1)}
-              disabled={historyPage <= 1}
-              className="p-1.5 rounded-md hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
+            <Button variant="ghost" size="sm" onClick={() => goToPage(historyPage - 1)} disabled={historyPage <= 1} aria-label="previous page">
               <ChevronLeft className="w-4 h-4" />
-            </button>
+            </Button>
             {renderPageNumbers(historyPage, totalPages, goToPage)}
-            <button
-              onClick={() => goToPage(historyPage + 1)}
-              disabled={historyPage >= totalPages}
-              className="p-1.5 rounded-md hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
+            <Button variant="ghost" size="sm" onClick={() => goToPage(historyPage + 1)} disabled={historyPage >= totalPages} aria-label="next page">
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -215,40 +208,56 @@ export default function HistoryPage() {
 function TaskRow({ task }: { task: MappedTask }) {
   const t = useTranslations("history");
   const locale = useLocale();
-  const tbCls = typeCls[task.type] || typeCls.task;
-  const pbCls = priorityCls[task.priority] || priorityCls.medium;
+  const router = useRouter();
 
-  // 从 _rawNodes 获取完成时间
-  const rawNodes = task._rawNodes as
-    | Array<{ completed_at?: string; status?: string }>
-    | undefined;
+  // 从 _rawNodes 获取完成时间(最后一个成功节点的完成时刻)
+  const rawNodes = task._rawNodes as Array<{ completed_at?: string; status?: string }> | undefined;
   const lastCompletedNode = rawNodes
-    ?.filter((n) => n.status === "completed" && n.completed_at)
+    ?.filter((n) => n.status === "succeeded" && n.completed_at)
     .sort((a, b) => (b.completed_at || "").localeCompare(a.completed_at || ""))[0];
   const completedAt = lastCompletedNode?.completed_at;
+  const hasChain = (task.nodeNames?.length || 0) > 0;
 
   return (
-    <tr className="border-b border-line/60 hover:bg-surface-2/40 transition-colors">
-      <td className="px-6 py-3 font-mono text-xs text-fg-subtle">
-        {task.taskRef}
-      </td>
+    <tr
+      tabIndex={0}
+      onClick={() => router.push(`/workflows/view?taskId=${task.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") router.push(`/workflows/view?taskId=${task.id}`);
+      }}
+      className="cursor-pointer transition-colors-fast hover:bg-surface-2/40 focus-visible:outline-none"
+    >
+      <td className="px-4 py-3 font-mono text-xs text-fg-subtle align-top">{task.taskRef}</td>
       <td className="px-4 py-3">
-        <span className="text-fg-muted">{task.title}</span>
+        <div className="text-fg-muted">{task.title}</div>
+        {hasChain ? (
+          <div className="mt-2 max-w-lg opacity-90">
+            <CollaborationChain
+              density="compact"
+              names={task.nodeNames || []}
+              statuses={task.nodesStatus || []}
+              agents={task.nodeAgents || []}
+              currentIndex={task.currentNode}
+            />
+          </div>
+        ) : (
+          task.workflowName && (
+            <div className="text-[10px] text-fg-faint mt-0.5">
+              {task.workflowName}
+            </div>
+          )
+        )}
       </td>
-      <td className="px-4 py-3">
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${tbCls}`}>
-          {t(typeKeys[task.type] || "typeTask")}
-        </span>
+      <td className="px-4 py-3 align-top">
+        <StatusBadge tone={typeTone[task.type] || "neutral"}>{t(typeKeys[task.type] || "typeTask")}</StatusBadge>
       </td>
-      <td className="px-4 py-3">
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${pbCls}`}>
-          {t(`priority.${task.priority}`)}
-        </span>
+      <td className={`px-4 py-3 align-top text-xs ${priorityTextCls(task.priority)}`}>
+        {t(`priority.${task.priority}`)}
       </td>
-      <td className="px-4 py-3 text-fg-subtle text-xs">
-        {task.workflowName || "-"}
+      <td className="px-4 py-3 align-top">
+        <TaskStateBadge state={task.priorityState} />
       </td>
-      <td className="px-4 py-3 text-fg-subtle text-xs">
+      <td className="px-4 py-3 align-top text-fg-subtle text-xs">
         {completedAt ? new Date(completedAt).toLocaleString(locale) : "-"}
       </td>
     </tr>
@@ -282,7 +291,7 @@ function renderPageNumbers(
       <button
         key={p}
         onClick={() => goToPage(p)}
-        className={`min-w-[28px] h-7 rounded text-xs ${
+        className={`min-w-[28px] h-7 rounded-[var(--radius-control)] text-xs focus-visible:outline-none ${
           p === current
             ? "bg-primary-strong text-fg"
             : "hover:bg-surface-2 text-fg-subtle"

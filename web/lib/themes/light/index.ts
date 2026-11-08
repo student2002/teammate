@@ -6,7 +6,7 @@ const light: ThemeDefinition = {
   id: "light",
   name: { "zh-CN": "浅色", "en-US": "Light" },
   icon: "sun",
-  preview: { bg: "#f8fafc", surface: "#ffffff", primary: "#3b82f6" },
+  preview: { bg: "#f4f6f9", surface: "#edf1f6", primary: "#6556d8" },
 };
 
 export default light;

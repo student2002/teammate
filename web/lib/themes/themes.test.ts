@@ -36,4 +36,16 @@ describe.each(THEMES)("theme module %#", (theme) => {
     expect(theme.preview.surface).toMatch(/^#/);
     expect(theme.preview.primary).toMatch(/^#/);
   });
+
+  it(`${theme.id}: 预览色与 theme.css 中对应变量一致（预览 surface 取 surface-2，沿用切换器对比度惯例）`, () => {
+    const css = readFileSync(join(themesDir, theme.id, "theme.css"), "utf-8");
+    const readVar = (name: string): string => {
+      const m = css.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`));
+      expect(m, `theme.css 缺少 ${name}`).not.toBeNull();
+      return m![1].toLowerCase();
+    };
+    expect(theme.preview.bg.toLowerCase()).toBe(readVar("--bg"));
+    expect(theme.preview.surface.toLowerCase()).toBe(readVar("--surface-2"));
+    expect(theme.preview.primary.toLowerCase()).toBe(readVar("--primary"));
+  });
 });

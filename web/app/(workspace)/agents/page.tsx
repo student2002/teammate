@@ -1,34 +1,29 @@
 "use client";
-// 代理列表页：实例全部在本页（守护进程分组下）创建并经 desired_agents 下发到机器，
-// 按所属守护进程分组展示，此处管理其能力配置（指令/技能/MCP/Git 身份）。
-// 守护进程只汇报机器信息、工具检测与实例运行状态，不上报实例清单。
-// 与守护进程的接入（创建/token）、删除。
+// 代理列表页：数字队友名册。守护进程（daemon）是一级分组，分组头展示设备、版本、
+// 心跳、provider 能力与连接状态；代理卡展示 AgentGlyph、状态、当前任务、能力数量与
+// Token 用量，点击在分组内展开全宽详情（原位展开，不用覆盖层）。
+// 新建/编辑/删除/令牌展示均为内联表单或原位确认，同一时刻只展开一个表单。
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  Bot,
+  Monitor,
   Terminal,
   Zap,
   Database,
   X,
-  Cpu,
-  Activity,
   Clock,
-  CheckCircle2,
   Plus,
-  Save,
   Trash2,
   ChevronDown,
   Check,
   Copy,
-  Loader2,
   AlertTriangle,
-  PlayCircle,
-  PauseCircle,
-  Monitor,
+  MonitorPlay,
+  Pencil,
   AlertCircle,
   Server,
   KeyRound,
+  Cpu,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
@@ -37,227 +32,52 @@ import { useTranslations } from "next-intl";
 import type {
   MappedAgent,
   MappedDaemon,
-  DaemonStatus,
   Skill,
   McpServer,
-  AgentStatus,
 } from "@/lib/types";
 import { mapAgentFromApi, mapDaemonFromApi } from "@/lib/mappers";
-import ModalPortal from "@/lib/ModalPortal";
+import PageHeader from "@/lib/ui/PageHeader";
+import Button from "@/lib/ui/Button";
+import StatusBadge from "@/lib/ui/StatusBadge";
+import type { BadgeTone } from "@/lib/ui/StatusBadge";
+import EmptyState from "@/lib/ui/EmptyState";
+import InlineConfirm from "@/lib/ui/InlineConfirm";
+import AgentGlyph from "@/lib/product/AgentGlyph";
+import { agentStatusTone, taskStateTone, providerLabel } from "@/lib/product/presentation";
 
+// 表单控件统一样式：Label 在输入框上方，控件高 34px
+const inputCls =
+  "w-full h-[34px] bg-surface-2/60 border border-line-strong/50 rounded-[var(--radius-control)] px-3 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60";
+const textareaCls =
+  "w-full bg-surface-2/60 border border-line-strong/50 rounded-[var(--radius-control)] px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:border-primary/60 resize-y";
+const labelCls = "block text-xs font-medium text-fg-muted mb-1.5";
 
-// ==========================================
-// AgentStatusBadge 组件
-// ==========================================
-const STATUS_STYLES: Record<string, string> = {
-  online: "bg-success/10 text-success-fg border-success/20",
-  busy: "bg-primary/10 text-primary-fg border-primary/20",
-  paused: "bg-warning/10 text-warning-fg border-warning/20",
-  offline: "bg-fg-faint/10 text-fg-subtle border-line-strong/20",
-  pending: "bg-warning/10 text-warning-fg border-warning/20 border-dashed",
-};
+interface HistoryItem {
+  task: string;
+  node: string;
+  status: string;
+}
 
-const STATUS_KEYS: Record<string, string> = {
-  online: "online",
-  busy: "busy",
-  paused: "paused",
-  offline: "offline",
-  pending: "pending",
-};
+// 历史条目状态 → 徽章语义色（失败用 danger；其余复用任务状态映射）
+function historyTone(status: string): BadgeTone {
+  return status === "failed" ? "danger" : taskStateTone(status);
+}
 
-function AgentStatusBadge({ status }: { status: AgentStatus | string }) {
-  const t = useTranslations("agents.status");
-  const s = STATUS_STYLES[status] || STATUS_STYLES.offline;
-  return (
-    <div
-      className={`flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${s}`}
-    >
-      {status === "online" ? (
-        <PlayCircle className="w-3 h-3 mr-1 animate-pulse-soft" />
-      ) : status === "busy" ? (
-        <Activity className="w-3 h-3 mr-1" />
-      ) : status === "paused" ? (
-        <PauseCircle className="w-3 h-3 mr-1" />
-      ) : status === "pending" ? (
-        <Clock className="w-3 h-3 mr-1 animate-pulse-soft" />
-      ) : (
-        <PauseCircle className="w-3 h-3 mr-1 opacity-50" />
-      )}
-      {t(STATUS_KEYS[status] || "offline")}
-    </div>
-  );
+// 历史条目状态 → 文案（未知状态原样展示，不伪造语义）
+function historyStatusText(
+  status: string,
+  tCompleted: string,
+  tIntervention: string,
+  tInProgress: string
+): string {
+  if (status === "completed") return tCompleted;
+  if (status === "manual_intervention") return tIntervention;
+  if (status === "in_progress") return tInProgress;
+  return status;
 }
 
 // ==========================================
-// 在工具运行时节点下创建代理实例(Web 端创建,下发到该机器由 agentd 物化)
-// 三层模型:agentd(机器)→ 工具运行时(检测到的 provider)→ agent 实例
-// ==========================================
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: "Claude Code",
-  openclaw: "OpenClaw",
-  opencode: "OpenCode",
-  atomcode: "AtomCode",
-  mimocode: "MiMoCode",
-};
-
-interface AddAgentTarget {
-  daemon: MappedDaemon;
-  provider: string;
-  version: string;
-}
-
-function AddAgentCard({
-  target,
-  onSave,
-  onClose,
-  saving,
-  error,
-}: {
-  target: AddAgentTarget;
-  onSave: (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => void;
-  onClose: () => void;
-  saving: boolean;
-  error: string | null;
-}) {
-  const t = useTranslations("agents.addDialog");
-  const [name, setName] = useState("");
-  const [personaKey, setPersonaKey] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [gitName, setGitName] = useState("");
-  const [gitEmail, setGitEmail] = useState("");
-  const providerLabel = PROVIDER_LABELS[target.provider] || target.provider;
-  const formValid = name.trim() !== "" && gitName.trim() !== "" && gitEmail.trim() !== "";
-
-  return (
-    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 flex flex-col shadow-sm transition-all">
-      <div className="flex justify-between items-center pb-3 border-b border-line">
-        <h3 className="text-sm font-bold text-fg flex items-center">
-          <Monitor className="w-4 h-4 mr-2 text-cyan-400" />
-          {t("inlineTitle")}
-        </h3>
-        <button
-          onClick={onClose}
-          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-          title={t("cancel")}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="space-y-3.5 mt-4">
-        <div>
-          <label className="block text-sm font-medium text-fg-muted mb-2">
-            {t("nameLabel")} <span className="text-danger-fg">*</span>
-          </label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value.trim())}
-            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-            placeholder={t("namePlaceholder")}
-            autoFocus
-          />
-          <p className="text-[11px] text-fg-faint mt-1.5">{t("nameHint")}</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-fg-muted mb-2">
-            {t("personaKeyLabel")}
-          </label>
-          <input
-            value={personaKey}
-            onChange={(e) =>
-              setPersonaKey(e.target.value.trim().toLowerCase())
-            }
-            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg font-mono focus:outline-none focus:border-primary"
-            placeholder={t("personaKeyPlaceholder")}
-          />
-          <p className="text-[11px] text-fg-faint mt-1.5">{t("personaKeyHint")}</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-fg-muted mb-2">
-            {t("instructionsLabel")}
-          </label>
-          <textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            rows={3}
-            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary resize-y"
-            placeholder={t("instructionsPlaceholder")}
-          />
-          <p className="text-[11px] text-fg-faint mt-1.5">{t("instructionsHint")}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("gitNameLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={gitName}
-              onChange={(e) => setGitName(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-              placeholder={t("gitNamePlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-2">
-              {t("gitEmailLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={gitEmail}
-              onChange={(e) => setGitEmail(e.target.value.trim())}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-              placeholder={t("gitEmailPlaceholder")}
-            />
-          </div>
-        </div>
-        <p className="text-[11px] text-fg-faint">{t("gitHint")}</p>
-        <div className="bg-bg/60 border border-line rounded-lg px-4 py-2.5 flex items-center justify-between">
-          <span className="text-sm text-fg-subtle">{t("providerLabel")}</span>
-          <span className="text-sm text-fg-muted font-mono">
-            {providerLabel}
-            {target.version ? ` · v${target.version}` : ""}
-          </span>
-        </div>
-        {error && (
-          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-            {error}
-          </p>
-        )}
-      </div>
-      <div className="mt-auto pt-4 border-t border-line flex justify-end gap-3">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-        >
-          {t("cancel")}
-        </button>
-        <button
-          onClick={() =>
-            formValid &&
-            onSave({
-              name,
-              provider: target.provider,
-              personaKey,
-              instructions: instructions.trim(),
-              gitName: gitName.trim(),
-              gitEmail: gitEmail.trim(),
-            })
-          }
-          disabled={!formValid || saving}
-          className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Plus className="w-4 h-4 mr-2" />
-          )}
-          {t("submit")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 守护进程相关：相对时间 / 状态徽标 / 内联组件
+// 守护进程相关：相对时间
 // ==========================================
 function formatRelative(t: ReturnType<typeof useTranslations>, iso: string): string {
   if (!iso) return "—";
@@ -271,28 +91,289 @@ function formatRelative(t: ReturnType<typeof useTranslations>, iso: string): str
   return t("daysAgo", { n: Math.floor(hours / 24) });
 }
 
-function DaemonStatusBadge({ status }: { status: DaemonStatus }) {
-  const t = useTranslations("daemons.status");
-  const online = status === "online";
+// ==========================================
+// 下拉多选（技能/MCP 绑定编辑用）：浮动菜单走统一样式
+// ==========================================
+interface MultiSelectOption {
+  id: string;
+  name: string;
+}
+
+function MultiSelect({
+  options,
+  selected,
+  onChange,
+  placeholder,
+  tone = "accent",
+}: {
+  options: MultiSelectOption[];
+  selected: string[];
+  onChange: (val: string[]) => void;
+  placeholder: string;
+  tone?: "accent" | "success";
+}) {
+  const t = useTranslations("agents.multiSelect");
+  const [isOpen, setIsOpen] = useState(false);
+
+  const chipCls =
+    tone === "success"
+      ? "bg-success/10 text-success-fg border-success/20"
+      : "bg-accent/10 text-accent-fg border-accent/20";
+  const hoverBorderCls = tone === "success" ? "hover:border-success/40" : "hover:border-accent/40";
+
+  const handleToggle = (id: string) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((s) => s !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
   return (
-    <div
-      className={`flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-        online
-          ? "bg-success/10 text-success-fg border-success/20"
-          : "bg-fg-faint/10 text-fg-subtle border-line-strong/20"
-      }`}
-    >
-      <span
-        className={`w-2 h-2 rounded-full mr-1.5 ${
-          online ? "bg-success-fg status-glow animate-pulse-soft" : "bg-fg-subtle"
-        }`}
-      />
-      {online ? t("online") : t("offline")}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        className={`w-full min-h-[34px] bg-surface-2/60 border border-line-strong/50 rounded-[var(--radius-control)] px-2.5 py-1 text-left text-sm transition-colors-fast focus-visible:outline-none ${hoverBorderCls} flex items-center justify-between gap-2`}
+      >
+        <span className="flex flex-wrap gap-1 flex-1 min-w-0">
+          {selected.length === 0 ? (
+            <span className="text-fg-faint py-0.5">{placeholder}</span>
+          ) : (
+            selected.map((s) => {
+              const label = options.find((opt) => opt.id === s)?.name || s;
+              return (
+                <span
+                  key={s}
+                  className={`inline-flex items-center px-2 py-0.5 text-[11px] rounded border ${chipCls}`}
+                >
+                  {label}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(s);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleToggle(s);
+                      }
+                    }}
+                    aria-label={label}
+                    className="ml-1 hover:text-fg cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </span>
+                </span>
+              );
+            })
+          )}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-fg-faint shrink-0 transition-transform-fast ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="animate-scale-in absolute top-full left-0 right-0 mt-1 bg-surface-2 border border-line-strong rounded-[var(--radius-panel)] shadow-xl z-50 max-h-48 overflow-y-auto overscroll-contain">
+            {options.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-fg-faint">{t("noOptions")}</div>
+            ) : (
+              options.map((opt) => {
+                const isSelected = selected.includes(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleToggle(opt.id)}
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors-fast ${
+                      isSelected ? chipCls : "text-fg-muted hover:bg-surface-3"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {isSelected && <Check className="w-3.5 h-3.5" />}
+                      <span>{opt.name}</span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-// 接入守护进程的内联表单卡:在机器列表最上方原位展开,不用弹窗
+// ==========================================
+// 在工具运行时下创建代理实例（Web 端创建，下发到该机器由 agentd 物化）
+// 内联表单卡：展开在对应守护进程分组的代理区顶部
+// ==========================================
+interface AddAgentTarget {
+  daemon: MappedDaemon;
+  provider: string;
+  version: string;
+}
+
+function AddAgentCard({
+  target,
+  providers,
+  onSave,
+  onClose,
+  saving,
+  error,
+}: {
+  target: AddAgentTarget;
+  providers: { provider: string; version: string }[];
+  onSave: (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => void;
+  onClose: () => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const t = useTranslations("agents.addDialog");
+  const [name, setName] = useState("");
+  const [personaKey, setPersonaKey] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [gitName, setGitName] = useState("");
+  const [gitEmail, setGitEmail] = useState("");
+  const [provider, setProvider] = useState(target.provider);
+  const formValid = name.trim() !== "" && gitName.trim() !== "" && gitEmail.trim() !== "";
+
+  return (
+    <div className="rounded-[var(--radius-card)] border border-primary/30 bg-primary/5 p-4">
+      <div className="flex justify-between items-center pb-3 border-b border-line">
+        <h3 className="text-sm font-semibold text-fg">{t("inlineTitle")}</h3>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-surface-3 rounded-[var(--radius-control)] text-fg-subtle hover:text-fg transition-colors-fast focus-visible:outline-none"
+          title={t("cancel")}
+          aria-label={t("cancel")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-3.5 mt-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <span className={labelCls}>{t("targetLabel")}</span>
+            <span className="text-sm text-fg-muted font-mono">{target.daemon.name}</span>
+          </div>
+          <div className="min-w-[180px] flex-1 max-w-xs">
+            <label className={labelCls}>{t("providerLabel")}</label>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className={`${inputCls} cursor-pointer`}
+            >
+              {providers.map((p) => (
+                <option key={p.provider} value={p.provider}>
+                  {providerLabel(p.provider)}
+                  {p.version ? ` · v${p.version}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>
+            {t("nameLabel")} <span className="text-danger-fg">*</span>
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.trim())}
+            className={inputCls}
+            placeholder={t("namePlaceholder")}
+            autoFocus
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("nameHint")}</p>
+        </div>
+        <div>
+          <label className={labelCls}>{t("personaKeyLabel")}</label>
+          <input
+            value={personaKey}
+            onChange={(e) => setPersonaKey(e.target.value.trim().toLowerCase())}
+            className={`${inputCls} font-mono`}
+            placeholder={t("personaKeyPlaceholder")}
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("personaKeyHint")}</p>
+        </div>
+        <div>
+          <label className={labelCls}>{t("instructionsLabel")}</label>
+          <textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            rows={3}
+            className={textareaCls}
+            placeholder={t("instructionsPlaceholder")}
+          />
+          <p className="text-[11px] text-fg-faint mt-1.5">{t("instructionsHint")}</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>
+              {t("gitNameLabel")} <span className="text-danger-fg">*</span>
+            </label>
+            <input
+              value={gitName}
+              onChange={(e) => setGitName(e.target.value)}
+              className={inputCls}
+              placeholder={t("gitNamePlaceholder")}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>
+              {t("gitEmailLabel")} <span className="text-danger-fg">*</span>
+            </label>
+            <input
+              value={gitEmail}
+              onChange={(e) => setGitEmail(e.target.value.trim())}
+              className={inputCls}
+              placeholder={t("gitEmailPlaceholder")}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-fg-faint">{t("gitHint")}</p>
+        {error && (
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-[var(--radius-control)] px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 pt-3 border-t border-line flex justify-end gap-2">
+        <Button variant="secondary" size="md" onClick={onClose}>
+          {t("cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          loading={saving}
+          disabled={!formValid}
+          onClick={() =>
+            onSave({
+              name,
+              provider,
+              personaKey,
+              instructions: instructions.trim(),
+              gitName: gitName.trim(),
+              gitEmail: gitEmail.trim(),
+            })
+          }
+        >
+          {t("submit")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 接入守护进程的内联表单卡：页面顶部原位展开
+// ==========================================
 function CreateDaemonCard({
   onSave,
   onClose,
@@ -308,16 +389,17 @@ function CreateDaemonCard({
   const [name, setName] = useState("");
 
   return (
-    <div className="bg-surface-2/40 border border-primary/30 rounded-xl backdrop-blur-sm p-5 mb-8 shadow-sm transition-all">
+    <div className="rounded-[var(--radius-card)] border border-primary/30 bg-primary/5 p-4 mb-6">
       <div className="flex justify-between items-center pb-3 border-b border-line">
-        <h3 className="text-sm font-bold text-fg flex items-center">
+        <h3 className="text-sm font-semibold text-fg flex items-center">
           <Server className="w-4 h-4 mr-2 text-primary-fg" />
           {t("title")}
         </h3>
         <button
           onClick={onClose}
-          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          className="p-1.5 hover:bg-surface-3 rounded-[var(--radius-control)] text-fg-subtle hover:text-fg transition-colors-fast focus-visible:outline-none"
           title={t("cancel")}
+          aria-label={t("cancel")}
         >
           <X className="w-4 h-4" />
         </button>
@@ -325,48 +407,38 @@ function CreateDaemonCard({
       <div className="space-y-3.5 mt-4">
         <p className="text-sm text-fg-subtle leading-relaxed">{t("desc")}</p>
         <div>
-          <label className="block text-sm font-medium text-fg-muted mb-2">
+          <label className={labelCls}>
             {t("nameLabel")} <span className="text-danger-fg">*</span>
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
+            className={inputCls}
             placeholder={t("namePlaceholder")}
             autoFocus
           />
         </div>
         {error && (
-          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
+          <p className="text-sm text-danger-fg bg-danger/10 border border-danger/20 rounded-[var(--radius-control)] px-3 py-2">
             {error}
           </p>
         )}
       </div>
-      <div className="mt-4 pt-4 border-t border-line flex justify-end gap-3">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-        >
+      <div className="mt-4 pt-3 border-t border-line flex justify-end gap-2">
+        <Button variant="secondary" size="md" onClick={onClose}>
           {t("cancel")}
-        </button>
-        <button
-          onClick={() => name.trim() && onSave(name.trim())}
-          disabled={!name.trim() || saving}
-          className="btn-press flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Plus className="w-4 h-4 mr-2" />
-          )}
+        </Button>
+        <Button variant="primary" size="md" loading={saving} disabled={!name.trim()} onClick={() => onSave(name.trim())}>
           {t("submit")}
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
-// daemon token 一次性展示的内联提示条:挂在对应机器分组头部下方,关闭后不再重现
+// ==========================================
+// daemon token 一次性展示的内联提示条：挂在对应分组头部下方，关闭后不再重现
+// ==========================================
 function DaemonTokenBanner({
   daemonName,
   daemonToken,
@@ -386,52 +458,44 @@ function DaemonTokenBanner({
   };
 
   return (
-    <div className="bg-surface-2/40 border border-warning/30 rounded-xl p-5 mb-4 shadow-sm">
+    <div className="mx-4 mt-3 rounded-[var(--radius-card)] border border-warning/30 bg-warning/5 p-4">
       <div className="flex justify-between items-center pb-3 border-b border-warning/20">
-        <h3 className="text-sm font-bold text-fg flex items-center">
+        <h3 className="text-sm font-semibold text-fg flex items-center">
           <AlertTriangle className="w-4 h-4 text-warning-fg shrink-0 mr-2" />
           {t("title")}
         </h3>
         <button
           onClick={onClose}
-          className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+          className="p-1.5 hover:bg-surface-3 rounded-[var(--radius-control)] text-fg-subtle hover:text-fg transition-colors-fast focus-visible:outline-none"
           title={t("close")}
+          aria-label={t("close")}
         >
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="space-y-4 mt-4">
-        <div className="bg-warning/5 border border-warning/20 rounded-lg p-3.5">
+      <div className="space-y-3.5 mt-3.5">
+        <div className="rounded-[var(--radius-control)] border border-warning/20 px-3 py-2.5">
           <p className="text-sm text-warning-fg font-medium mb-1">{t("importantTitle")}</p>
           <p className="text-xs text-warning-fg/70">{t("importantDesc")}</p>
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs font-semibold text-fg-subtle uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="block text-xs font-medium text-fg-muted">
               {t("tokenLabel")} · {daemonName}
-            </label>
-            <button
-              onClick={handleCopy}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors-fast ${
-                copied
-                  ? "bg-success-strong text-fg"
-                  : "bg-primary/10 text-primary-fg border border-primary/20 hover:bg-primary/20"
-              }`}
-            >
+            </span>
+            <Button variant="secondary" size="sm" onClick={handleCopy}>
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? t("copied") : t("copy")}
-            </button>
+            </Button>
           </div>
-          <div className="bg-bg border border-line-strong rounded-lg p-4 break-all font-mono text-sm text-fg select-all">
+          <div className="bg-bg border border-line rounded-[var(--radius-control)] p-3 break-all font-mono text-sm text-fg select-all">
             {daemonToken}
           </div>
         </div>
 
-        <div className="bg-surface-2/50 border border-line-strong rounded-lg p-4">
-          <p className="text-xs font-semibold text-fg-subtle uppercase tracking-wider mb-3">
-            {t("stepsTitle")}
-          </p>
+        <div className="rounded-[var(--radius-control)] border border-line bg-surface-2/50 p-3.5">
+          <p className="text-xs font-medium text-fg-subtle mb-2.5">{t("stepsTitle")}</p>
           <ol className="space-y-2 text-sm text-fg-muted">
             {["step1", "step2", "step3"].map((key, i) => (
               <li key={key} className="flex items-start gap-2">
@@ -451,19 +515,18 @@ function DaemonTokenBanner({
         </div>
 
         <div className="flex justify-end">
-          <button
-            onClick={onClose}
-            className="btn-press px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium"
-          >
+          <Button variant="primary" size="md" onClick={onClose}>
             {t("close")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   );
 }
 
-// 删除机器的原位二次确认簇:替换机器头部按钮组,红色确认态
+// ==========================================
+// 删除机器的原位二次确认簇：替换分组头部按钮组（携带实例数量警示文案）
+// ==========================================
 function DaemonDeleteConfirm({
   daemon,
   onConfirm,
@@ -494,31 +557,21 @@ function DaemonDeleteConfirm({
         </span>
       )}
       <div className="flex items-center gap-2">
-        <button
-          onClick={onCancel}
-          disabled={deleting}
-          className="px-3 py-1.5 text-xs font-medium bg-surface-3/50 border border-line-strong/50 rounded-md hover:bg-surface-3 transition-colors-fast disabled:opacity-50"
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={deleting}>
           {t("cancel")}
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={deleting}
-          className="btn-press flex items-center px-3 py-1.5 text-xs font-medium bg-danger-strong hover:bg-danger text-fg rounded-md disabled:opacity-50 transition-colors-fast"
-        >
-          {deleting ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-          ) : (
-            <Trash2 className="w-3.5 h-3.5 mr-1" />
-          )}
+        </Button>
+        <Button variant="danger" size="sm" loading={deleting} onClick={onConfirm}>
+          <Trash2 className="w-3.5 h-3.5" />
           {t("confirmDelete")}
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
-// 重置 token 的原位二次确认簇:替换机器头部按钮组,warning 确认态(旧 token 立即失效)
+// ==========================================
+// 重置 token 的原位二次确认簇：warning 确认态（旧 token 立即失效）
+// ==========================================
 function DaemonRotateConfirm({
   daemon,
   onConfirm,
@@ -548,23 +601,16 @@ function DaemonRotateConfirm({
         </span>
       )}
       <div className="flex items-center gap-2">
-        <button
-          onClick={onCancel}
-          disabled={rotating}
-          className="px-3 py-1.5 text-xs font-medium bg-surface-3/50 border border-line-strong/50 rounded-md hover:bg-surface-3 transition-colors-fast disabled:opacity-50"
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={rotating}>
           {t("cancel")}
-        </button>
+        </Button>
         <button
+          type="button"
           onClick={onConfirm}
           disabled={rotating}
-          className="btn-press flex items-center px-3 py-1.5 text-xs font-medium bg-warning-strong hover:bg-warning text-fg rounded-md disabled:opacity-50 transition-colors-fast"
+          className="inline-flex items-center justify-center whitespace-nowrap h-7 px-2.5 text-xs rounded-[var(--radius-control)] gap-1 font-medium bg-warning-strong hover:bg-warning text-fg btn-press disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none focus-visible:outline-none transition-colors-fast"
         >
-          {rotating ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-          ) : (
-            <KeyRound className="w-3.5 h-3.5 mr-1" />
-          )}
+          <KeyRound className="w-3.5 h-3.5" />
           {t("confirmRotate")}
         </button>
       </div>
@@ -573,253 +619,36 @@ function DaemonRotateConfirm({
 }
 
 // ==========================================
-// 下拉选择器组件（支持多选）
+// 代理详情区（全宽，查看 + 内置编辑模式；挂载在展开的代理卡内部）
 // ==========================================
-interface MultiSelectOption {
-  id: string;
-  name: string;
-  enabled?: boolean;
-  category?: string;
-  type?: string;
-}
-
-function MultiSelect({
-  options,
-  selected,
-  onChange,
-  placeholder,
-  accentColor = "indigo",
-}: {
-  options: MultiSelectOption[];
-  selected: string[];
-  onChange: (val: string[]) => void;
-  placeholder: string;
-  accentColor?: string;
-}) {
-  const t = useTranslations("agents.multiSelect");
-  const [isOpen, setIsOpen] = useState(false);
-
-  const colorMap: Record<
-    string,
-    {
-      bg: string;
-      border: string;
-      text: string;
-      focus: string;
-      hover: string;
-    }
-  > = {
-    indigo: {
-      bg: "bg-accent/10",
-      border: "border-accent/20",
-      text: "text-accent-fg",
-      focus: "focus:border-accent",
-      hover: "hover:border-accent/40",
-    },
-    emerald: {
-      bg: "bg-success/10",
-      border: "border-success/20",
-      text: "text-success-fg",
-      focus: "focus:border-success",
-      hover: "hover:border-success/40",
-    },
-  };
-  const c = colorMap[accentColor] || colorMap.indigo;
-
-  const handleToggle = (id: string) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((s) => s !== id));
-    } else {
-      onChange([...selected, id]);
-    }
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-bg border border-line-strong rounded-lg px-3 py-2 text-left text-sm ${c.hover} transition-colors-fast flex items-center justify-between min-h-[38px]`}
-      >
-        <div className="flex flex-wrap gap-1 flex-1">
-          {selected.length === 0 ? (
-            <span className="text-fg-faint">{placeholder}</span>
-          ) : (
-            selected.map((s) => {
-              const label = options.find((opt) => opt.id === s)?.name || s;
-              return (
-                <span
-                  key={s}
-                  className={`inline-flex items-center px-2 py-0.5 text-[11px] rounded ${c.bg} ${c.text} ${c.border} border`}
-                >
-                  {label}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(s);
-                    }}
-                    className="ml-1 hover:text-fg"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              );
-            })
-          )}
-        </div>
-        <ChevronDown
-          className={`w-4 h-4 text-fg-faint shrink-0 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}
-        />
-      </button>
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-[60]"
-            onClick={() => setIsOpen(false)}
-          />
-          <div
-            className="animate-scale-in absolute top-full left-0 right-0 mt-1 bg-surface border border-line-strong rounded-lg shadow-xl z-[70] max-h-48 overflow-y-auto overscroll-contain"
-            onWheel={(e) => e.stopPropagation()}
-          >
-            {options.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-fg-faint">
-                {t("noOptions")}
-              </div>
-            ) : (
-              options.map((opt) => {
-                const isSelected = selected.includes(opt.id);
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => handleToggle(opt.id)}
-                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors-fast ${
-                      isSelected
-                        ? `${c.bg} ${c.text}`
-                        : "text-fg-muted hover:bg-surface-2"
-                    } ${!opt.enabled ? "opacity-40" : ""}`}
-                  >
-                    <span className="flex items-center gap-2">
-                      {isSelected && <Check className="w-3.5 h-3.5" />}
-                      <span>{opt.name}</span>
-                      {!opt.enabled && (
-                        <span className="text-[10px] text-fg-faint">
-                          ({t("disabled")})
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[10px] text-fg-faint">
-                      {opt.category || opt.type}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// 删除确认弹窗
-// ==========================================
-function ConfirmDeleteModal({
-  agentName,
-  onConfirm,
-  onClose,
-  deleting,
-  error,
-}: {
-  agentName: string;
-  onConfirm: () => void;
-  onClose: () => void;
-  deleting: boolean;
-  error: string | null;
-}) {
-  const t = useTranslations("agents.deleteDialog");
-  return (
-    <div
-      className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-danger/30 rounded-2xl w-[440px] shadow-2xl shadow-danger/10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center shrink-0 mt-0.5">
-            <AlertTriangle className="w-5 h-5 text-danger-fg" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-fg mb-1">{t("title")}</h3>
-            <p className="text-sm text-fg-subtle">
-              {t.rich("confirm", {
-                name: agentName,
-                span: (chunks) => (
-                  <span className="text-fg font-medium">{chunks}</span>
-                ),
-              })}
-            </p>
-            {error && (
-              <p className="text-sm text-danger-fg mt-2 bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="p-4 border-t border-line flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={deleting}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast disabled:opacity-50"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="btn-press flex items-center px-4 py-2 bg-danger-strong hover:bg-danger text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-          >
-            {deleting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4 mr-2" />
-            )}
-            {t("confirmDelete")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 代理详情面板(查看 + 内置编辑模式,点击「编辑」原地切换)
-// ==========================================
-interface HistoryItem {
-  task: string;
-  node: string;
-  status: string;
-}
-
-function AgentDetailPanel({
+function AgentDetailSection({
   agent,
   onSaveEdit,
   saving,
   skills,
   mcpServers,
+  onEditStart,
+  canEdit,
+  onDelete,
+  deleting,
+  deleteError,
 }: {
   agent: MappedAgent;
   onSaveEdit: (id: string, fields: Partial<MappedAgent>) => Promise<boolean>;
   saving: boolean;
   skills: Skill[];
   mcpServers: McpServer[];
+  /** 进入编辑表单时收起页面其他内联表单（同页同时只展开一个表单） */
+  onEditStart: () => void;
+  canEdit: boolean;
+  onDelete: (id: string) => void;
+  deleting: boolean;
+  deleteError: string | null;
 }) {
   const t = useTranslations("agents.detail");
+  const tc = useTranslations("agents");
   const te = useTranslations("agents.edit");
+  const td = useTranslations("agents.deleteDialog");
   const [editing, setEditing] = useState(false);
   const [identity, setIdentity] = useState("");
   const [gitName, setGitName] = useState("");
@@ -840,6 +669,7 @@ function AgentDetailPanel({
     setGitEmail(agent.gitEmail || "");
     setSelectedSkills((agent.skills || []).map((s) => (typeof s === "string" ? s : s.id)));
     setSelectedMcps((agent.mcpServers || []).map((m) => (typeof m === "string" ? m : m.id)));
+    onEditStart();
     setEditing(true);
   };
 
@@ -854,188 +684,205 @@ function AgentDetailPanel({
     if (ok) setEditing(false);
   };
 
+  const sectionLabelCls =
+    "text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center";
+
+  if (editing) {
+    return (
+      <div className="border-t border-line px-4 pb-4 pt-3 space-y-4">
+        <div>
+          <label className={labelCls}>{te("identityLabel")}</label>
+          <textarea
+            value={identity}
+            onChange={(e) => setIdentity(e.target.value)}
+            rows={3}
+            className={`${textareaCls} font-mono text-fg-muted resize-none`}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>{te("gitNameLabel")}</label>
+            <input
+              value={gitName}
+              onChange={(e) => setGitName(e.target.value)}
+              className={inputCls}
+              placeholder={te("gitNamePlaceholder")}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>{te("gitEmailLabel")}</label>
+            <input
+              value={gitEmail}
+              onChange={(e) => setGitEmail(e.target.value)}
+              className={inputCls}
+              placeholder={te("gitEmailPlaceholder")}
+            />
+          </div>
+        </div>
+        <div>
+          <label className={`${labelCls} flex items-center`}>
+            <Zap className="w-3.5 h-3.5 mr-1.5 text-accent-fg" /> {te("skillsLabel")}
+          </label>
+          <MultiSelect
+            options={enabledSkills.map((s) => ({ id: s.id, name: s.name }))}
+            selected={selectedSkills}
+            onChange={setSelectedSkills}
+            placeholder={te("skillsPlaceholder")}
+            tone="accent"
+          />
+        </div>
+        <div>
+          <label className={`${labelCls} flex items-center`}>
+            <Database className="w-3.5 h-3.5 mr-1.5 text-success-fg" /> {te("mcpLabel")}
+          </label>
+          <MultiSelect
+            options={enabledMcps.map((m) => ({ id: m.id, name: m.name }))}
+            selected={selectedMcps}
+            onChange={setSelectedMcps}
+            placeholder={te("mcpPlaceholder")}
+            tone="success"
+          />
+        </div>
+        <div className="pt-3 border-t border-line flex justify-end gap-2">
+          <Button variant="secondary" size="md" onClick={() => setEditing(false)}>
+            {te("cancel")}
+          </Button>
+          <Button variant="primary" size="md" loading={saving} onClick={handleSave}>
+            {te("save")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const historyItems = (agent.history as HistoryItem[]) || [];
+  const tokenUsage = agent.tokenUsage || { input: 0, output: 0 };
+
   return (
-    <div className="mt-4 pt-4 border-t border-line">
-      {!editing && (
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={enterEdit}
-            className="flex items-center px-3 py-1.5 text-xs font-medium text-primary-fg hover:text-primary-fg bg-primary/10 border border-primary/20 rounded-md transition-colors-fast"
-          >
-            <Save className="w-3.5 h-3.5 mr-1" /> {t("editButton")}
-          </button>
-        </div>
-      )}
-      {editing ? (
-        <>
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2">
-                {te("identityLabel")}
-              </label>
-              <textarea
-                value={identity}
-                onChange={(e) => setIdentity(e.target.value)}
-                rows={3}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-primary resize-none font-mono"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {te("gitNameLabel")}
-                </label>
-                <input
-                  value={gitName}
-                  onChange={(e) => setGitName(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder={te("gitNamePlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  {te("gitEmailLabel")}
-                </label>
-                <input
-                  value={gitEmail}
-                  onChange={(e) => setGitEmail(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-primary"
-                  placeholder={te("gitEmailPlaceholder")}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
-                <Zap className="w-4 h-4 mr-1.5 text-accent-fg" /> {te("skillsLabel")}
-              </label>
-              <MultiSelect
-                options={enabledSkills.map((s) => ({ id: s.id, name: s.name, enabled: true }))}
-                selected={selectedSkills}
-                onChange={setSelectedSkills}
-                placeholder={te("skillsPlaceholder")}
-                accentColor="indigo"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2 flex items-center">
-                <Database className="w-4 h-4 mr-1.5 text-success-fg" /> {te("mcpLabel")}
-              </label>
-              <MultiSelect
-                options={enabledMcps.map((m) => ({ id: m.id, name: m.name, enabled: true }))}
-                selected={selectedMcps}
-                onChange={setSelectedMcps}
-                placeholder={te("mcpPlaceholder")}
-                accentColor="emerald"
-              />
-            </div>
-          </div>
-          <div className="mt-5 pt-4 border-t border-line flex justify-end gap-3">
-            <button
-              onClick={() => setEditing(false)}
-              className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-            >
-              {te("cancel")}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center px-5 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast"
-            >
-              {saving ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
-              )}
-              {te("save")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="space-y-6">
-          {agent.personaKey && (
-            <div>
-              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>{t("personaLabel")}</span>
-                <button
-                  onClick={() => navigator.clipboard?.writeText(agent.personaKey || "")}
-                  className="text-[11px] px-2 py-0.5 bg-surface-2 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast"
-                  title={t("personaCopy")}
-                >
-                  {t("personaCopy")}
-                </button>
-              </div>
-              <div
-                className="bg-bg border border-line rounded-lg px-4 py-2 text-sm text-fg-muted font-mono break-all select-all cursor-text"
-                title={t("personaBadge", { key: agent.personaKey })}
+    <div className="border-t border-line px-4 pb-4 pt-3">
+      <div className="flex items-center justify-end gap-2">
+        {deleteError && (
+          <span className="text-xs text-danger-fg bg-danger/10 border border-danger/20 rounded px-2 py-1 mr-auto">
+            {deleteError}
+          </span>
+        )}
+        <Button variant="secondary" size="sm" onClick={enterEdit}>
+          <Pencil className="w-3.5 h-3.5" /> {t("editButton")}
+        </Button>
+        <InlineConfirm
+          label={tc("deleteButton")}
+          onConfirm={() => onDelete(agent.id)}
+          confirmLabel={td("confirmDelete")}
+          cancelLabel={td("cancel")}
+          busy={deleting}
+          disabled={!canEdit}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+        {agent.personaKey && (
+          <div>
+            <div className={sectionLabelCls}>
+              <span className="flex-1">{t("personaLabel")}</span>
+              <button
+                onClick={() => navigator.clipboard?.writeText(agent.personaKey || "")}
+                className="text-[11px] px-2 py-0.5 bg-surface-2 hover:bg-surface-3 rounded text-fg-subtle hover:text-fg transition-colors-fast focus-visible:outline-none"
+                title={t("personaCopy")}
               >
-                {agent.personaKey}
-              </div>
+                {t("personaCopy")}
+              </button>
             </div>
-          )}
-          <div>
-            <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-2">
-              {t("identityLabel")}
-            </div>
-            <div className="bg-bg border border-line rounded-lg p-4 text-sm text-fg-muted leading-relaxed font-mono">
-              {agent.identityInstruction}
+            <div
+              className="bg-bg border border-line rounded-[var(--radius-control)] px-3 py-1.5 text-sm text-fg-muted font-mono break-all select-all"
+              title={t("personaBadge", { key: agent.personaKey })}
+            >
+              {agent.personaKey}
             </div>
           </div>
-          <div>
-            <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-              <Cpu className="w-3.5 h-3.5 mr-1 text-primary-fg" /> {t("tokenUsageLabel")}
-            </div>
-            <div className="text-sm text-fg-muted">
-              {t("inputToken")}：
-              <span className="font-mono">
-                {(agent.tokenUsage || { input: 0, output: 0 }).input.toLocaleString()}
-              </span>
-              <span className="mx-2 text-fg-faint">·</span>
-              {t("outputToken")}：
-              <span className="font-mono">
-                {(agent.tokenUsage || { input: 0, output: 0 }).output.toLocaleString()}
-              </span>
-            </div>
+        )}
+        <div>
+          <div className={sectionLabelCls}>{t("gitLabel")}</div>
+          <div className="bg-bg border border-line rounded-[var(--radius-control)] px-3 py-1.5 text-sm text-fg-muted font-mono break-all">
+            {agent.gitName || agent.gitEmail ? `${agent.gitName} <${agent.gitEmail}>` : "—"}
           </div>
-          {((agent.history as HistoryItem[]) || []).length > 0 && (
-            <div>
-              <div className="text-xs font-semibold text-fg-faint uppercase tracking-wider mb-3 flex items-center">
-                <Clock className="w-3.5 h-3.5 mr-1 text-fg-subtle" /> {t("historyLabel")}
-              </div>
-              <div className="space-y-2">
-                {(agent.history as HistoryItem[]).map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between bg-bg border border-line rounded-lg p-3"
-                  >
-                    <div className="flex items-center text-sm">
-                      <span className="text-fg-muted font-mono mr-2">
-                        {h.task}
-                      </span>
-                      <span className="text-fg-faint">—</span>
-                      <span className="text-fg-subtle ml-2">{h.node}</span>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
-                        h.status === "completed"
-                          ? "bg-success/10 text-success-fg"
-                          : h.status === "manual_intervention"
-                            ? "bg-danger/10 text-danger-fg"
-                            : "bg-primary/10 text-primary-fg"
-                      }`}
-                    >
-                      {h.status === "completed"
-                        ? t("historyCompleted")
-                        : h.status === "manual_intervention"
-                          ? t("historyIntervention")
-                          : t("historyInProgress")}
-                    </span>
+        </div>
+        <div className="lg:col-span-2">
+          <div className={sectionLabelCls}>{t("identityLabel")}</div>
+          <div className="bg-bg border border-line rounded-[var(--radius-control)] p-3 text-sm text-fg-muted leading-relaxed font-mono whitespace-pre-wrap break-words">
+            {agent.identityInstruction}
+          </div>
+        </div>
+        <div>
+          <div className={sectionLabelCls}>{tc("cardSkills")}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(agent.skills || []).length === 0 ? (
+              <span className="text-sm text-fg-faint">—</span>
+            ) : (
+              (agent.skills || []).map((s) => (
+                <span
+                  key={typeof s === "string" ? s : s.id}
+                  className="px-2 py-0.5 bg-accent/10 border border-accent/20 text-accent-fg text-xs rounded"
+                >
+                  {typeof s === "string" ? s : s.name}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+        <div>
+          <div className={sectionLabelCls}>{tc("cardMcp")}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(agent.mcpServers || []).length === 0 ? (
+              <span className="text-sm text-fg-faint">—</span>
+            ) : (
+              (agent.mcpServers || []).map((m) => (
+                <span
+                  key={typeof m === "string" ? m : m.id}
+                  className="px-2 py-0.5 bg-success/10 border border-success/20 text-success-fg text-xs rounded"
+                >
+                  {typeof m === "string" ? m : m.name}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+        <div>
+          <div className={sectionLabelCls}>{t("tokenUsageLabel")}</div>
+          <div className="bg-bg border border-line rounded-[var(--radius-control)] px-3 py-1.5 text-sm text-fg-muted">
+            {t("inputToken")}{" "}
+            <span className="font-mono text-fg">{tokenUsage.input.toLocaleString()}</span>
+            <span className="mx-2 text-fg-faint">·</span>
+            {t("outputToken")}{" "}
+            <span className="font-mono text-fg">{tokenUsage.output.toLocaleString()}</span>
+          </div>
+        </div>
+        <div>
+          <div className={sectionLabelCls}>{t("historyLabel")}</div>
+          {historyItems.length === 0 ? (
+            <div className="bg-bg border border-line rounded-[var(--radius-control)] px-3 py-1.5 text-sm text-fg-faint">
+              —
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {historyItems.map((h, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2 bg-bg border border-line rounded-[var(--radius-control)] px-3 py-1.5"
+                >
+                  <div className="flex items-center text-sm min-w-0">
+                    <span className="text-fg-muted font-mono truncate">{h.task}</span>
+                    <span className="text-fg-faint mx-2 shrink-0">—</span>
+                    <span className="text-fg-subtle truncate">{h.node}</span>
                   </div>
-                ))}
-              </div>
+                  <StatusBadge tone={historyTone(h.status)} className="shrink-0">
+                    {historyStatusText(h.status, t("historyCompleted"), t("historyIntervention"), t("historyInProgress"))}
+                  </StatusBadge>
+                </div>
+              ))}
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1085,10 +932,20 @@ async function hydrateAgentBindings(workspaceId: string, agentList: MappedAgent[
   );
 }
 
+/** PageHeader meta 里的状态计数块 */
+function MetaStat({ dot, label, value }: { dot: string; label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[var(--radius-control)] border border-line bg-surface-2/40">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+      <span className="text-xs text-fg-subtle whitespace-nowrap">{label}</span>
+      <span className="text-xs font-semibold text-fg font-mono">{value}</span>
+    </span>
+  );
+}
+
 export default function AgentsPage() {
   const t = useTranslations("agents");
   const td = useTranslations("daemons");
-  const tEmpty = useTranslations("daemons.empty");
   const { canEdit } = usePermission();
 
   const agents = useAppStore((s) => s.agents);
@@ -1098,10 +955,9 @@ export default function AgentsPage() {
   const mcpServers = useAppStore((s) => s.mcpServers);
   const currentWorkspaceId = useAppStore((s) => s.currentWorkspaceId);
 
-  // 实例卡可收纳:默认折叠,底部按钮展开/收起;按 id 记录,轮询刷新后展开态不丢
+  // 展开的代理详情：全局同时只展开一个；null = 全部收起
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deletingAgent, setDeletingAgent] = useState<MappedAgent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [daemons, setDaemons] = useState<MappedDaemon[]>([]);
@@ -1119,7 +975,7 @@ export default function AgentsPage() {
   const [addingAgent, setAddingAgent] = useState(false);
   const [addAgentError, setAddAgentError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  // 折叠状态:daemon 分组与工具节点两级,key 形如 "daemon:{id}" / "daemon:{id}:{provider}"
+  // 折叠状态：daemon 分组一级，key 形如 "daemon:{id}"
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCollapse = (key: string) => {
     setCollapsed((prev) => {
@@ -1131,7 +987,7 @@ export default function AgentsPage() {
   };
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 每 10 秒轮询守护进程与代理状态;tick 驱动心跳相对时间重新渲染
+  // 每 10 秒轮询守护进程与代理状态；tick 驱动心跳相对时间重新渲染
   useEffect(() => {
     if (!currentWorkspaceId) return;
 
@@ -1183,11 +1039,10 @@ export default function AgentsPage() {
     }
     if (!target) return;
     setExpandedAgentId(id);
-    // 目标实例所在机器/工具节点可能处于折叠态,一并展开后再滚动定位
+    // 目标实例所在机器分组可能处于折叠态,展开后再滚动定位
     setCollapsed((prev) => {
       const next = new Set(prev);
       next.delete(`daemon:${target.daemonId}`);
-      next.delete(`daemon:${target.daemonId}:${target.provider}`);
       return next;
     });
     params.delete("id");
@@ -1229,11 +1084,12 @@ export default function AgentsPage() {
     }
   };
 
-  // 打开接入守护进程的内联表单;与「添加代理」表单卡互斥,同页同时只展开一处表单
+  // 打开接入守护进程的内联表单;与「添加代理」表单互斥,同页同时只展开一处表单
   const openCreateDaemonForm = () => {
     setAddAgentError(null);
     setAddAgentTarget(null);
     setCreateDaemonError(null);
+    setExpandedAgentId(null);
     setShowCreateDaemon(true);
   };
 
@@ -1252,8 +1108,36 @@ export default function AgentsPage() {
     }
   };
 
-  // Web 端在工具运行时节点下创建实例:server 记录后下发给该机器的 agentd,
-  // 列表先显示"待下发",agentd 物化上线由 10s 轮询自动呈现
+  // 在指定守护进程下打开「添加代理」表单（默认选中第一个检测到的工具）；
+  // 同一分组重复点击为收起。与接入表单、详情编辑表单互斥。
+  const openAddAgentForDaemon = (daemon: MappedDaemon) => {
+    const provider = daemon.providers.find((p) => p.installed);
+    if (!provider) return;
+    setAddAgentError(null);
+    setCreateDaemonError(null);
+    setShowCreateDaemon(false);
+    setExpandedAgentId(null);
+    if (addAgentTarget?.daemon.id === daemon.id) {
+      setAddAgentTarget(null);
+      return;
+    }
+    setAddAgentTarget({ daemon, provider: provider.provider, version: provider.version });
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(`daemon:${daemon.id}`);
+      return next;
+    });
+  };
+
+  // 页头「添加代理」：定位到第一个有可用工具的守护进程；无可选目标时按钮禁用
+  const addAgentTargetAvailable = daemons.some((d) => d.providers.some((p) => p.installed));
+  const openAddAgentAnywhere = () => {
+    const daemon = daemons.find((d) => d.providers.some((p) => p.installed));
+    if (daemon) openAddAgentForDaemon(daemon);
+  };
+
+  // Web 端创建实例：server 记录后下发给该机器的 agentd,
+  // 列表先显示"待上线",agentd 物化上线由 10s 轮询自动呈现
   const handleCreateAgent = async (data: { name: string; provider: string; personaKey: string; instructions: string; gitName: string; gitEmail: string }) => {
     if (!addAgentTarget || !currentWorkspaceId) return;
     setAddingAgent(true);
@@ -1306,7 +1190,7 @@ export default function AgentsPage() {
     }
   };
 
-  // 详情面板内的保存:成功返回 true(面板退回查看态),失败返回 false(停留编辑态)
+  // 详情区内的保存:成功返回 true(面板退回查看态),失败返回 false(停留编辑态)
   const handleEditSave = async (id: string, fields: Partial<MappedAgent>): Promise<boolean> => {
     if (!currentWorkspaceId) return false;
     setSaving(true);
@@ -1346,24 +1230,16 @@ export default function AgentsPage() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteError(null);
-    setDeletingAgent(agents.find((a) => a.id === id) || null);
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingAgent || !currentWorkspaceId) return;
+  const confirmDelete = async (id: string) => {
+    if (!currentWorkspaceId) return;
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.deleteAgent(currentWorkspaceId, deletingAgent.id);
-      setAgents(agents.filter((a) => a.id !== deletingAgent.id));
-      setExpandedAgentId((prev) => (prev === deletingAgent.id ? null : prev));
-      setDeletingAgent(null);
+      await api.deleteAgent(currentWorkspaceId, id);
+      setAgents(agents.filter((a) => a.id !== id));
+      setExpandedAgentId((prev) => (prev === id ? null : prev));
     } catch (err) {
-      setDeleteError(
-        err instanceof Error ? err.message : t("deleteFailed")
-      );
+      setDeleteError(err instanceof Error ? err.message : t("deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -1378,254 +1254,230 @@ export default function AgentsPage() {
     (a) => !a.daemonId || !daemons.some((d) => d.id === a.daemonId)
   );
 
-  const renderAgentCard = (agent: MappedAgent) => {
+  const countOnline = agents.filter((a) => a.status === "online").length;
+  const countBusy = agents.filter((a) => a.status === "busy").length;
+  const countWaiting = agents.filter((a) => a.status === "paused" || a.status === "pending").length;
+  const countOffline = agents.filter((a) => a.status === "offline").length;
+
+  const renderAgentCard = (agent: MappedAgent, detected?: Set<string>) => {
     const currentTask =
       tasks?.find(
-        (t) => String(t.id) === agent.task?.split(" ")[0]
+        (task) => String(task.id) === agent.task?.split(" ")[0]
       ) || null;
-    const completedCount = ((agent.history as HistoryItem[]) || []).filter(
-      (h) => h.status === "completed"
-    ).length;
     const expanded = expandedAgentId === agent.id;
+    const hasActiveTask = !!currentTask || !!agent.task;
     return (
       <div
         key={agent.id}
         id={`agent-card-${agent.id}`}
-        className="card-hover bg-surface-2/40 border border-line-strong/50 rounded-xl backdrop-blur-sm p-6 flex flex-col shadow-sm hover:border-line-strong transition-all"
+        className={`relative rounded-[var(--radius-card)] border transition-colors-fast ${
+          expanded
+            ? "border-primary/50 bg-primary/5"
+            : "border-line-strong/50 bg-surface-2/30 hover:bg-surface-2/60 hover:border-line-strong"
+        } ${agent.status === "offline" ? "opacity-60" : ""}`}
       >
-        <div className="flex justify-between items-start mb-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 border border-primary/20 flex items-center justify-center mr-4 shadow-inner">
-              <Bot className="w-7 h-7 text-primary-fg" />
-            </div>
-            <div>
-              <h3 className="font-bold text-fg text-lg leading-tight">
-                {agent.name}
-              </h3>
-              <div className="text-xs text-fg-subtle flex items-center mt-1 font-mono">
-                <Terminal className="w-3 h-3 mr-1.5" /> {agent.tool}
+        {hasActiveTask && (
+          <span aria-hidden="true" className="absolute left-0 top-3 bottom-3 w-0.5 rounded-r-full bg-accent-fg" />
+        )}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedAgentId(expanded ? null : agent.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpandedAgentId(expanded ? null : agent.id);
+            }
+          }}
+          aria-expanded={expanded}
+          className="w-full text-left px-4 pt-4 pb-3.5 cursor-pointer focus-visible:outline-none"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <AgentGlyph name={agent.name} status={agent.status} size="md" />
+              <div className="min-w-0 pt-0.5">
+                <h3 className="text-sm font-semibold text-fg truncate">{agent.name}</h3>
+                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-subtle font-mono min-w-0">
+                  <Terminal className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{providerLabel(agent.provider)}</span>
+                  {detected && !detected.has(agent.provider) && (
+                    <span className="inline-flex items-center gap-0.5 shrink-0 text-warning-fg text-[10px] px-1 rounded border border-warning/25 bg-warning/10">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                      {td("providerMissing")}
+                    </span>
+                  )}
+                </div>
               </div>
-              {agent.personaKey && (
-                <div
-                  className="mt-1.5 text-[10px] font-mono text-fg-subtle bg-surface-3/40 rounded px-1.5 py-0.5 w-fit cursor-default"
-                  title={t("personaBadge", { key: agent.personaKey })}
-                >
-                  {(agent.personaKey.length > 12
-                    ? agent.personaKey.slice(0, 12) + "…"
-                    : agent.personaKey)}
-                </div>
-              )}
             </div>
+            <StatusBadge tone={agentStatusTone(agent.status)} dot className="shrink-0 mt-0.5">
+              {t(`status.${agent.status}`)}
+            </StatusBadge>
           </div>
-          <AgentStatusBadge status={agent.status} />
+          <div className="mt-3 flex items-center gap-x-3.5 gap-y-1 flex-wrap text-xs text-fg-subtle">
+            <span className="flex items-center gap-1 min-w-0">
+              <span className="text-fg-faint shrink-0">{t("currentTask")}</span>
+              <span className="text-fg-muted truncate max-w-[180px]">
+                {currentTask?.title || agent.task || t("idle")}
+              </span>
+            </span>
+            <span className="flex items-center gap-1 shrink-0" title={t("cardSkills")}>
+              <Zap className="w-3 h-3 text-accent-fg shrink-0" />
+              <span className="font-mono text-fg-muted">{(agent.skills || []).length}</span>
+            </span>
+            <span className="flex items-center gap-1 shrink-0" title={t("cardMcp")}>
+              <Database className="w-3 h-3 text-success-fg shrink-0" />
+              <span className="font-mono text-fg-muted">{(agent.mcpServers || []).length}</span>
+            </span>
+            <span
+              className="flex items-center gap-1 shrink-0"
+              title={t("detail.tokenUsageLabel")}
+            >
+              <Cpu className="w-3 h-3 text-fg-faint shrink-0" />
+              <span className="font-mono text-fg-muted">
+                {((agent.tokenUsage?.input || 0) + (agent.tokenUsage?.output || 0)).toLocaleString()}
+              </span>
+            </span>
+          </div>
         </div>
-
-        <div className="space-y-5 mb-6">
-          <div>
-            <div className="text-xs font-semibold text-fg-faint mb-2 flex items-center">
-              <Zap className="w-3.5 h-3.5 mr-1 text-accent-fg" /> {t("cardSkills")}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(agent.skills || []).map((s) => (
-                <span
-                  key={typeof s === "string" ? s : s.name}
-                  className="px-2 py-1 bg-accent/10 border border-accent/20 text-accent-fg text-[11px] rounded uppercase tracking-wide font-medium"
-                >
-                  {typeof s === "string" ? s : s.name}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-fg-faint mb-2 flex items-center">
-              <Database className="w-3.5 h-3.5 mr-1 text-success-fg" />{" "}
-              {t("cardMcp")}
-            </div>
-            <div className="flex flex-col gap-2">
-              {(agent.mcpServers || []).map((m) => (
-                <div
-                  key={typeof m === "string" ? m : m.name}
-                  className="flex items-center text-xs text-fg-muted bg-surface/50 border border-line-strong/50 rounded-lg p-2"
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-success mr-2.5 status-glow animate-pulse-soft" />{" "}
-                  {typeof m === "string" ? m : m.name}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-fg-faint mb-2 flex items-center">
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-success-fg" />
-              {t("completedNodes")}
-            </div>
-            <div className="text-lg font-bold text-success-fg">
-              {completedCount}
-            </div>
-          </div>
-          {(!agent.gitName || !(agent.skills || []).length) && (
-            <div className="flex flex-wrap gap-2">
-              {!agent.gitName && (
-                <span className="flex items-center gap-1 px-2 py-1 bg-warning/10 border border-warning/20 text-warning-fg text-[11px] rounded">
-                  <AlertCircle className="w-3 h-3" /> {t("missingGit")}
-                </span>
-              )}
-              {!(agent.skills || []).length && (
-                <span className="flex items-center gap-1 px-2 py-1 bg-warning/10 border border-warning/20 text-warning-fg text-[11px] rounded">
-                  <AlertCircle className="w-3 h-3" /> {t("missingSkills")}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
         {expanded && (
-          <AgentDetailPanel
+          <AgentDetailSection
             agent={agent}
             onSaveEdit={handleEditSave}
             saving={saving}
             skills={skills}
             mcpServers={mcpServers}
+            onEditStart={() => {
+              setShowCreateDaemon(false);
+              setAddAgentTarget(null);
+            }}
+            canEdit={canEdit}
+            onDelete={confirmDelete}
+            deleting={deleting}
+            deleteError={deleteError}
           />
         )}
-
-        <div className="mt-auto pt-4 border-t border-line-strong/50 flex justify-between items-center bg-surface-2/20 -mx-6 -mb-6 px-6 pb-6 rounded-b-xl">
-          <div className="flex items-center gap-4">
-            <div className="text-xs text-fg-subtle">
-              {t("currentTask")}{" "}
-              <span className="text-fg font-medium ml-1">
-                {currentTask?.title
-                  ? currentTask.title.substring(0, 14) + "..."
-                  : agent.task || t("idle")}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                setExpandedAgentId((prev) =>
-                  prev === agent.id ? null : agent.id
-                )
-              }
-              aria-expanded={expanded}
-              className="flex items-center text-fg-subtle hover:text-fg text-xs font-medium bg-surface-3/50 px-3 py-1.5 rounded-md border border-line-strong/50 transition-colors-fast"
-            >
-              <ChevronDown
-                className={`w-3.5 h-3.5 mr-1 transition-transform ${
-                  expanded ? "rotate-180" : ""
-                }`}
-              />
-              {expanded ? t("collapseButton") : t("expandButton")}
-            </button>
-            <button
-              onClick={() => handleDelete(agent.id)}
-              disabled={!canEdit}
-              className="text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t("deleteButton")}
-            </button>
-          </div>
-        </div>
       </div>
     );
   };
 
+  const agentGridCls = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4";
+
   return (
-    <div className="page-enter h-full flex flex-col p-8 overflow-y-auto" data-tick={tick}>
-      <div className="flex justify-between items-center mb-8 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-fg mb-2">{t("title")}</h1>
-          <p className="text-sm text-fg-subtle">
-            {t("subtitle", { count: agents.length })}
-          </p>
-        </div>
-        <button
-          onClick={openCreateDaemonForm}
-          disabled={!canEdit}
-          className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Monitor className="w-5 h-5 mr-2" /> {td("addButton")}
-        </button>
-      </div>
+    <div className="h-full flex flex-col page-enter overflow-y-auto" data-tick={tick}>
+      <PageHeader
+        title={t("title")}
+        description={t("subtitle", { count: agents.length })}
+        meta={
+          <>
+            <MetaStat dot="bg-success-fg" label={t("meta.online")} value={countOnline} />
+            <MetaStat dot="bg-accent-fg" label={t("meta.busy")} value={countBusy} />
+            <MetaStat dot="bg-warning-fg" label={t("meta.waiting")} value={countWaiting} />
+            <MetaStat dot="bg-fg-faint" label={t("meta.offline")} value={countOffline} />
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={openAddAgentAnywhere}
+              disabled={!canEdit || !addAgentTargetAvailable}
+              title={addAgentTargetAvailable ? undefined : td("noProviders")}
+            >
+              <Plus className="w-4 h-4" /> {t("addAgent")}
+            </Button>
+            <Button variant="primary" size="lg" onClick={openCreateDaemonForm} disabled={!canEdit}>
+              <Monitor className="w-4 h-4" /> {td("addButton")}
+            </Button>
+          </>
+        }
+      />
 
-      {showCreateDaemon && (
-        <CreateDaemonCard
-          onSave={handleCreateDaemon}
-          onClose={() => {
-            setShowCreateDaemon(false);
-            setCreateDaemonError(null);
-          }}
-          saving={creatingDaemon}
-          error={createDaemonError}
-        />
-      )}
+      <div className="px-6 pb-8">
+        {showCreateDaemon && (
+          <CreateDaemonCard
+            onSave={handleCreateDaemon}
+            onClose={() => {
+              setShowCreateDaemon(false);
+              setCreateDaemonError(null);
+            }}
+            saving={creatingDaemon}
+            error={createDaemonError}
+          />
+        )}
 
-      {daemons.length === 0 && agents.length === 0 ? (
-        <div className="bg-gradient-to-br from-surface-2/40 to-surface/40 border border-line-strong/60 rounded-xl p-8 max-w-2xl mx-auto mt-8">
-          <div className="flex items-start gap-4 mb-5">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-              <Server className="w-6 h-6 text-primary-fg" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-fg mb-1">{td("empty.title")}</h3>
-              <p className="text-sm text-fg-subtle leading-relaxed">{td("empty.desc")}</p>
-            </div>
-          </div>
-          <ol className="space-y-3 mb-6">
-            {["step1", "step2", "step3"].map((key, i) => (
-              <li key={key} className="flex items-start gap-3 text-sm text-fg-muted">
-                <span className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 text-primary-fg text-xs font-bold flex items-center justify-center shrink-0">
-                  {i + 1}
-                </span>
-                <span className="leading-relaxed pt-0.5">{tEmpty(key)}</span>
-              </li>
-            ))}
-          </ol>
-          <button
-            onClick={openCreateDaemonForm}
-            disabled={!canEdit}
-            className="btn-press flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg text-sm font-medium transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Monitor className="w-4 h-4 mr-2" /> {td("addButton")}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-10">
-          {groups.map(({ daemon, groupAgents }) => (
-            <section key={daemon.id}>
-              {(() => {
-                const daemonCollapsed = collapsed.has(`daemon:${daemon.id}`);
-                return (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4 pb-3 border-b border-line-strong/60">
-                      <button
-                        className="flex items-center text-left"
-                        onClick={() => toggleCollapse(`daemon:${daemon.id}`)}
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-primary/20 border border-cyan-500/20 flex items-center justify-center mr-3 shadow-inner">
-                          <Monitor className="w-5 h-5 text-cyan-400" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2.5">
-                            <h2 className="text-lg font-bold text-fg">{daemon.name}</h2>
-                            <DaemonStatusBadge status={daemon.status} />
-                            <ChevronDown
-                              className={`w-4 h-4 text-fg-faint transition-transform ${daemonCollapsed ? "" : "rotate-180"}`}
-                            />
-                          </div>
-                          <div className="text-xs text-fg-faint flex items-center gap-3 mt-0.5">
-                            <span>
-                              {daemon.deviceName || td("noDevice")}
-                              {daemon.version ? ` · v${daemon.version}` : ""}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {td("heartbeat")} {formatRelative(td, daemon.lastHeartbeat)}
-                            </span>
-                            <span>{td("agentsCount", { count: groupAgents.length })}</span>
-                            <span className="font-mono">{daemon.id}</span>
-                          </div>
-                        </div>
-                      </button>
+        {daemons.length === 0 && agents.length === 0 ? (
+          <EmptyState
+            icon={Server}
+            title={td("empty.title")}
+            description={td("empty.desc")}
+            className="mt-8"
+            action={
+              <Button variant="primary" size="lg" onClick={openCreateDaemonForm} disabled={!canEdit}>
+                <Monitor className="w-4 h-4" /> {td("addButton")}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="space-y-8">
+            {groups.map(({ daemon, groupAgents }) => {
+              const daemonCollapsed = collapsed.has(`daemon:${daemon.id}`);
+              const detected = daemon.providers.filter((p) => p.installed);
+              const detectedSet = new Set(detected.map((d) => d.provider));
+              const addFormOpen = !!addAgentTarget && addAgentTarget.daemon.id === daemon.id;
+              // 展开详情的代理提到分组卡片区顶部全宽展示，其余保持原顺序
+              const expandedAgent = groupAgents.find((a) => a.id === expandedAgentId);
+              const restAgents = groupAgents.filter((a) => a.id !== expandedAgentId);
+              return (
+                <section key={daemon.id} className="rounded-[var(--radius-card)] border border-line bg-surface-2/20">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 border-b border-line">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(`daemon:${daemon.id}`)}
+                      aria-expanded={!daemonCollapsed}
+                      className="flex items-center gap-3 text-left min-w-0 focus-visible:outline-none"
+                    >
+                      <span className="w-9 h-9 rounded-[var(--radius-control)] bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                        <MonitorPlay className="w-4 h-4 text-primary-fg" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-fg">{daemon.name}</span>
+                          <StatusBadge
+                            tone={daemon.status === "online" ? "success" : "neutral"}
+                            dot
+                            className="shrink-0"
+                          >
+                            {td(`status.${daemon.status}`)}
+                          </StatusBadge>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 text-fg-faint transition-transform-fast ${daemonCollapsed ? "" : "rotate-180"}`}
+                          />
+                        </span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-fg-faint">
+                          <span>
+                            {daemon.deviceName || td("noDevice")}
+                            {daemon.version ? ` · v${daemon.version}` : ""}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {td("heartbeat")} {formatRelative(td, daemon.lastHeartbeat)}
+                          </span>
+                          <span>{td("agentsCount", { count: groupAgents.length })}</span>
+                          {detected.length > 0
+                            ? detected.map((p) => (
+                                <span key={p.provider} className="font-mono">
+                                  {providerLabel(p.provider)}
+                                  {p.version ? ` v${p.version}` : ""}
+                                </span>
+                              ))
+                            : (
+                                <span>{td("noProviders")}</span>
+                              )}
+                        </span>
+                      </span>
+                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
                       {deletingDaemon?.id === daemon.id ? (
                         <DaemonDeleteConfirm
                           daemon={deletingDaemon}
@@ -1649,8 +1501,19 @@ export default function AgentsPage() {
                           error={rotateError}
                         />
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <button
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openAddAgentForDaemon(daemon)}
+                            disabled={!canEdit || detected.length === 0}
+                            title={detected.length === 0 ? td("noProviders") : undefined}
+                          >
+                            <Plus className="w-3.5 h-3.5" /> {t("addAgent")}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => {
                               // 与删除确认互斥,同一时刻只有一个确认态
                               setDeleteDaemonError(null);
@@ -1658,195 +1521,100 @@ export default function AgentsPage() {
                               setRotateError(null);
                               setRotatingDaemon(daemon);
                             }}
-                            className="flex items-center text-warning-fg hover:text-warning-fg text-xs font-medium bg-warning/10 px-3 py-1.5 rounded-md border border-warning/20 transition-colors-fast"
                           >
-                            <KeyRound className="w-3.5 h-3.5 mr-1" /> {td("rotateButton")}
-                          </button>
-                          <button
+                            <KeyRound className="w-3.5 h-3.5" /> {td("rotateButton")}
+                          </Button>
+                          <Button
+                            variant="danger-ghost"
+                            size="sm"
+                            disabled={!canEdit}
                             onClick={() => {
                               setRotateError(null);
                               setRotatingDaemon(null);
                               setDeleteDaemonError(null);
                               setDeletingDaemon(daemon);
                             }}
-                            disabled={!canEdit}
-                            className="flex items-center text-danger-fg hover:text-danger-fg text-xs font-medium bg-danger/10 px-3 py-1.5 rounded-md border border-danger/20 transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <Trash2 className="w-3.5 h-3.5 mr-1" /> {td("deleteButton")}
-                          </button>
-                        </div>
+                            <Trash2 className="w-3.5 h-3.5" /> {td("deleteButton")}
+                          </Button>
+                        </>
                       )}
                     </div>
+                  </div>
 
-                    {newDaemonToken?.daemonId === daemon.id && (
-                      <DaemonTokenBanner
-                        daemonName={newDaemonToken.name}
-                        daemonToken={newDaemonToken.token}
-                        onClose={() => setNewDaemonToken(null)}
-                      />
-                    )}
+                  {newDaemonToken?.daemonId === daemon.id && (
+                    <DaemonTokenBanner
+                      daemonName={newDaemonToken.name}
+                      daemonToken={newDaemonToken.token}
+                      onClose={() => setNewDaemonToken(null)}
+                    />
+                  )}
 
-                    {!daemonCollapsed &&
-                      (() => {
-                        // 二层:工具运行时节点(来自 daemon 检测上报;存在实例但工具未检测到的作为孤儿节点警示)
-                        const detected = daemon.providers.filter((p) => p.installed);
-                        const orphans = Array.from(
-                          new Set(
-                            groupAgents
-                              .map((a) => a.provider)
-                              .filter((p) => !detected.some((d) => d.provider === p))
-                          )
-                        );
-                        const nodes = [
-                          ...detected.map((d) => ({
-                            provider: d.provider,
-                            version: d.version,
-                            missing: false,
-                          })),
-                          ...orphans.map((p) => ({ provider: p, version: "", missing: true })),
-                        ];
-                        if (nodes.length === 0) {
-                          return (
-                            <p className="text-xs text-fg-faint py-3">{td("noProviders")}</p>
-                          );
-                        }
-                        return nodes.map((node) => {
-                          const instances = groupAgents.filter(
-                            (a) => a.provider === node.provider
-                          );
-                          const nodeCollapsed = collapsed.has(
-                            `daemon:${daemon.id}:${node.provider}`
-                          );
-                          const addFormOpen =
-                            !!addAgentTarget &&
-                            addAgentTarget.daemon.id === daemon.id &&
-                            addAgentTarget.provider === node.provider;
-                          return (
-                            <div key={node.provider} className="mb-6 last:mb-0">
-                              <div className="flex items-center justify-between mb-3">
-                                <button
-                                  className="flex items-center gap-2 text-left"
-                                  onClick={() =>
-                                    toggleCollapse(`daemon:${daemon.id}:${node.provider}`)
-                                  }
-                                >
-                                  <ChevronDown
-                                    className={`w-3.5 h-3.5 text-fg-faint transition-transform ${nodeCollapsed ? "" : "rotate-180"}`}
-                                  />
-                                  <Terminal className="w-4 h-4 text-primary-fg" />
-                                  <span className="text-sm font-semibold text-fg-muted">
-                                    {PROVIDER_LABELS[node.provider] || node.provider}
-                                  </span>
-                                  {node.version && (
-                                    <span className="text-[10px] font-mono text-fg-faint">
-                                      v{node.version}
-                                    </span>
-                                  )}
-                                  {node.missing && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-warning/10 text-warning-fg border border-warning/20">
-                                      {td("providerMissing")}
-                                    </span>
-                                  )}
-                                  <span className="text-[11px] text-fg-faint">
-                                    {td("instancesCount", { count: instances.length })}
-                                  </span>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setAddAgentError(null);
-                                    if (addFormOpen) {
-                                      setAddAgentTarget(null);
-                                      return;
-                                    }
-                                    // 与接入守护进程表单互斥,同页同时只展开一处表单
-                                    setCreateDaemonError(null);
-                                    setShowCreateDaemon(false);
-                                    setAddAgentTarget({
-                                      daemon,
-                                      provider: node.provider,
-                                      version: node.version,
-                                    });
-                                    setCollapsed((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(`daemon:${daemon.id}:${node.provider}`);
-                                      return next;
-                                    });
-                                  }}
-                                  className={`flex items-center text-primary-fg hover:text-primary-fg text-xs font-medium px-3 py-1.5 rounded-md border transition-colors-fast ${
-                                    addFormOpen
-                                      ? "bg-primary/25 border-primary/50"
-                                      : "bg-primary/10 border-primary/20"
-                                  }`}
-                                >
-                                  <Plus className="w-3.5 h-3.5 mr-1" /> {t("addAgent")}
-                                </button>
-                              </div>
-                              {!nodeCollapsed &&
-                                (() => {
-                                  // 添加代理为内嵌表单卡:命中当前节点时插到实例网格首位
-                                  const addForm = addFormOpen ? addAgentTarget : null;
-                                  if (instances.length === 0 && !addForm) {
-                                    return (
-                                      <p className="text-xs text-fg-faint py-2 pl-6">
-                                        {td("noInstances")}
-                                      </p>
-                                    );
-                                  }
-                                  return (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                      {addForm && (
-                                        <AddAgentCard
-                                          target={addForm}
-                                          onSave={handleCreateAgent}
-                                          onClose={() => {
-                                            setAddAgentTarget(null);
-                                            setAddAgentError(null);
-                                          }}
-                                          saving={addingAgent}
-                                          error={addAgentError}
-                                        />
-                                      )}
-                                      {instances.map(renderAgentCard)}
-                                    </div>
-                                  );
-                                })()}
+                  {!daemonCollapsed && (
+                    <div className="p-4">
+                      {addFormOpen && addAgentTarget && (
+                        <div className="mb-4">
+                          <AddAgentCard
+                            target={addAgentTarget}
+                            providers={detected.map((d) => ({ provider: d.provider, version: d.version }))}
+                            onSave={handleCreateAgent}
+                            onClose={() => {
+                              setAddAgentTarget(null);
+                              setAddAgentError(null);
+                            }}
+                            saving={addingAgent}
+                            error={addAgentError}
+                          />
+                        </div>
+                      )}
+                      {groupAgents.length === 0 && !addFormOpen ? (
+                        <p className="text-xs text-fg-faint py-1">{td("noAgents")}</p>
+                      ) : (
+                        <>
+                          {expandedAgent && (
+                            <div className="mb-4">{renderAgentCard(expandedAgent, detectedSet)}</div>
+                          )}
+                          {restAgents.length > 0 && (
+                            <div className={agentGridCls}>
+                              {restAgents.map((agent) => renderAgentCard(agent, detectedSet))}
                             </div>
-                          );
-                        });
-                      })()}
-                  </>
-                );
-              })()}
-            </section>
-          ))}
-          {ungrouped.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-line-strong/60">
-                <AlertCircle className="w-4 h-4 text-warning-fg" />
-                <h2 className="text-base font-bold text-fg-muted">{t("ungrouped")}</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {ungrouped.map(renderAgentCard)}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {deletingAgent && (
-        <ModalPortal>
-          <ConfirmDeleteModal
-            agentName={deletingAgent.name}
-            onConfirm={confirmDelete}
-            onClose={() => {
-              setDeletingAgent(null);
-              setDeleteError(null);
-            }}
-            deleting={deleting}
-            error={deleteError}
-          />
-        </ModalPortal>
-      )}
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            {ungrouped.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 pb-3 border-b border-line">
+                  <AlertCircle className="w-4 h-4 text-warning-fg shrink-0" />
+                  <h2 className="text-sm font-semibold text-fg-muted">{t("ungrouped")}</h2>
+                </div>
+                <div className="mt-4">
+                  {(() => {
+                    const expandedAgent = ungrouped.find((a) => a.id === expandedAgentId);
+                    const restAgents = ungrouped.filter((a) => a.id !== expandedAgentId);
+                    return (
+                      <>
+                        {expandedAgent && (
+                          <div className="mb-4">{renderAgentCard(expandedAgent)}</div>
+                        )}
+                        {restAgents.length > 0 && (
+                          <div className={agentGridCls}>
+                            {restAgents.map((agent) => renderAgentCard(agent))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

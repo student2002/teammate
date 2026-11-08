@@ -1,52 +1,29 @@
 "use client";
-// 代理详情页：展示单个 Agent 的身份指令、知识库、技能、MCP 服务与 Token 用量。
+// 代理详情页：单个 Agent 的身份指令、Git 身份、技能、MCP、Token 用量与执行历史。
+// 与列表页共用 AgentGlyph/StatusBadge/SectionHeader 等组件，不维护第二套视觉。
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
-  Bot,
-  Terminal,
+  BookOpen,
   Zap,
   Database,
   Clock,
-  Cpu,
-  Activity,
-  BookOpen,
   BarChart3,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
+  Terminal,
+  Cpu,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import type { MappedAgent } from "@/lib/types";
 import { mapAgentFromApi } from "@/lib/mappers";
-
-// ==========================================
-// 状态配置
-// ==========================================
-const STATUS_ICON: Record<string, typeof Activity> = {
-  running: Activity,
-  idle: Clock,
-  error: AlertTriangle,
-  completed: CheckCircle2,
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  running: "bg-success/20 text-success-fg border-success/30",
-  idle: "bg-fg-faint/20 text-fg-subtle border-line-strong/30",
-  error: "bg-danger/20 text-danger-fg border-danger/30",
-  completed: "bg-primary/20 text-primary-fg border-primary/30",
-};
-
-const STATUS_KEY: Record<string, string> = {
-  running: "statusRunning",
-  idle: "statusIdle",
-  error: "statusError",
-  completed: "statusCompleted",
-};
+import StatusBadge from "@/lib/ui/StatusBadge";
+import type { BadgeTone } from "@/lib/ui/StatusBadge";
+import SectionHeader from "@/lib/ui/SectionHeader";
+import AgentGlyph from "@/lib/product/AgentGlyph";
+import { agentStatusTone, taskStateTone, providerLabel } from "@/lib/product/presentation";
 
 interface HistoryItem {
   task: string;
@@ -54,28 +31,9 @@ interface HistoryItem {
   status: string;
 }
 
-const HISTORY_STATUS_ICON: Record<string, React.ReactNode> = {
-  success: <CheckCircle2 className="w-4 h-4 text-success-fg" />,
-  failed: <XCircle className="w-4 h-4 text-danger-fg" />,
-  running: <Activity className="w-4 h-4 text-primary-fg animate-pulse" />,
-};
-
-// ==========================================
-// 子组件
-// ==========================================
-function StatusBadge({ status }: { status: string }) {
-  const t = useTranslations("agentDetail");
-  const Icon = STATUS_ICON[status] || STATUS_ICON.idle;
-  const badge = STATUS_BADGE[status] || STATUS_BADGE.idle;
-  const key = STATUS_KEY[status] || STATUS_KEY.idle;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badge}`}
-    >
-      <Icon className="w-3 h-3" />
-      {t(key)}
-    </span>
-  );
+// 历史条目状态 → 徽章语义色（失败用 danger；其余复用任务状态映射）
+function historyTone(status: string): BadgeTone {
+  return status === "failed" ? "danger" : taskStateTone(status);
 }
 
 function TokenBar({
@@ -94,14 +52,14 @@ function TokenBar({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
         <span className="text-fg-subtle">{label}</span>
-        <span className="text-fg font-medium">
+        <span className="text-fg font-medium font-mono">
           {value.toLocaleString()}{" "}
           <span className="text-fg-faint text-xs">({pct.toFixed(1)}%)</span>
         </span>
       </div>
-      <div className="h-3 w-full rounded-full bg-surface-3/50 overflow-hidden">
+      <div className="h-2 w-full rounded-full bg-surface-3/50 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          className={`h-full rounded-full transition-all-normal ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -109,11 +67,10 @@ function TokenBar({
   );
 }
 
-// ==========================================
-// 主页面组件
-// ==========================================
 export default function AgentDetailPage() {
   const t = useTranslations("agentDetail");
+  const ta = useTranslations("agents.detail");
+  const ts = useTranslations("agents.status");
   const router = useRouter();
   const params = useParams();
   const agentId = params.id as string;
@@ -190,210 +147,219 @@ export default function AgentDetailPage() {
 
   const { input, output } = agent.tokenUsage || { input: 0, output: 0 };
   const totalTokens = input + output;
+  const historyItems = (agent.history as HistoryItem[]) || [];
+  const skills = agent.skills || [];
+  const mcpServers = agent.mcpServers || [];
+  const gitIdentity =
+    agent.gitName || agent.gitEmail ? `${agent.gitName} <${agent.gitEmail}>` : "—";
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto">
-      {/* 返回按钮 */}
-      <button
-        onClick={handleBack}
-        className="inline-flex items-center gap-2 text-fg-subtle hover:text-fg transition-colors mb-6 self-start group"
-      >
-        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-        <span className="text-sm font-medium">{t("backToList")}</span>
-      </button>
+    <div className="h-full flex flex-col page-enter overflow-y-auto">
+      <div className="px-6 pt-6">
+        <button
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-fg-subtle hover:text-fg transition-colors-fast mb-4 self-start group focus-visible:outline-none"
+        >
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform-fast" />
+          <span className="text-sm font-medium">{t("backToList")}</span>
+        </button>
 
-      {/* 代理头部 */}
-      <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-6 mb-6">
-        <div className="flex items-start gap-5">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shrink-0">
-            <Bot className="w-8 h-8 text-fg" />
-          </div>
+        {/* 代理头部 */}
+        <div className="rounded-[var(--radius-card)] border border-line-strong/50 bg-surface-2/30 p-5 flex items-start gap-4">
+          <AgentGlyph name={agent.name} status={agent.status} size="lg" />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-bold text-fg truncate">
-                {agent.name}
-              </h1>
-              <StatusBadge status={agent.status} />
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl font-bold text-fg truncate">{agent.name}</h1>
+              <StatusBadge tone={agentStatusTone(agent.status)} dot className="shrink-0">
+                {ts(agent.status)}
+              </StatusBadge>
             </div>
-            <div className="flex items-center gap-2 text-fg-subtle text-sm">
-              <Terminal className="w-3.5 h-3.5" />
-              <span>{agent.tool}</span>
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-fg-subtle font-mono">
+              <Terminal className="w-3 h-3 shrink-0" />
+              <span className="truncate">{providerLabel(agent.provider)}</span>
             </div>
             {agent.task && (
-              <p className="mt-2 text-fg-muted text-sm leading-relaxed">
-                {agent.task}
-              </p>
+              <p className="mt-2 text-sm text-fg-muted leading-relaxed">{agent.task}</p>
             )}
           </div>
         </div>
       </div>
 
       {/* 双栏布局 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
-        {/* 左栏 */}
-        <div className="flex flex-col gap-6">
-          {/* 身份指令 */}
-          <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BookOpen className="w-4 h-4 text-accent-fg" />
-              <h2 className="text-sm font-semibold text-fg uppercase tracking-wider">
+      <div className="px-6 pb-6 pt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start flex-1">
+        {/* 身份指令 / Git 身份 / 记忆标识 */}
+        <div className="rounded-[var(--radius-card)] border border-line bg-surface-2/20 p-5">
+          <SectionHeader
+            title={
+              <span className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-fg-faint" />
                 {t("identity")}
-              </h2>
+              </span>
+            }
+            className="mb-4"
+          />
+          <p className="text-sm text-fg-muted leading-relaxed whitespace-pre-wrap font-mono break-words">
+            {agent.identityInstruction || t("identityEmpty")}
+          </p>
+          <div className="mt-4 pt-3 border-t border-line text-xs leading-relaxed">
+            <span className="text-fg-faint">{ta("gitLabel")}：</span>
+            <span className="font-mono text-fg-muted break-all">{gitIdentity}</span>
+          </div>
+          {agent.personaKey && (
+            <div className="mt-2 text-xs leading-relaxed">
+              <span className="text-fg-faint">{ta("personaLabel")}：</span>
+              <span
+                className="font-mono text-fg-muted break-all"
+                title={ta("personaBadge", { key: agent.personaKey })}
+              >
+                {agent.personaKey}
+              </span>
             </div>
-            <p className="text-fg-muted text-sm leading-relaxed whitespace-pre-wrap">
-              {agent.identityInstruction || t("identityEmpty")}
-            </p>
+          )}
+        </div>
+
+        {/* Token 用量下钻 */}
+        <div className="rounded-[var(--radius-card)] border border-line bg-surface-2/20 p-5">
+          <SectionHeader
+            title={
+              <span className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-fg-faint" />
+                {t("tokenUsage")}
+              </span>
+            }
+            className="mb-4"
+          />
+
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="text-2xl font-bold text-fg font-mono">{totalTokens.toLocaleString()}</span>
+            <span className="text-xs text-fg-faint">{t("tokensTotal")}</span>
           </div>
 
-          {/* 知识库 */}
-          <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Database className="w-4 h-4 text-accent-fg" />
-              <h2 className="text-sm font-semibold text-fg uppercase tracking-wider">
-                {t("knowledge")}
-              </h2>
-            </div>
-
-            {/* 技能 */}
-            <div className="mb-5">
-              <div className="flex items-center gap-2 mb-2.5">
-                <Zap className="w-3.5 h-3.5 text-warning-fg" />
-                <span className="text-xs font-medium text-fg-subtle uppercase tracking-wider">
-                  {t("skills")}
-                </span>
-              </div>
-              {agent.skills && agent.skills.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {agent.skills.map((skill) => (
-                    <span
-                      key={typeof skill === "string" ? skill : skill.name}
-                      className="inline-flex items-center px-2.5 py-1 rounded-lg bg-warning/10 text-warning-fg text-xs font-medium border border-warning/20"
-                    >
-                      {typeof skill === "string" ? skill : skill.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-fg-faint text-xs">{t("skillsEmpty")}</p>
-              )}
-            </div>
-
-            {/* MCP 服务 */}
-            <div>
-              <div className="flex items-center gap-2 mb-2.5">
-                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-xs font-medium text-fg-subtle uppercase tracking-wider">
-                  {t("mcp")}
-                </span>
-              </div>
-              {agent.mcpServers && agent.mcpServers.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {agent.mcpServers.map((server) => (
-                    <span
-                      key={typeof server === "string" ? server : server.name}
-                      className="inline-flex items-center px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 text-xs font-medium border border-cyan-500/20"
-                    >
-                      {typeof server === "string" ? server : server.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-fg-faint text-xs">{t("mcpEmpty")}</p>
-              )}
-            </div>
+          <div className="space-y-3">
+            <TokenBar
+              label={t("inputTokens")}
+              value={input}
+              total={totalTokens}
+              color="bg-primary"
+            />
+            <TokenBar
+              label={t("outputTokens")}
+              value={output}
+              total={totalTokens}
+              color="bg-accent"
+            />
           </div>
         </div>
 
-        {/* 右栏 */}
-        <div className="flex flex-col gap-6">
-          {/* Token 用量下钻 */}
-          <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-4 h-4 text-accent-fg" />
-              <h2 className="text-sm font-semibold text-fg uppercase tracking-wider">
-                {t("tokenUsage")}
-              </h2>
-            </div>
-
-            <div className="flex items-baseline gap-2 mb-5">
-              <span className="text-3xl font-bold text-fg">
-                {totalTokens.toLocaleString()}
+        {/* 能力：技能 + MCP */}
+        <div className="rounded-[var(--radius-card)] border border-line bg-surface-2/20 p-5">
+          <SectionHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-fg-faint" />
+                {t("knowledge")}
               </span>
-              <span className="text-fg-faint text-sm">{t("tokensTotal")}</span>
-            </div>
+            }
+            className="mb-4"
+          />
 
-            <div className="space-y-4">
-              <TokenBar
-                label={t("inputTokens")}
-                value={input}
-                total={totalTokens}
-                color="bg-primary"
-              />
-              <TokenBar
-                label={t("outputTokens")}
-                value={output}
-                total={totalTokens}
-                color="bg-accent"
-              />
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-3.5 h-3.5 text-accent-fg" />
+              <span className="text-xs font-medium text-fg-subtle">{t("skills")}</span>
             </div>
-          </div>
-
-          {/* 执行历史 */}
-          <div className="bg-surface-2/40 backdrop-blur-sm border border-line-strong/60 rounded-xl p-6 flex-1">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4 text-accent-fg" />
-              <h2 className="text-sm font-semibold text-fg uppercase tracking-wider">
-                {t("history")}
-              </h2>
-            </div>
-
-            {agent.history && (agent.history as HistoryItem[]).length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line-strong/60">
-                      <th className="text-left text-fg-subtle font-medium pb-3 pr-4">
-                        {t("thTask")}
-                      </th>
-                      <th className="text-left text-fg-subtle font-medium pb-3 pr-4">
-                        {t("thNode")}
-                      </th>
-                      <th className="text-left text-fg-subtle font-medium pb-3">
-                        {t("thStatus")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(agent.history as HistoryItem[]).map((item, idx) => (
-                      <tr
-                        key={idx}
-                        className="border-b border-line-strong/30 last:border-0"
-                      >
-                        <td className="py-3 pr-4 text-fg-muted font-mono text-xs">
-                          {item.task}
-                        </td>
-                        <td className="py-3 pr-4 text-fg-subtle text-xs">
-                          {item.node}
-                        </td>
-                        <td className="py-3">
-                          <span className="inline-flex items-center gap-1.5">
-                            {HISTORY_STATUS_ICON[item.status] || (
-                              <Activity className="w-4 h-4 text-fg-faint" />
-                            )}
-                            <span className="text-xs text-fg-subtle capitalize">
-                              {item.status}
-                            </span>
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {skills.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {skills.map((skill) => (
+                  <span
+                    key={typeof skill === "string" ? skill : skill.id}
+                    className="inline-flex items-center px-2 py-0.5 rounded border text-xs bg-accent/10 text-accent-fg border-accent/20"
+                  >
+                    {typeof skill === "string" ? skill : skill.name}
+                  </span>
+                ))}
               </div>
             ) : (
-              <p className="text-fg-faint text-sm">{t("historyEmpty")}</p>
+              <p className="text-fg-faint text-xs">{t("skillsEmpty")}</p>
             )}
           </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Cpu className="w-3.5 h-3.5 text-success-fg" />
+              <span className="text-xs font-medium text-fg-subtle">{t("mcp")}</span>
+            </div>
+            {mcpServers.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {mcpServers.map((server) => (
+                  <span
+                    key={typeof server === "string" ? server : server.id}
+                    className="inline-flex items-center px-2 py-0.5 rounded border text-xs bg-success/10 text-success-fg border-success/20"
+                  >
+                    {typeof server === "string" ? server : server.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-fg-faint text-xs">{t("mcpEmpty")}</p>
+            )}
+          </div>
+        </div>
+
+        {/* 执行历史 */}
+        <div className="rounded-[var(--radius-card)] border border-line bg-surface-2/20 p-5">
+          <SectionHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-fg-faint" />
+                {t("history")}
+              </span>
+            }
+            className="mb-4"
+          />
+
+          {historyItems.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="text-left text-fg-subtle font-medium pb-3 pr-4">
+                      {t("thTask")}
+                    </th>
+                    <th className="text-left text-fg-subtle font-medium pb-3 pr-4">
+                      {t("thNode")}
+                    </th>
+                    <th className="text-left text-fg-subtle font-medium pb-3">
+                      {t("thStatus")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyItems.map((item, idx) => (
+                    <tr key={idx} className="border-b border-line/50 last:border-0">
+                      <td className="py-2.5 pr-4 text-fg-muted font-mono text-xs">
+                        {item.task}
+                      </td>
+                      <td className="py-2.5 pr-4 text-fg-subtle text-xs">{item.node}</td>
+                      <td className="py-2.5">
+                        <StatusBadge tone={historyTone(item.status)}>
+                          {item.status === "completed"
+                            ? ta("historyCompleted")
+                            : item.status === "manual_intervention"
+                              ? ta("historyIntervention")
+                              : item.status === "in_progress"
+                                ? ta("historyInProgress")
+                                : item.status}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-fg-faint text-sm">{t("historyEmpty")}</p>
+          )}
         </div>
       </div>
     </div>

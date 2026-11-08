@@ -1,66 +1,56 @@
 "use client";
-// 技能管理页：技能的创建、编辑与删除。
+// 技能管理页:Skill 与 MCP 使用同一实体卡骨架;新增/编辑在卡片区内内联展开(文档流推开),
+// 同一时刻只展开一个编辑表单;删除在被占用时展示占用代理列表,未占用时走 InlineConfirm 原位确认;
+// 所有错误以表单内/列表上的 danger 提示条展示,不使用遮罩弹窗和 alert。
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Zap,
   Database,
+  Server,
   Plus,
   X,
   Edit2,
-  Save,
   Trash2,
   Search,
   ToggleLeft,
   ToggleRight,
   Wifi,
-  WifiOff,
   Tag,
-  Server,
   AlertTriangle,
 } from "lucide-react";
-import ModalPortal from "@/lib/ModalPortal";
 import { useAppStore } from "@/lib/store";
 import api, { ApiError } from "@/lib/api";
 import EmptyStateGuide from "@/lib/EmptyStateGuide";
+import Button from "@/lib/ui/Button";
+import PageHeader from "@/lib/ui/PageHeader";
+import SectionHeader from "@/lib/ui/SectionHeader";
+import StatusBadge from "@/lib/ui/StatusBadge";
+import EmptyState from "@/lib/ui/EmptyState";
+import InlineConfirm from "@/lib/ui/InlineConfirm";
 import type { Skill, McpAuthType, McpServer, McpServerType } from "@/lib/types";
 import { mapMcpServerFromApi, mapSkillFromApi } from "@/lib/mappers";
 
 type LocalSkill = Skill;
 type LocalMcpServer = McpServer;
+type UsingAgent = { id: string; name: string };
 
-interface DeleteConfirmState {
+// 编辑表单状态:全页同一时刻只存在一个(kind 互斥)
+type EditFormState =
+  | { kind: "skill-add" }
+  | { kind: "skill-edit"; skill: LocalSkill }
+  | { kind: "mcp-add" }
+  | { kind: "mcp-edit"; mcp: LocalMcpServer };
+
+// 删除被占用时的原位展示状态(非弹窗)
+type BlockedDeleteState = {
   type: "skill" | "mcp";
-  item: LocalSkill | LocalMcpServer;
-  usingAgents: { id: string; name: string }[];
-}
-
-// ── Category / type colour map ──────────────────────────────────────────────
-const categoryColors: Record<string, string> = {
-  "前端": "bg-primary/10 text-primary-fg border-primary/20",
-  "后端": "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  "数据": "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  "安全": "bg-danger/10 text-danger-fg border-danger/20",
-  "运维": "bg-warning/10 text-warning-fg border-warning/20",
-  "文档": "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  "性能": "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  "质量": "bg-teal-500/10 text-teal-400 border-teal-500/20",
-  "设计": "bg-pink-500/10 text-pink-400 border-pink-500/20",
-  "存储": "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  "代码": "bg-accent/10 text-accent-fg border-accent/20",
-  "数据库": "bg-success/10 text-success-fg border-success/20",
-  "服务": "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  "CI/CD": "bg-lime-500/10 text-lime-400 border-lime-500/20",
-  sse: "bg-success/10 text-success-fg border-success/20",
-  http: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  streamable_http: "bg-accent/10 text-accent-fg border-accent/20",
+  id: string;
+  usingAgents: UsingAgent[];
 };
 
-const getCategoryColor = (cat: string) =>
-  categoryColors[cat] || "bg-fg-faint/10 text-fg-subtle border-line-strong/20";
-
-// 分类数据值为中文（存库），显示层通过此映射转为翻译 key
+// 分类数据值为中文(存库),显示层通过此映射转为翻译 key
 const categoryKeyMap: Record<string, string> = {
   "前端": "frontend",
   "后端": "backend",
@@ -77,10 +67,29 @@ const categoryKeyMap: Record<string, string> = {
   "服务": "service",
 };
 
+// 表单区内的 danger 提示条(alert 的替代)
+function FormErrorStrip({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 bg-danger/10 border border-danger/30 rounded-[var(--radius-control)] px-3 py-2.5 text-sm text-danger-fg"
+    >
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+      <span className="min-w-0 break-all">{message}</span>
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 text-sm text-fg focus:outline-none focus:border-primary transition-colors-fast";
+const textareaCls =
+  "w-full bg-bg border border-line-strong rounded-[var(--radius-control)] px-3 py-2 text-sm text-fg-muted focus:outline-none focus:border-primary transition-colors-fast";
+const labelCls = "block text-sm font-medium text-fg-muted mb-1.5";
+
 // ==========================================
-// Skill 编辑/新增弹窗
+// Skill 内联编辑/新增表单(无遮罩,嵌入卡片或区块顶部)
 // ==========================================
-function SkillEditModal({
+function SkillForm({
   skill,
   onSave,
   onClose,
@@ -89,12 +98,14 @@ function SkillEditModal({
   onSave: (data: LocalSkill) => Promise<void>;
   onClose: () => void;
 }) {
-  const t = useTranslations("skills.skillModal");
+  const t = useTranslations("skills.skillForm");
   const tCat = useTranslations("skills.category");
+  const tErr = useTranslations("skills");
   const [name, setName] = useState(skill?.name || "");
   const [category, setCategory] = useState(skill?.category || "前端");
   const [description, setDescription] = useState(skill?.description || "");
   const [promptTemplate, setPromptTemplate] = useState(skill?.promptTemplate || "");
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const categories = [
@@ -111,6 +122,7 @@ function SkillEditModal({
   const handleSave = async () => {
     if (!name.trim() || saving) return;
     setSaving(true);
+    setError("");
     try {
       await onSave({
         id: skill?.id || "",
@@ -121,109 +133,77 @@ function SkillEditModal({
         promptTemplate: promptTemplate.trim(),
       });
       onClose();
+    } catch (err) {
+      setError(tErr("errSaveSkill") + (err instanceof Error ? err.message : String(err)));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[560px] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line-strong/50 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-fg flex items-center">
-            <Zap className="w-5 h-5 mr-2 text-accent-fg" />
-            {skill ? t("editTitle") : t("addTitle")}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("nameLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-accent"
-              placeholder={t("namePlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("categoryLabel")}
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-accent"
-            >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c ? tCat(categoryKeyMap[c] || c) : tCat("uncategorized")}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("descLabel")}
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-accent resize-none"
-              placeholder={t("descPlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("promptLabel")}
-            </label>
-            <textarea
-              value={promptTemplate}
-              onChange={(e) => setPromptTemplate(e.target.value)}
-              rows={5}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-accent resize-y font-mono"
-              placeholder={t("promptPlaceholder")}
-            />
-          </div>
-        </div>
-        <div className="p-5 border-t border-line-strong/50 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!name.trim() || saving}
-            className="flex items-center px-5 py-2 bg-accent-strong hover:bg-accent text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
-          >
-            <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
-          </button>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <label className={labelCls}>
+          {t("nameLabel")} <span className="text-danger-fg">*</span>
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={inputCls}
+          placeholder={t("namePlaceholder")}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>{t("categoryLabel")}</label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className={`${inputCls} cursor-pointer`}
+        >
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c ? tCat(categoryKeyMap[c] || c) : tCat("uncategorized")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>{t("descLabel")}</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          className={`${textareaCls} resize-none`}
+          placeholder={t("descPlaceholder")}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>{t("promptLabel")}</label>
+        <textarea
+          value={promptTemplate}
+          onChange={(e) => setPromptTemplate(e.target.value)}
+          rows={5}
+          className={`${textareaCls} resize-y font-mono`}
+          placeholder={t("promptPlaceholder")}
+        />
+      </div>
+      {error && <FormErrorStrip message={error} />}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          {t("cancel")}
+        </Button>
+        <Button variant="primary" onClick={handleSave} disabled={!name.trim()} loading={saving}>
+          {saving ? t("saving") : t("save")}
+        </Button>
       </div>
     </div>
   );
 }
 
 // ==========================================
-// MCP 编辑/新增弹窗
+// MCP 内联编辑/新增表单(无遮罩,嵌入卡片或区块顶部)
 // ==========================================
-function McpEditModal({
+function McpForm({
   mcp,
   onSave,
   onClose,
@@ -232,7 +212,8 @@ function McpEditModal({
   onSave: (data: LocalMcpServer) => Promise<void>;
   onClose: () => void;
 }) {
-  const t = useTranslations("skills.mcpModal");
+  const t = useTranslations("skills.mcpForm");
+  const tErr = useTranslations("skills");
   const [name, setName] = useState(mcp?.name || "");
   const [url, setUrl] = useState(mcp?.url || "");
   const [type, setType] = useState<McpServerType>(mcp?.type || "sse");
@@ -273,127 +254,137 @@ function McpEditModal({
         status,
       });
       onClose();
+    } catch (err) {
+      setError(tErr("errSaveMcp") + (err instanceof Error ? err.message : String(err)));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[560px] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-line-strong/50 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-fg flex items-center">
-            <Database className="w-5 h-5 mr-2 text-success-fg" />
-            {mcp ? t("editTitle") : t("addTitle")}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-surface-3 rounded-lg text-fg-subtle hover:text-fg"
+    <div className="space-y-4">
+      <div>
+        <label className={labelCls}>
+          {t("nameLabel")} <span className="text-danger-fg">*</span>
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={inputCls}
+          placeholder={t("namePlaceholder")}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>
+          {t("urlLabel")} <span className="text-danger-fg">*</span>
+        </label>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className={`${inputCls} font-mono`}
+          placeholder="https://mcp.example.com/sse"
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className={labelCls}>{t("typeLabel")}</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as McpServerType)}
+            className={`${inputCls} cursor-pointer`}
           >
-            <X className="w-5 h-5" />
-          </button>
+            <option value="sse">SSE</option>
+            <option value="http">HTTP</option>
+            <option value="streamable_http">Streamable HTTP</option>
+          </select>
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("nameLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
-              placeholder={t("namePlaceholder")}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("urlLabel")} <span className="text-danger-fg">*</span>
-            </label>
-            <input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success font-mono text-sm"
-              placeholder="https://mcp.example.com/sse"
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1.5">
-                {t("typeLabel")}
-              </label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as McpServerType)}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
-              >
-                <option value="sse">SSE</option>
-                <option value="http">HTTP</option>
-                <option value="streamable_http">Streamable HTTP</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1.5">
-                {t("authLabel")}
-              </label>
-              <select
-                value={authType}
-                onChange={(e) => setAuthType(e.target.value as McpAuthType)}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
-              >
-                <option value="none">{t("authNone")}</option>
-                <option value="api_key">API Key</option>
-                <option value="oauth">OAuth</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1.5">
-                {t("statusLabel")}
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-fg focus:outline-none focus:border-success"
-              >
-                <option value="active">{t("statusActive")}</option>
-                <option value="inactive">{t("statusInactive")}</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1.5">
-              {t("envLabel")}
-            </label>
-            <textarea
-              value={envVarsText}
-              onChange={(e) => setEnvVarsText(e.target.value)}
-              rows={5}
-              className="w-full bg-bg border border-line-strong rounded-lg px-4 py-2.5 text-sm text-fg-muted focus:outline-none focus:border-success resize-y font-mono"
-              placeholder={'{"API_KEY":"..."}'}
-            />
-            {error && <p className="text-xs text-danger-fg mt-2">{error}</p>}
-          </div>
-        </div>
-        <div className="p-5 border-t border-line-strong/50 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
+        <div>
+          <label className={labelCls}>{t("authLabel")}</label>
+          <select
+            value={authType}
+            onChange={(e) => setAuthType(e.target.value as McpAuthType)}
+            className={`${inputCls} cursor-pointer`}
           >
-            {t("cancel")}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!name.trim() || !url.trim() || saving}
-            className="flex items-center px-5 py-2 bg-success-strong hover:bg-success text-fg rounded-lg text-sm font-medium disabled:opacity-50 transition-colors-fast btn-press"
-          >
-            <Save className="w-4 h-4 mr-2" /> {saving ? t("saving") : t("save")}
-          </button>
+            <option value="none">{t("authNone")}</option>
+            <option value="api_key">API Key</option>
+            <option value="oauth">OAuth</option>
+          </select>
         </div>
+        <div>
+          <label className={labelCls}>{t("statusLabel")}</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className={`${inputCls} cursor-pointer`}
+          >
+            <option value="active">{t("statusActive")}</option>
+            <option value="inactive">{t("statusInactive")}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>{t("envLabel")}</label>
+        <textarea
+          value={envVarsText}
+          onChange={(e) => setEnvVarsText(e.target.value)}
+          rows={5}
+          className={`${textareaCls} resize-y font-mono`}
+          placeholder={'{"API_KEY":"..."}'}
+        />
+      </div>
+      {error && <FormErrorStrip message={error} />}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          {t("cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          onClick={handleSave}
+          disabled={!name.trim() || !url.trim()}
+          loading={saving}
+        >
+          {saving ? t("saving") : t("save")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 删除被占用时的原位提示(展示占用代理名单)
+// ==========================================
+function UsingAgentsPanel({
+  itemName,
+  usingAgents,
+  onAcknowledge,
+}: {
+  itemName: string;
+  usingAgents: UsingAgent[];
+  onAcknowledge: () => void;
+}) {
+  const t = useTranslations("skills");
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-sm font-semibold text-warning-fg mb-1.5">
+        <AlertTriangle className="w-4 h-4" /> {t("cannotDelete")}
+      </div>
+      <p className="text-xs text-fg-subtle mb-3">
+        <span className="font-medium text-fg">{itemName}</span> {t("inUseByAgents")}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {usingAgents.map((a) => (
+          <span
+            key={a.id}
+            className="inline-flex items-center gap-1.5 bg-surface-2 border border-line rounded-[var(--radius-control)] px-2 py-1 text-xs text-fg-muted"
+          >
+            <Zap className="w-3 h-3 text-primary-fg shrink-0" /> {a.name}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3">
+        <Button variant="secondary" size="sm" onClick={onAcknowledge}>
+          {t("acknowledge")}
+        </Button>
       </div>
     </div>
   );
@@ -405,6 +396,7 @@ function McpEditModal({
 export default function SkillsPage() {
   const t = useTranslations("skills");
   const tCat = useTranslations("skills.category");
+  const tCommon = useTranslations("common");
   const skills = useAppStore((s) => s.skills) as unknown as LocalSkill[];
   const setSkills = useAppStore((s) => s.setSkills) as unknown as (
     v: LocalSkill[] | ((prev: LocalSkill[]) => LocalSkill[])
@@ -416,125 +408,110 @@ export default function SkillsPage() {
   const agents = useAppStore((s) => s.agents);
   const workspaceId = useAppStore((s) => s.currentWorkspaceId) || "";
 
-  const [activeTab, setActiveTab] = useState<"skills" | "mcp">("skills");
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingSkill, setEditingSkill] = useState<LocalSkill | null>(null);
-  const [editingMcp, setEditingMcp] = useState<LocalMcpServer | null>(null);
-  const [showAddSkill, setShowAddSkill] = useState(false);
-  const [showAddMcp, setShowAddMcp] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(
-    null
-  );
+  const [formState, setFormState] = useState<EditFormState | null>(null);
+  const [blockedDelete, setBlockedDelete] = useState<BlockedDeleteState | null>(null);
+  const [listError, setListError] = useState("");
 
-  // 计算哪些 skill/mcp 正在被代理使用
-  const usedSkillNames = new Set(agents.flatMap((a) => a.skills?.map((s) => s.name) || []));
-  const usedMcpNames = new Set(agents.flatMap((a) => a.mcpServers?.map((m) => m.name) || []));
+  // 计算某个 skill/mcp 正在被哪些代理使用
+  const skillUsingAgents = (skill: LocalSkill) =>
+    agents.filter((a) => a.skills?.some((s) => s.name === skill.name));
+  const mcpUsingAgents = (mcp: LocalMcpServer) =>
+    agents.filter((a) => a.mcpServers?.some((m) => m.name === mcp.name));
 
   const handleSaveSkill = async (skillData: LocalSkill) => {
-    try {
-      const payload = {
-        name: skillData.name,
-        category: skillData.category,
-        description: skillData.description,
-        prompt_template: skillData.promptTemplate,
-      };
-      const saved = skillData.id
-        ? await api.updateSkill(workspaceId, skillData.id, payload)
-        : await api.createSkill(workspaceId, payload);
-      const mapped = mapSkillFromApi(saved);
-      setSkills((prev: LocalSkill[]) => {
-        const exists = prev.some((s) => s.id === mapped.id);
-        return exists
-          ? prev.map((s) => (s.id === mapped.id ? mapped : s))
-          : [...prev, mapped];
-      });
-    } catch (err) {
-      alert(t("errSaveSkill") + (err instanceof Error ? err.message : String(err)));
-      throw err;
-    }
+    const payload = {
+      name: skillData.name,
+      category: skillData.category,
+      description: skillData.description,
+      prompt_template: skillData.promptTemplate,
+    };
+    const saved = skillData.id
+      ? await api.updateSkill(workspaceId, skillData.id, payload)
+      : await api.createSkill(workspaceId, payload);
+    const mapped = mapSkillFromApi(saved);
+    setSkills((prev: LocalSkill[]) => {
+      const exists = prev.some((s) => s.id === mapped.id);
+      return exists
+        ? prev.map((s) => (s.id === mapped.id ? mapped : s))
+        : [...prev, mapped];
+    });
   };
 
   const handleSaveMcp = async (mcpData: LocalMcpServer) => {
-    try {
-      const payload = {
-        name: mcpData.name,
-        url: mcpData.url,
-        type: mcpData.type,
-        auth_type: mcpData.authType,
-        env_vars: mcpData.envVars,
-        status: mcpData.status,
-      };
-      const saved = mcpData.id
-        ? await api.updateMcpServer(workspaceId, mcpData.id, payload)
-        : await api.createMcpServer(workspaceId, payload);
-      const mapped = mapMcpServerFromApi(saved);
-      setMcpServers((prev: LocalMcpServer[]) => {
-        const exists = prev.some((m) => m.id === mapped.id);
-        return exists
-          ? prev.map((m) => (m.id === mapped.id ? mapped : m))
-          : [...prev, mapped];
-      });
-    } catch (err) {
-      alert(t("errSaveMcp") + (err instanceof Error ? err.message : String(err)));
-      throw err;
-    }
+    const payload = {
+      name: mcpData.name,
+      url: mcpData.url,
+      type: mcpData.type,
+      auth_type: mcpData.authType,
+      env_vars: mcpData.envVars,
+      status: mcpData.status,
+    };
+    const saved = mcpData.id
+      ? await api.updateMcpServer(workspaceId, mcpData.id, payload)
+      : await api.createMcpServer(workspaceId, payload);
+    const mapped = mapMcpServerFromApi(saved);
+    setMcpServers((prev: LocalMcpServer[]) => {
+      const exists = prev.some((m) => m.id === mapped.id);
+      return exists
+        ? prev.map((m) => (m.id === mapped.id ? mapped : m))
+        : [...prev, mapped];
+    });
   };
 
   const handleDeleteSkill = async (id: string) => {
     const skill = skills.find((s) => s.id === id);
     if (!skill) return;
-    const usingAgents = agents.filter((a) =>
-      a.skills?.some((s) => s.name === skill.name)
-    );
+    const usingAgents = skillUsingAgents(skill);
     if (usingAgents.length > 0) {
-      setDeleteConfirm({
+      setBlockedDelete({
         type: "skill",
-        item: skill,
+        id,
         usingAgents: usingAgents.map((a) => ({ id: a.id, name: a.name })),
       });
       return;
     }
+    setListError("");
     try {
       await api.deleteSkill(workspaceId, id);
       setSkills((prev: LocalSkill[]) => prev.filter((s) => s.id !== id));
     } catch (err) {
-      alert(t("errDeleteSkill") + (err instanceof Error ? err.message : String(err)));
+      setListError(t("errDeleteSkill") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
   const handleDeleteMcp = async (id: string) => {
     const mcp = mcpServers.find((m) => m.id === id);
     if (!mcp) return;
-    const usingAgents = agents.filter((a) =>
-      a.mcpServers?.some((m) => m.name === mcp.name)
-    );
+    const usingAgents = mcpUsingAgents(mcp);
     if (usingAgents.length > 0) {
-      setDeleteConfirm({
+      setBlockedDelete({
         type: "mcp",
-        item: mcp,
+        id,
         usingAgents: usingAgents.map((a) => ({ id: a.id, name: a.name })),
       });
       return;
     }
+    setListError("");
     try {
       await api.deleteMcpServer(workspaceId, id);
       setMcpServers((prev: LocalMcpServer[]) => prev.filter((m) => m.id !== id));
     } catch (err) {
-      // 服务端权威判定：仍被绑定时以 409 返回占用代理名单
+      // 服务端权威判定:仍被绑定时以 409 返回占用代理名单
       if (err instanceof ApiError && err.status === 409) {
         const names = Array.isArray((err.body as { agents?: unknown } | null)?.agents)
           ? ((err.body as { agents: string[] }).agents)
           : [];
         if (names.length > 0) {
-          setDeleteConfirm({
+          setBlockedDelete({
             type: "mcp",
-            item: mcp,
+            id,
             usingAgents: names.map((name, i) => ({ id: `bound-${i}-${name}`, name })),
           });
           return;
         }
       }
-      alert(t("errDeleteMcp") + (err instanceof Error ? err.message : String(err)));
+      setListError(t("errDeleteMcp") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -549,11 +526,11 @@ export default function SkillsPage() {
         prev.map((m) => (m.id === mapped.id ? mapped : m))
       );
     } catch (err) {
-      alert(t("errToggleMcp") + (err instanceof Error ? err.message : String(err)));
+      setListError(t("errToggleMcp") + (err instanceof Error ? err.message : String(err)));
     }
   };
 
-  // 过滤
+  // 过滤(单个搜索框同时作用于两个区块)
   const filteredSkills = skills.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -570,24 +547,22 @@ export default function SkillsPage() {
   const mcpTypes = [...new Set(mcpServers.map((m) => m.type))];
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto page-enter">
-      {/* 头部 */}
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-fg mb-1">
-            {t("title")}
-          </h1>
-          <p className="text-sm text-fg-subtle">
-            {t("subtitle")}
-          </p>
-        </div>
-      </div>
+    <div className="h-full flex flex-col overflow-y-auto page-enter">
+      <PageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button variant="primary" size="lg" onClick={() => setFormState({ kind: "skill-add" })}>
+            <Plus className="w-4 h-4 mr-1.5" /> {t("addSkill")}
+          </Button>
+        }
+      />
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
-        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+      <div className="px-6 mb-5 grid grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
+        <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <Zap className="w-5 h-5 text-accent-fg" />
+            <Zap className="w-4 h-4 text-fg-subtle" />
             <span className="text-xs text-fg-faint">{t("skillsLabel")}</span>
           </div>
           <div className="text-2xl font-bold text-fg">{skills.length}</div>
@@ -595,21 +570,19 @@ export default function SkillsPage() {
             {t("categoryCount", { count: skillCategories.length })}
           </div>
         </div>
-        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <Database className="w-5 h-5 text-success-fg" />
+            <Database className="w-4 h-4 text-fg-subtle" />
             <span className="text-xs text-fg-faint">MCP</span>
           </div>
-          <div className="text-2xl font-bold text-fg">
-            {mcpServers.length}
-          </div>
+          <div className="text-2xl font-bold text-fg">{mcpServers.length}</div>
           <div className="text-xs text-fg-faint mt-1">
             {t("enabledCount", { count: mcpServers.filter((m) => m.status === "active").length })}
           </div>
         </div>
-        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <Wifi className="w-5 h-5 text-primary-fg" />
+            <Wifi className="w-4 h-4 text-fg-subtle" />
             <span className="text-xs text-fg-faint">{t("mcpStatusLabel")}</span>
           </div>
           <div className="text-2xl font-bold text-fg">
@@ -619,9 +592,9 @@ export default function SkillsPage() {
             {t("disabledCount", { count: mcpServers.filter((m) => m.status !== "active").length })}
           </div>
         </div>
-        <div className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover">
+        <div className="bg-surface-2/40 border border-line rounded-[var(--radius-card)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <Tag className="w-5 h-5 text-warning-fg" />
+            <Tag className="w-4 h-4 text-fg-subtle" />
             <span className="text-xs text-fg-faint">{t("categoryTab")}</span>
           </div>
           <div className="text-2xl font-bold text-fg">
@@ -631,310 +604,297 @@ export default function SkillsPage() {
         </div>
       </div>
 
-      {/* Tab 切换 + 搜索 + 添加 */}
-      <div className="flex items-center gap-4 mb-6 shrink-0">
-        <div className="flex bg-surface-2/60 border border-line-strong/50 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setActiveTab("skills")}
-            className={`flex items-center px-4 py-2 text-sm font-medium transition-colors-fast ${
-              activeTab === "skills"
-                ? "bg-accent-strong/20 text-accent-fg"
-                : "text-fg-subtle hover:text-fg"
-            }`}
-          >
-            <Zap className="w-4 h-4 mr-2" /> {t("tabSkills", { count: skills.length })}
-          </button>
-          <button
-            onClick={() => setActiveTab("mcp")}
-            className={`flex items-center px-4 py-2 text-sm font-medium transition-colors-fast ${
-              activeTab === "mcp"
-                ? "bg-success-strong/20 text-success-fg"
-                : "text-fg-subtle hover:text-fg"
-            }`}
-          >
-            <Database className="w-4 h-4 mr-2" /> {t("tabMcp", { count: mcpServers.length })}
-          </button>
-        </div>
-
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint" />
+      {/* 搜索(两个区块共用) */}
+      <div className="px-6 mb-5 shrink-0">
+        <div className="relative max-w-xl">
+          <Search className="w-4 h-4 text-fg-faint absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-2/60 border border-line-strong/50 rounded-lg pl-10 pr-4 py-2 text-sm text-fg focus:outline-none focus:border-line-strong"
-            placeholder={
-              activeTab === "skills"
-                ? t("searchSkillsPlaceholder")
-                : t("searchMcpPlaceholder")
-            }
+            className="w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] pl-9 pr-3 text-sm text-fg focus:outline-none focus:border-primary transition-colors-fast"
+            placeholder={t("searchPlaceholder")}
           />
         </div>
-
-        <button
-          onClick={() =>
-            activeTab === "skills" ? setShowAddSkill(true) : setShowAddMcp(true)
-          }
-          className="flex items-center px-4 py-2 bg-primary-strong hover:bg-primary text-fg rounded-lg font-medium transition-colors-fast btn-press shadow-lg shadow-primary/20 text-sm shrink-0"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {activeTab === "skills" ? t("addSkill") : t("addMcp")}
-        </button>
       </div>
 
-      {/* Skills 列表 */}
-      {activeTab === "skills" && (
-        <div className="space-y-3">
-          {filteredSkills.map((skill) => {
-            const isUsed = usedSkillNames.has(skill.name);
-            const usingAgentCount = agents.filter((a) =>
-              a.skills?.some((s) => s.name === skill.name)
-            ).length;
-            return (
-              <div
-                key={skill.id}
-                className="bg-surface-2/40 border border-line-strong/60 rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-primary/5 hover:border-line-strong/60"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${getCategoryColor(skill.category)} border`}
-                    >
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-fg">
-                          {skill.name}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 text-[10px] rounded-full border ${getCategoryColor(skill.category)}`}
-                        >
-                          {skill.category
-                            ? tCat(categoryKeyMap[skill.category] || skill.category)
-                            : tCat("uncategorized")}
-                        </span>
-                        {isUsed && (
-                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/10 text-primary-fg border border-primary/20">
-                            {t("usedByAgents", { count: usingAgentCount })}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-fg-faint mt-1 truncate">
-                        {skill.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
-                    <button
-                      onClick={() => setEditingSkill(skill)}
-                      className="p-1.5 rounded-lg text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSkill(skill.id)}
-                      className="p-1.5 rounded-lg text-fg-subtle hover:text-danger-fg hover:bg-danger/10 transition-colors-fast"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {filteredSkills.length === 0 && (
-            <div>
-              <div className="text-center py-8 text-fg-faint">
-                <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p>{t("noSkillMatch")}</p>
-              </div>
-              <EmptyStateGuide page="skills" />
-            </div>
-          )}
+      {/* 删除/启停失败提示条 */}
+      {listError && (
+        <div
+          role="alert"
+          className="mx-6 mb-5 flex items-start justify-between gap-3 bg-danger/10 border border-danger/30 rounded-[var(--radius-card)] px-4 py-3 text-sm text-danger-fg shrink-0"
+        >
+          <span className="flex items-start gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="min-w-0 break-all">{listError}</span>
+          </span>
+          <button
+            onClick={() => setListError("")}
+            aria-label={tCommon("close")}
+            className="text-danger-fg hover:text-fg transition-colors-fast shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* MCP 列表 */}
-      {activeTab === "mcp" && (
+      {/* Skill 区块 */}
+      <section className="px-6 pb-6">
+        <SectionHeader title={t("tabSkills", { count: skills.length })} className="mb-3" />
+
+        {formState?.kind === "skill-add" && (
+          <div className="bg-surface border border-line rounded-[var(--radius-card)] p-4 mb-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-fg mb-4">
+              <Zap className="w-4 h-4 text-primary-fg" /> {t("skillForm.addTitle")}
+            </h3>
+            <SkillForm onSave={handleSaveSkill} onClose={() => setFormState(null)} />
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {filteredSkills.map((skill) => {
+            const usingAgents = skillUsingAgents(skill);
+            const editing =
+              formState?.kind === "skill-edit" && formState.skill.id === skill.id;
+            const blocked =
+              blockedDelete?.type === "skill" && blockedDelete.id === skill.id;
+            return (
+              <div
+                key={skill.id}
+                className="bg-surface border border-line rounded-[var(--radius-card)] transition-colors-fast hover:border-line-strong"
+              >
+                <div className="p-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-9 h-9 rounded-[var(--radius-control)] bg-surface-2 border border-line flex items-center justify-center shrink-0">
+                      <Zap className="w-4 h-4 text-fg-subtle" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-fg">{skill.name}</span>
+                        <StatusBadge tone="neutral">
+                          {skill.category
+                            ? tCat(categoryKeyMap[skill.category] || skill.category)
+                            : tCat("uncategorized")}
+                        </StatusBadge>
+                        {usingAgents.length > 0 && (
+                          <StatusBadge tone="neutral">
+                            {t("usedByAgents", { count: usingAgents.length })}
+                          </StatusBadge>
+                        )}
+                      </div>
+                      {skill.description && (
+                        <p className="text-xs text-fg-faint mt-1 truncate">{skill.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setFormState({ kind: "skill-edit", skill })}
+                      title={t("skillForm.editTitle")}
+                      aria-label={t("skillForm.editTitle")}
+                      className="p-1.5 rounded-[var(--radius-control)] text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {usingAgents.length > 0 ? (
+                      // 被占用的实体删除必然失败:单击直接展开占用代理名单,不进入确认态
+                      <Button
+                        variant="danger-ghost"
+                        size="sm"
+                        onClick={() => handleDeleteSkill(skill.id)}
+                      >
+                        <Trash2 className="w-3 h-3" /> {tCommon("delete")}
+                      </Button>
+                    ) : (
+                      <InlineConfirm
+                        label={
+                          <>
+                            <Trash2 className="w-3 h-3" /> {tCommon("delete")}
+                          </>
+                        }
+                        onConfirm={() => handleDeleteSkill(skill.id)}
+                        confirmLabel={tCommon("confirm")}
+                        cancelLabel={tCommon("cancel")}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {editing && (
+                  <div className="border-t border-line px-4 py-4">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-fg mb-4">
+                      <Zap className="w-4 h-4 text-primary-fg" /> {t("skillForm.editTitle")}
+                    </h3>
+                    <SkillForm
+                      skill={skill}
+                      onSave={handleSaveSkill}
+                      onClose={() => setFormState(null)}
+                    />
+                  </div>
+                )}
+
+                {blocked && blockedDelete && (
+                  <div className="border-t border-line px-4 py-4">
+                    <UsingAgentsPanel
+                      itemName={skill.name}
+                      usingAgents={blockedDelete.usingAgents}
+                      onAcknowledge={() => setBlockedDelete(null)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredSkills.length === 0 && (
+          <div>
+            <EmptyState icon={Zap} title={t("noSkillMatch")} />
+            <div className="max-w-2xl mx-auto">
+              <EmptyStateGuide page="skills" />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* MCP 区块 */}
+      <section className="px-6 pb-8">
+        <SectionHeader
+          title={t("tabMcp", { count: mcpServers.length })}
+          className="mb-3"
+          actions={
+            <Button variant="secondary" size="sm" onClick={() => setFormState({ kind: "mcp-add" })}>
+              <Plus className="w-3.5 h-3.5" /> {t("addMcp")}
+            </Button>
+          }
+        />
+
+        {formState?.kind === "mcp-add" && (
+          <div className="bg-surface border border-line rounded-[var(--radius-card)] p-4 mb-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-fg mb-4">
+              <Server className="w-4 h-4 text-primary-fg" /> {t("mcpForm.addTitle")}
+            </h3>
+            <McpForm onSave={handleSaveMcp} onClose={() => setFormState(null)} />
+          </div>
+        )}
+
         <div className="space-y-3">
           {filteredMcps.map((mcp) => {
-            const isUsed = usedMcpNames.has(mcp.name);
-            const usingAgentCount = agents.filter((a) =>
-              a.mcpServers?.some((m) => m.name === mcp.name)
-            ).length;
+            const usingAgents = mcpUsingAgents(mcp);
+            const editing = formState?.kind === "mcp-edit" && formState.mcp.id === mcp.id;
+            const blocked = blockedDelete?.type === "mcp" && blockedDelete.id === mcp.id;
             return (
               <div
                 key={mcp.id}
-                className={`bg-surface-2/40 border rounded-xl p-4 backdrop-blur-sm card-hover transition-colors-normal hover:shadow-lg hover:shadow-primary/5 ${
-                  mcp.status === "active"
-                    ? "border-line-strong/60 hover:border-line-strong/60"
-                    : "border-line-strong/30 opacity-60"
+                className={`bg-surface border rounded-[var(--radius-card)] transition-colors-fast hover:border-line-strong ${
+                  mcp.status === "active" ? "border-line" : "border-line opacity-60"
                 }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="p-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${getCategoryColor(mcp.type)} border`}
-                    >
-                      <Server className="w-5 h-5" />
+                    <div className="w-9 h-9 rounded-[var(--radius-control)] bg-surface-2 border border-line flex items-center justify-center shrink-0">
+                      <Server className="w-4 h-4 text-fg-subtle" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-fg">
-                          {mcp.name}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 text-[10px] rounded-full border ${getCategoryColor(mcp.type)}`}
-                        >
-                          {mcp.type}
-                        </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-fg">{mcp.name}</span>
+                        <StatusBadge tone="primary">{mcp.type}</StatusBadge>
                         {mcp.status === "active" ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-success/10 text-success-fg border border-success/20">
-                            <Wifi className="w-3 h-3" /> {t("statusActive")}
-                          </span>
+                          <StatusBadge tone="success" dot>{t("statusActive")}</StatusBadge>
                         ) : (
-                          <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-fg-faint/10 text-fg-faint border border-line-strong/20">
-                            <WifiOff className="w-3 h-3" /> {t("statusInactive")}
-                          </span>
+                          <StatusBadge tone="neutral" dot>{t("statusInactive")}</StatusBadge>
                         )}
-                        {isUsed && (
-                          <span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/10 text-primary-fg border border-primary/20">
-                            {t("usedByAgents", { count: usingAgentCount })}
-                          </span>
+                        {usingAgents.length > 0 && (
+                          <StatusBadge tone="neutral">
+                            {t("usedByAgents", { count: usingAgents.length })}
+                          </StatusBadge>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <p className="text-xs text-fg-faint truncate">
-                          {mcp.authType}
-                        </p>
-                        <code className="text-[10px] text-fg-faint font-mono shrink-0">
+                      <div className="flex items-center gap-3 mt-1 min-w-0">
+                        <span className="text-xs text-fg-faint shrink-0">{mcp.authType}</span>
+                        <code className="text-[10px] text-fg-faint font-mono truncate">
                           {mcp.url}
                         </code>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => handleToggleMcp(mcp.id)}
-                      className={`p-1.5 rounded-lg transition-colors-fast ${mcp.status === "active" ? "text-success-fg hover:bg-success/10" : "text-fg-faint hover:bg-surface-3"}`}
                       title={mcp.status === "active" ? t("clickToDisable") : t("clickToEnable")}
+                      aria-label={mcp.status === "active" ? t("clickToDisable") : t("clickToEnable")}
+                      className={`p-1.5 rounded-[var(--radius-control)] transition-colors-fast ${
+                        mcp.status === "active"
+                          ? "text-success-fg hover:bg-success/10"
+                          : "text-fg-faint hover:bg-surface-2"
+                      }`}
                     >
                       {mcp.status === "active" ? (
-                        <ToggleRight className="w-6 h-6" />
+                        <ToggleRight className="w-5 h-5" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6" />
+                        <ToggleLeft className="w-5 h-5" />
                       )}
                     </button>
                     <button
-                      onClick={() => setEditingMcp(mcp)}
-                      className="p-1.5 rounded-lg text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
+                      onClick={() => setFormState({ kind: "mcp-edit", mcp })}
+                      title={t("mcpForm.editTitle")}
+                      aria-label={t("mcpForm.editTitle")}
+                      className="p-1.5 rounded-[var(--radius-control)] text-fg-subtle hover:text-primary-fg hover:bg-primary/10 transition-colors-fast"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteMcp(mcp.id)}
-                      className="p-1.5 rounded-lg text-fg-subtle hover:text-danger-fg hover:bg-danger/10 transition-colors-fast"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {usingAgents.length > 0 ? (
+                      // 被占用的实体删除必然失败:单击直接展开占用代理名单,不进入确认态
+                      <Button
+                        variant="danger-ghost"
+                        size="sm"
+                        onClick={() => handleDeleteMcp(mcp.id)}
+                      >
+                        <Trash2 className="w-3 h-3" /> {tCommon("delete")}
+                      </Button>
+                    ) : (
+                      <InlineConfirm
+                        label={
+                          <>
+                            <Trash2 className="w-3 h-3" /> {tCommon("delete")}
+                          </>
+                        }
+                        onConfirm={() => handleDeleteMcp(mcp.id)}
+                        confirmLabel={tCommon("confirm")}
+                        cancelLabel={tCommon("cancel")}
+                      />
+                    )}
                   </div>
                 </div>
+
+                {editing && (
+                  <div className="border-t border-line px-4 py-4">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-fg mb-4">
+                      <Server className="w-4 h-4 text-primary-fg" /> {t("mcpForm.editTitle")}
+                    </h3>
+                    <McpForm
+                      mcp={mcp}
+                      onSave={handleSaveMcp}
+                      onClose={() => setFormState(null)}
+                    />
+                  </div>
+                )}
+
+                {blocked && blockedDelete && (
+                  <div className="border-t border-line px-4 py-4">
+                    <UsingAgentsPanel
+                      itemName={mcp.name}
+                      usingAgents={blockedDelete.usingAgents}
+                      onAcknowledge={() => setBlockedDelete(null)}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
-          {filteredMcps.length === 0 && (
-            <div className="text-center py-12 text-fg-faint">
-              <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>{t("noMcpMatch")}</p>
-            </div>
-          )}
         </div>
-      )}
 
-      {/* 删除确认弹窗 */}
-      {deleteConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center modal-overlay"
-          onClick={() => setDeleteConfirm(null)}
-        >
-          <div
-            className="modal-content bg-surface/95 backdrop-blur-xl border border-line-strong/60 rounded-2xl w-[440px] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5 border-b border-line-strong/50 flex items-center">
-              <AlertTriangle className="w-5 h-5 text-warning-fg mr-2" />
-              <h2 className="text-lg font-bold text-fg">{t("cannotDelete")}</h2>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-fg-muted mb-3">
-                <span className="font-medium text-fg">
-                  {deleteConfirm.item.name}
-                </span>{" "}
-                {t("inUseByAgents")}
-              </p>
-              <div className="space-y-2">
-                {deleteConfirm.usingAgents.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center gap-2 bg-surface-2/60 border border-line-strong/50 rounded-lg p-2.5"
-                  >
-                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                      <Zap className="w-3.5 h-3.5 text-primary-fg" />
-                    </div>
-                    <span className="text-sm text-fg font-medium">
-                      {a.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="p-5 border-t border-line-strong/50 flex justify-end">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 rounded-lg transition-colors-fast"
-              >
-                {t("acknowledge")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 编辑弹窗 */}
-      {editingSkill && (
-        <ModalPortal>
-        <SkillEditModal
-          skill={editingSkill}
-          onSave={handleSaveSkill}
-          onClose={() => setEditingSkill(null)}
-        />
-        </ModalPortal>
-      )}
-      {editingMcp && (
-        <ModalPortal>
-        <McpEditModal
-          mcp={editingMcp}
-          onSave={handleSaveMcp}
-          onClose={() => setEditingMcp(null)}
-        />
-        </ModalPortal>
-      )}
-      {showAddSkill && (
-        <ModalPortal>
-        <SkillEditModal
-          onSave={handleSaveSkill}
-          onClose={() => setShowAddSkill(false)}
-        />
-        </ModalPortal>
-      )}
-      {showAddMcp && (
-        <ModalPortal>
-        <McpEditModal
-          onSave={handleSaveMcp}
-          onClose={() => setShowAddMcp(false)}
-        />
-        </ModalPortal>
-      )}
+        {filteredMcps.length === 0 && <EmptyState icon={Database} title={t("noMcpMatch")} />}
+      </section>
     </div>
   );
 }

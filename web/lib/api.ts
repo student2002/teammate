@@ -58,6 +58,19 @@ async function request<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+// 工作区集成视图(IntegrationView 平铺字段)+ 所属工程名;用于触发/动作节点的集成下拉
+export interface WorkspaceIntegration {
+  id: string;
+  name: string;
+  provider: string;
+  status: string;
+  repo_owner: string;
+  repo_name: string;
+  pat_masked: string;
+  project_id: string;
+  project_name: string;
+}
+
 const api = {
   // 认证
   login: (email: string, password: string) =>
@@ -97,15 +110,33 @@ const api = {
   deleteProject: (wsId: string, id: string) =>
     request("DELETE", `/workspaces/${wsId}/projects/${id}`),
 
-  // 工作流
+  // 工作流(整图)
   listWorkflows: (wsId: string) =>
     request("GET", `/workspaces/${wsId}/workflows`),
+  getWorkflow: (wsId: string, id: string) =>
+    request("GET", `/workspaces/${wsId}/workflows/${id}`),
   createWorkflow: (wsId: string, data: Record<string, unknown>) =>
     request("POST", `/workspaces/${wsId}/workflows`, data),
   updateWorkflow: (wsId: string, id: string, data: Record<string, unknown>) =>
     request("PUT", `/workspaces/${wsId}/workflows/${id}`, data),
   deleteWorkflow: (wsId: string, id: string) =>
     request("DELETE", `/workspaces/${wsId}/workflows/${id}`),
+  // 工作区全部集成(含所属工程名),供工作流节点的集成下拉使用
+  listWorkspaceIntegrations: (wsId: string) =>
+    request<{ integrations: WorkspaceIntegration[] }>(
+      "GET",
+      `/workspaces/${wsId}/integrations`
+    ),
+  // 节点类型目录(GET /api/workflow-node-types)
+  listWorkflowNodeTypes: () => request("GET", "/workflow-node-types"),
+  // 手动运行模板(模板停用时 409)
+  runWorkflowTemplate: (projectId: string, templateId: string, data: { input?: Record<string, unknown>; title?: string }) =>
+    request<{ task_id: number; title: string }>("POST", `/projects/${projectId}/workflows/${templateId}/runs`, data),
+  // 运行视图数据源(任务全图 + 尝试历史 + 边 resolution)
+  getTaskGraph: (taskId: number) => request("GET", `/tasks/${taskId}/graph`),
+  // human.input 节点人工提交(action: submitted/cancelled)
+  submitHumanInput: (taskId: number, nodeId: string, data: { action: "submitted" | "cancelled"; data?: Record<string, unknown> }) =>
+    request("POST", `/tasks/${taskId}/nodes/${nodeId}/submit`, data),
 
   // 代理
   listAgents: (wsId: string) =>
@@ -207,34 +238,6 @@ const api = {
   deleteTask: (projectId: string, id: number) =>
     request("DELETE", `/projects/${projectId}/tasks/${id}`),
 
-  // 节点操作
-  claimNode: (taskId: number, nodeId: string, data?: Record<string, unknown>) =>
-    request("POST", `/tasks/${taskId}/nodes/${nodeId}/claim`, data),
-  approveNode: (
-    taskId: number,
-    nodeId: string,
-    data?: Record<string, unknown>
-  ) => request("POST", `/tasks/${taskId}/nodes/${nodeId}/approve`, data),
-  rejectNode: (
-    taskId: number,
-    nodeId: string,
-    data?: Record<string, unknown>
-  ) => request("POST", `/tasks/${taskId}/nodes/${nodeId}/reject`, data),
-  manualIntervention: (
-    taskId: number,
-    nodeId: string,
-    data?: Record<string, unknown>
-  ) => request("POST", `/tasks/${taskId}/nodes/${nodeId}/manual`, data),
-  resolveNode: (
-    taskId: number,
-    nodeId: string,
-    data?: Record<string, unknown>
-  ) => request("POST", `/tasks/${taskId}/nodes/${nodeId}/resolve`, data),
-
-  // 节点流转记录
-  getNodeTransitions: (taskId: number, nodeId: string) =>
-    request("GET", `/tasks/${taskId}/nodes/${nodeId}/transitions`),
-
   // 评论
   listComments: (taskId: number, params?: { nodeId?: string; scope?: "task" | "execution_context" }) => {
     const query = new URLSearchParams();
@@ -281,11 +284,17 @@ const api = {
   getBoardData: (projectId: string) =>
     request("GET", `/projects/${projectId}/board`),
 
-  // 审查
-  getReviewQueue: (projectId: string) =>
-    request("GET", `/projects/${projectId}/review/review-queue`),
-  checkSelfReview: (taskId: number, nodeId: string) =>
-    request("GET", `/tasks/${taskId}/review/nodes/${nodeId}/self-review-check`),
+  // 工程 GitHub 集成(PAT/webhook secret 加密存储,响应只带掩码)
+  listIntegrations: (wsId: string, projectId: string) =>
+    request("GET", `/workspaces/${wsId}/projects/${projectId}/integrations/github`),
+  createIntegration: (wsId: string, projectId: string, data: Record<string, unknown>) =>
+    request("POST", `/workspaces/${wsId}/projects/${projectId}/integrations/github`, data),
+  updateIntegration: (wsId: string, projectId: string, integrationId: string, data: Record<string, unknown>) =>
+    request("PUT", `/workspaces/${wsId}/projects/${projectId}/integrations/github/${integrationId}`, data),
+  testIntegration: (wsId: string, projectId: string, integrationId: string) =>
+    request("POST", `/workspaces/${wsId}/projects/${projectId}/integrations/github/${integrationId}/test`),
+  deleteIntegration: (wsId: string, projectId: string, integrationId: string) =>
+    request("DELETE", `/workspaces/${wsId}/projects/${projectId}/integrations/github/${integrationId}`),
 
   // 项目成员
   listProjectMembers: (wsId: string, projectId: string) =>

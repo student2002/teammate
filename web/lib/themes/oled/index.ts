@@ -6,7 +6,7 @@ const oled: ThemeDefinition = {
   id: "oled",
   name: { "zh-CN": "纯黑", "en-US": "OLED Black" },
   icon: "contrast",
-  preview: { bg: "#000000", surface: "#171717", primary: "#3b82f6" },
+  preview: { bg: "#000000", surface: "#0e1116", primary: "#8172f5" },
 };
 
 export default oled;

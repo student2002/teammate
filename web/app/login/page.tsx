@@ -1,12 +1,15 @@
 "use client";
-// 登录/注册页：认证入口与主题切换。
+// 登录/注册页：左侧品牌区（网格背景 + 静态协作链示意），右侧实色表单。
+// 1024px 以下只保留表单与紧凑品牌头；登录、注册、校验、主题切换行为不变。
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/api";
 import ThemeSwitcher from "@/lib/themes/ThemeSwitcher";
+import BrandMark from "@/lib/product/BrandMark";
+import Button from "@/lib/ui/Button";
 import { useAppStore } from "@/lib/store";
 
 export default function LoginPage() {
@@ -74,33 +77,69 @@ export default function LoginPage() {
     }
   };
 
+  const inputClasses =
+    "w-full h-[34px] bg-bg border border-line-strong rounded-[var(--radius-control)] pl-10 pr-4 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-bg via-bg to-primary/20 flex items-center justify-center p-4">
-      {/* 背景装饰 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse-soft" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: "1s" }} />
+    <div className="min-h-screen flex bg-bg">
+      {/* 品牌区：1024px 以上显示 */}
+      <div className="hidden lg:flex lg:w-[45%] min-[1440px]:w-[55%] cockpit-grid border-r border-line relative">
+        <div className="m-auto max-w-md px-10 xl:px-14 py-16 animate-fade-in">
+          <div className="w-12 h-12 rounded-[var(--radius-card)] bg-gradient-to-br from-primary to-accent-strong flex items-center justify-center text-fg">
+            <BrandMark size={26} />
+          </div>
+          <h1 className="mt-6 text-3xl font-bold text-fg">Teammate</h1>
+          <p className="mt-2 text-sm text-fg-subtle">{t("subtitle")}</p>
+          <p className="mt-1 text-sm text-fg-subtle">{t("brandDesc")}</p>
+
+          {/* 静态协作链示意：圆点=执行节点，菱形=审查门；纯展示，不动画 */}
+          <div className="mt-12 relative" aria-hidden="true">
+            <div className="absolute left-[7px] top-2 bottom-2 w-px bg-line-strong" />
+            <div className="space-y-7">
+              <div className="flex items-center gap-3.5 relative">
+                <span className="w-[15px] h-[15px] rounded-full bg-accent ring-4 ring-accent/15 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-fg">{t("chainCoding")}</div>
+                  <div className="text-xs text-accent-fg mt-0.5">{t("chainCodingState")}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3.5 relative">
+                <span className="w-[15px] h-[15px] rounded-full border-2 border-line-strong bg-surface shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-fg-muted">{t("chainVerify")}</div>
+                  <div className="text-xs text-fg-faint mt-0.5">{t("chainVerifyState")}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3.5 relative">
+                <span className="w-[15px] h-[15px] rotate-45 rounded-[3px] border-2 border-warning bg-surface shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-fg-muted">{t("chainReview")}</div>
+                  <div className="text-xs text-warning-fg mt-0.5">{t("chainReviewState")}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="relative w-full max-w-md animate-fade-in-up">
-        {/* 主题切换 */}
-        <div className="absolute -top-12 right-0">
+      {/* 表单区：实色表面 */}
+      <div className="flex-1 bg-surface relative flex flex-col">
+        <div className="absolute top-4 right-4">
           <ThemeSwitcher placement="bottom" />
         </div>
 
-        {/* Logo */}
-        <div className="flex items-center justify-center mb-10">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent-strong rounded-xl flex items-center justify-center mr-4 shadow-lg shadow-primary/30 animate-scale-in">
-            <Bot className="w-7 h-7 text-fg" />
+        <div className="m-auto w-full max-w-sm px-6 py-10 animate-fade-in">
+          {/* 紧凑品牌头：仅窄屏显示 */}
+          <div className="lg:hidden flex items-center gap-3 mb-8">
+            <div className="w-9 h-9 rounded-[var(--radius-control)] bg-gradient-to-br from-primary to-accent-strong flex items-center justify-center text-fg shrink-0">
+              <BrandMark size={20} />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-fg leading-tight">Teammate</div>
+              <div className="text-xs text-fg-faint">{t("subtitle")}</div>
+            </div>
           </div>
-          <div className="animate-fade-in" style={{ animationDelay: "100ms" }}>
-            <h1 className="text-2xl font-bold text-fg">Teammate</h1>
-            <p className="text-xs text-fg-faint">{t("subtitle")}</p>
-          </div>
-        </div>
 
-        {/* 表单卡片 */}
-        <div className="bg-surface/80 backdrop-blur-xl border border-line-strong/50 rounded-2xl p-8 shadow-2xl animate-scale-in" style={{ animationDelay: "150ms" }}>
           <h2 className="text-xl font-bold text-fg mb-2">
             {mode === "login" ? t("title") : t("titleRegister")}
           </h2>
@@ -111,7 +150,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
               <div>
-                <label className="block text-sm font-medium text-fg-muted mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-1.5">
                   {t("username")}
                 </label>
                 <div className="relative">
@@ -119,7 +158,7 @@ export default function LoginPage() {
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-bg border border-line-strong rounded-lg pl-10 pr-4 py-3 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast"
+                    className={inputClasses}
                     placeholder={t("usernamePlaceholder")}
                   />
                 </div>
@@ -127,7 +166,7 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2">
+              <label className="block text-sm font-medium text-fg-muted mb-1.5">
                 {t("email")}
               </label>
               <div className="relative">
@@ -136,14 +175,14 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg pl-10 pr-4 py-3 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast"
+                  className={inputClasses}
                   placeholder="you@example.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-2">
+              <label className="block text-sm font-medium text-fg-muted mb-1.5">
                 {t("password")}
               </label>
               <div className="relative">
@@ -152,7 +191,7 @@ export default function LoginPage() {
                   type={showPwd ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-bg border border-line-strong rounded-lg pl-10 pr-10 py-3 text-fg text-sm focus:outline-none focus:border-primary transition-colors-fast"
+                  className={`${inputClasses} pr-10`}
                   placeholder={t("passwordPlaceholder")}
                 />
                 <button
@@ -170,7 +209,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 bg-danger/10 border border-danger/20 rounded-lg px-4 py-3 text-sm text-danger-fg animate-fade-in">
+              <div className="flex items-center gap-2 bg-danger/10 border border-danger/20 rounded-[var(--radius-control)] px-4 py-3 text-sm text-danger-fg animate-fade-in">
                 <svg
                   className="w-4 h-4 shrink-0"
                   viewBox="0 0 16 16"
@@ -186,23 +225,21 @@ export default function LoginPage() {
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-primary-strong to-accent-strong hover:from-primary hover:to-accent text-fg rounded-lg font-semibold transition-colors-fast disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-lg shadow-primary/20 btn-press"
+              variant="primary"
+              size="lg"
+              loading={loading}
+              className="w-full"
             >
-              {loading && (
-                <div className="w-5 h-5 mr-2 border-2 border-fg border-t-transparent rounded-full animate-spin" />
-              )}
               {loading
                 ? t("verifying")
                 : mode === "login"
                   ? t("submitLogin")
                   : t("submitRegister")}
-            </button>
+            </Button>
           </form>
 
-          {/* 切换模式 */}
           <p className="mt-6 text-center text-sm text-fg-faint">
             {mode === "login" ? t("noAccount") : t("hasAccount")}
             <button
@@ -216,7 +253,6 @@ export default function LoginPage() {
               {mode === "login" ? t("register") : t("submitLogin")}
             </button>
           </p>
-
         </div>
       </div>
     </div>

@@ -3,15 +3,11 @@ import type {
   MappedTask,
   MappedAgent,
   MappedDaemon,
-  MappedTemplate,
-  NodeType,
   TaskNodeStatus,
   Skill,
   McpServer,
   McpAuthType,
   McpServerType,
-  WorkflowTriggerConfig,
-  WorkflowTriggerType,
   Workspace,
 } from "./types";
 
@@ -44,33 +40,6 @@ function nullableString(value: unknown): string {
   return "";
 }
 
-function rawJsonObject(value: unknown): Record<string, unknown> {
-  if (!value || value === "null") return {};
-  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function mapTriggerConfig(value: unknown): WorkflowTriggerConfig {
-  const raw = rawJsonObject(value);
-  return {
-    projectId: String(raw.project_id || raw.projectId || ""),
-    intervalMinutes: Number(raw.interval_minutes || raw.intervalMinutes || 0),
-    title: String(raw.title || ""),
-    description: String(raw.description || ""),
-    repoOwner: String(raw.repo_owner || raw.repoOwner || ""),
-    repoName: String(raw.repo_name || raw.repoName || ""),
-    secret: String(raw.secret || ""),
-  };
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapSkillFromApi(apiSkill: any): Skill {
   return {
@@ -91,7 +60,7 @@ export function mapMcpServerFromApi(apiMcp: any): McpServer {
     url: apiMcp.url || "",
     type: (nullableString(apiMcp.type) || "sse") as McpServerType,
     authType: (apiMcp.auth_type || apiMcp.authType || "none") as McpAuthType,
-    envVars: rawJsonObject(apiMcp.env_vars ?? apiMcp.envVars),
+    envVars: apiMcp.env_vars ?? apiMcp.envVars ?? {},
     status: apiMcp.status || "active",
     workspaceId: apiMcp.workspace_id || apiMcp.workspaceId || "",
   };
@@ -110,6 +79,9 @@ export function mapWorkspaceFromApi(apiWs: any): Workspace {
   };
 }
 
+// 节点的终态集合:首个未到终态的节点即当前节点(与看板判定一致)
+const TERMINAL_NODE_STATUS = new Set(["succeeded", "skipped", "cancelled"]);
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,24 +89,23 @@ export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const taskNodes: any[] = item.nodes || [];
 
-  const currentNodeIdx = taskNodes.findIndex(
-    (n) =>
-      n.status === "in_progress" ||
-      n.status === "manual_intervention" ||
-      n.status === "rejected"
-  );
-  const currentNode =
-    currentNodeIdx >= 0
-      ? currentNodeIdx
-      : taskNodes.findIndex((n) => n.status === "pending");
+  const currentNodeIdx = taskNodes.findIndex((n) => !TERMINAL_NODE_STATUS.has(n.status));
+  const currentNode = currentNodeIdx >= 0 ? currentNodeIdx : Math.max(0, taskNodes.length - 1);
+  const currentNodeRaw = taskNodes[currentNode];
 
-  // 续作权随节点下发(reserved_for_agent_id / reservation_expires_at),
-  // 聚合到任务级供徽标/锁标消费:优先当前活跃节点,回退到任一持有预约的节点
-  const activeNode = currentNode >= 0 ? taskNodes[currentNode] : undefined;
-  const reservedNode = activeNode?.reserved_for_agent_id
-    ? activeNode
-    : taskNodes.find((n) => n.reserved_for_agent_id);
+  // 任务级展示状态:终态任务直接用任务状态,活跃任务用当前节点状态,
+  // 存在需人工节点时优先标注
+  const priorityState = resolvePriorityState(apiTask.status, taskNodes, currentNodeRaw);
+
+  // 续作权随节点下发(reserved_for_agent_id),聚合到任务级供徽标消费
+  const reservedNode = taskNodes.find((n) => n.reserved_for_agent_id);
   const reservedForAgentId = reservedNode?.reserved_for_agent_id || null;
+
+  const agentName = (id: unknown) => {
+    if (!id) return "";
+    const agent = agentsList.find((a) => a.id === id);
+    return agent ? agent.name : String(id);
+  };
 
   return {
     id: apiTask.id,
@@ -142,55 +113,25 @@ export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
     title: apiTask.title || "",
     type: apiTask.type || "task",
     priority: apiTask.priority || "medium",
-    priorityState:
-      apiTask.status === "active"
-        ? taskNodes.some((n) => n.status === "manual_intervention")
-          ? "manual_intervention"
-          : taskNodes.some((n) => n.status === "rejected")
-            ? "rejected"
-            : taskNodes.some((n) => n.status === "in_progress")
-              ? "in_progress"
-              : "pending"
-        : apiTask.status || "pending",
+    priorityState,
     description: apiTask.description || "",
     constraints: apiTask.constraints || "",
-    currentNode: currentNode >= 0 ? currentNode : 0,
-    currentNodeType: taskNodes.length > 0
-      ? (taskNodes[currentNode >= 0 ? currentNode : 0]?.node_type as NodeType || "standard")
-      : "standard",
-    agent:
-      taskNodes.find(
-        (n) =>
-          n.assignee_id &&
-          (n.status === "in_progress" || n.status === "manual_intervention")
-      )?.assignee_id || null,
+    currentNode,
+    currentNodeType: currentNodeRaw?.type_key || "",
+    agent: agentName(currentNodeRaw?.reserved_for_agent_id) || null,
     message: "",
-    nodesStatus: taskNodes.map((n) => (n.status || "pending") as TaskNodeStatus),
-    nodeAgents: taskNodes.map((n) => {
-      const aid = n.assignee_id;
-      if (!aid) return "";
-      const agent = agentsList.find((a) => a.id === aid);
-      return agent ? agent.name : aid;
-    }),
+    nodesStatus: taskNodes.map((n) => (n.status || "waiting") as TaskNodeStatus),
+    nodeAgents: taskNodes.map((n) => agentName(n.reserved_for_agent_id)),
     nodeNames: taskNodes.map((n) => n.name || ""),
     nodeTokens: item.node_tokens || {},
-    nodeTimeouts: {},
     dueDate: apiTask.due_date || "",
     labels: apiTask.labels || [],
-    rejectCount: apiTask.reject_count || 0,
     logs: {},
     comments: [],
-    reviewHistory: [],
     subTasks: [],
     gitBranch: item.git_branch || "",
     parentTask: "",
-    interrupted: taskNodes.some((n) => n.status === "manual_intervention"),
-    reservedForAgent: (() => {
-      if (!reservedForAgentId) return null;
-      const agent = agentsList.find((a) => a.id === reservedForAgentId);
-      return agent ? agent.name : reservedForAgentId;
-    })(),
-    reservationExpiresAt: reservedNode?.reservation_expires_at || null,
+    reservedForAgent: reservedForAgentId ? agentName(reservedForAgentId) : null,
     nodeSummaries: taskNodes.reduce((acc: Record<string, string>, n: { id: string; summary?: string }) => {
       if (n.summary) acc[n.id] = n.summary;
       return acc;
@@ -199,6 +140,20 @@ export function mapTaskFromApi(item: any, agentsList: any[] = []): MappedTask {
     _rawNodes: taskNodes,
     _projectId: apiTask.project_id,
   };
+}
+
+function resolvePriorityState(
+  taskStatus: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  nodes: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  currentNodeRaw: any
+): TaskNodeStatus {
+  if (taskStatus === "cancelled") return "cancelled";
+  if (taskStatus === "completed") return "succeeded";
+  if (taskStatus === "failed") return "failed";
+  if (nodes.some((n) => n.status === "manual_intervention")) return "manual_intervention";
+  return (currentNodeRaw?.status as TaskNodeStatus) || "waiting";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -254,38 +209,5 @@ export function mapDaemonFromApi(apiDaemon: any): MappedDaemon {
         installed: p.installed !== false,
       })
     ),
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function mapTemplateFromApi(apiTemplate: any): MappedTemplate {
-  const template = apiTemplate.template || apiTemplate;
-  const nodes = (apiTemplate.nodes || template.nodes || []).map(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (n: any) => ({
-      id: n.sort_order || n.id,
-      name: n.name || "",
-      nodeType: n.node_type || "standard",
-      assigneeType: n.assignee_type || "any_agent",
-      assigneeId: n.assignee_id || "",
-      description: n.description || "",
-      timeout: 0,
-      readonlyDirs: n.readonly_dirs || "",
-      fullControlDirs: n.full_control_dirs || "",
-      artifact: n.artifact || "",
-      maxRejectCycles: n.max_reject_cycles || 5,
-    })
-  );
-  return {
-    id: template.id || "",
-    name: template.name || "",
-    description: template.description || "",
-    isBuiltIn: template.is_builtin || template.isBuiltIn || false,
-    triggerType: (template.trigger_type || template.triggerType || "manual") as WorkflowTriggerType,
-    triggerConfig: mapTriggerConfig(template.trigger_config ?? template.triggerConfig),
-    triggerEnabled: template.trigger_enabled ?? template.triggerEnabled ?? true,
-    nextRunAt: template.next_run_at || template.nextRunAt || "",
-    lastTriggeredAt: template.last_triggered_at || template.lastTriggeredAt || "",
-    nodes,
   };
 }

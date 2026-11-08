@@ -56,7 +56,14 @@
     "errPwdMin": "Password must be at least 8 characters",
     "errPwdMax": "Password must be at most 128 characters",
     "errPwdComplex": "Password must contain uppercase, lowercase letters and digits",
-    "failed": "Operation failed"
+    "failed": "Operation failed",
+    "brandDesc": "Agents hand off work in the open, with human review at every gate.",
+    "chainCoding": "Implementation",
+    "chainCodingState": "Running",
+    "chainVerify": "Automated verification",
+    "chainVerifyState": "Pending",
+    "chainReview": "Human review",
+    "chainReviewState": "Review gate"
   },
   "nav": {
     "dashboard": "Tasks",
@@ -65,7 +72,7 @@
     "agents": "AI Agents",
     "skills": "Skill & MCP",
     "memory": "Shared Memory",
-    "reviews": "Review Queue",
+    "reviews": "Manual Todos",
     "settings": "Project Settings",
     "tokens": "Token Stats",
     "market": "Community Market",
@@ -98,7 +105,18 @@
     "cancel": "Cancel",
     "creating": "Creating...",
     "create": "Create",
-    "createFailed": "Failed to create workspace"
+    "createFailed": "Failed to create workspace",
+    "groupWork": "Work",
+    "groupOrchestration": "Orchestration",
+    "groupInsight": "Insight",
+    "groupManage": "Manage",
+    "projectSelector": "Current project",
+    "selectProject": "Select project",
+    "noProjects": "No projects",
+    "onlineAgentsCount": "{count} agents online",
+    "onlineLabel": "online",
+    "loadFailedStale": "Failed to refresh tasks; showing last successful data",
+    "retry": "Retry"
   },
   "history": {
     "title": "Task History",
@@ -109,7 +127,6 @@
     "thTitle": "Title",
     "thType": "Type",
     "thPriority": "Priority",
-    "thWorkflow": "Workflow",
     "thCompletedAt": "Completed At",
     "pageRange": "{from}-{to} of {count} tasks",
     "typeStory": "Story",
@@ -120,7 +137,8 @@
       "high": "High",
       "medium": "Medium",
       "low": "Low"
-    }
+    },
+    "thStatus": "Status"
   },
   "tokens": {
     "title": "Compute & Token Stats",
@@ -175,111 +193,387 @@
       "typeEnvironment": "Environment"
     }
   },
+  "runFeedback": {
+    "errPermissionHint": "Check the agent's project membership and granted permissions (e.g. git:push)",
+    "skippedReason": "An upstream branch did not reach this node, so it was skipped",
+    "unresolvedRefTitle": "Title contains unresolved references; upstream data may not have arrived"
+  },
   "workflows": {
+    "export": "Export",
+    "import": "Import workflow",
+    "importSuccess": "Imported: {name}",
+    "importInvalid": "Not a valid workflow file",
+    "importFailed": "Import failed: {error}",
+    "importIssuesMore": "{count} more issue(s) not shown",
     "editor": {
-      "back": "Back",
-      "namePlaceholder": "Template name",
-      "descPlaceholder": "Description (optional)",
-      "layoutLR": "Layout LR",
-      "layoutTB": "Layout TB",
-      "addNode": "Add node",
-      "creating": "New template",
-      "editing": "Editing {id}",
-      "nodeCount": "{count} nodes",
-      "edgeCount": "{count} deps",
-      "palette": {
-        "placeholder": "Search node type…",
-        "noHit": "No match",
-        "standard": "Standard",
-        "review": "Review",
-        "manual": "Manual"
-      },
-      "reject": {
-        "self": "Self-loop not allowed",
-        "duplicate": "Duplicate dependency",
-        "cycle": "Would create a cycle"
-      },
-      "title": "Design Workflow Template",
-      "subtitle": "A template defines the collaboration and flow rules of work; it can be reused across projects.",
-      "saving": "Saving...",
-      "nameLabel": "Template name",
-      "descLabel": "Template description",
-      "stepNamePlaceholder": "Enter step name...",
-      "nodeTypeLabel": "Node type",
-      "optionStandard": "Standard",
-      "optionReview": "Review",
-      "optionManual": "Manual",
-      "assigneeLabel": "Assignee rule",
-      "optionAnyAgent": "Any idle AI agent",
-      "optionSpecificAgent": "Bind to a specific AI agent",
-      "optionHuman": "Human member",
-      "selectAgentPlaceholder": "-- Select agent --",
-      "timeoutMinutesLabel": "Timeout (minutes)",
-      "maxRejectCyclesLabel": "Max rejection cycles",
-      "stepDescLabel": "Step description (Markdown)",
-      "stepDescPlaceholder": "Describe what this node should do...",
-      "readonlyDirsLabel": "Read-only directories",
-      "readonlyDirsPlaceholder": "e.g. /docs,/README.md (comma separated)",
-      "readonlyDirsHint": "Directories/files agents can read but must not modify",
-      "fullControlDirsLabel": "Full-control directories",
-      "fullControlDirsPlaceholder": "e.g. /src (comma separated)",
-      "fullControlDirsHint": "Directories where agents can freely read and write code",
-      "artifactLabel": "Artifact constraints",
-      "save": "Save",
-      "saveFailed": "Save failed",
-      "needName": "Template name is required",
-      "needNode": "At least one node is required",
-      "loadFailed": "Failed to load template",
-      "deleteNode": "Delete node",
-      "deleteConfirm": "Confirm delete",
-      "inspectorEmpty": "Click a node on the canvas to edit its properties",
+      "startTitle": "Start",
+      "endTitle": "Finish",
+      "invalidBadge": "Configuration issues",
+      "inspectorEmpty": "Click a node on the canvas to edit its configuration",
       "inspectorUntitled": "Untitled node",
-      "stepName": "Node name",
-      "assigneeIdLabel": "Assignee"
+      "dismiss": "Got it",
+      "topbar": {
+        "back": "Back",
+        "namePlaceholder": "Template name",
+        "descPlaceholder": "Template description (optional)",
+        "issues": "{count} validation issues",
+        "issuesOk": "Validation passed",
+        "layoutLR": "Layout horizontally",
+        "layoutTB": "Layout vertically",
+        "save": "Save",
+        "startTemplate": "Start template",
+        "nodeCount": "{count} nodes",
+        "edgeCount": "{count} edges"
+      },
+      "library": {
+        "title": "Node Library",
+        "fixedHint": "Start/Finish nodes are fixed in every template and cannot be added again",
+        "groups": {
+          "trigger": "Trigger",
+          "agent": "Agent",
+          "integration": "Integration",
+          "action": "Action",
+          "task": "Task",
+          "reuse": "Reuse",
+          "data": "Data",
+          "logic": "Logic",
+          "wait": "Wait",
+          "human": "Human"
+        }
+      },
+      "types": {
+        "trigger": {
+          "manual": {
+            "label": "Manual Trigger",
+            "desc": "Start the workflow manually from the run page"
+          },
+          "schedule": {
+            "label": "Schedule Trigger",
+            "desc": "Start the workflow automatically on an interval"
+          },
+          "github": {
+            "label": "GitHub Trigger",
+            "desc": "Start the workflow from GitHub repository events"
+          },
+          "webhook": {
+            "label": "Webhook Trigger",
+            "desc": "Start the workflow from an external webhook request"
+          }
+        },
+        "agent": {
+          "task": {
+            "label": "Agent Task",
+            "desc": "Intelligent work done by an agent: analysis, coding, testing, review"
+          }
+        },
+        "action": {
+          "github": {
+            "label": "GitHub Action",
+            "desc": "Deterministic GitHub operations on issues/PRs"
+          },
+          "http": {
+            "label": "HTTP Request",
+            "desc": "Call an external HTTP API"
+          },
+          "command": {
+            "label": "Run Command",
+            "desc": "Run a deterministic command on the agent machine"
+          },
+          "create_task": {
+            "label": "Create Task",
+            "desc": "Create a new Teammate task"
+          }
+        },
+        "workflow": {
+          "call": {
+            "label": "Call Workflow",
+            "desc": "Reuse an existing template as a sub-workflow"
+          }
+        },
+        "data": {
+          "set": {
+            "label": "Set Variable",
+            "desc": "Write a value into workflow variables"
+          },
+          "map": {
+            "label": "Field Mapping",
+            "desc": "Reshape upstream outputs into workflow variables"
+          }
+        },
+        "flow": {
+          "condition": {
+            "label": "Condition",
+            "desc": "Choose the true/false branch by condition"
+          },
+          "switch": {
+            "label": "Switch",
+            "desc": "Pick one branch by value matching"
+          },
+          "parallel": {
+            "label": "Parallel",
+            "desc": "Activate all configured branches at once"
+          },
+          "join": {
+            "label": "Join",
+            "desc": "Continue after multiple branches converge"
+          },
+          "wait": {
+            "label": "Wait",
+            "desc": "Wait for a duration or an external event"
+          },
+          "end": {
+            "label": "Finish",
+            "desc": "Task outcome follows the connected input port"
+          }
+        },
+        "human": {
+          "input": {
+            "label": "Human Input",
+            "desc": "Wait for a human to submit or cancel"
+          }
+        }
+      },
+      "ports": {
+        "input": "Input",
+        "success": "Success",
+        "failed": "Failed",
+        "true": "True",
+        "false": "False",
+        "resumed": "Resumed",
+        "timeout": "Timeout",
+        "submitted": "Submitted",
+        "cancelled": "Cancelled",
+        "completed": "Completed",
+        "default": "Default"
+      },
+      "sum": {
+        "triggerManual": "Start manually from the run page",
+        "triggerSchedule": "Every {minutes} minutes",
+        "triggerGithubEvent": "GitHub · {event}",
+        "triggerGithubActions": "Actions: {actions}",
+        "triggerWebhook": "Receives webhook requests",
+        "instruction": "{text}",
+        "assigneeAny": "Any idle agent",
+        "assigneeSpecific": "Bound to a specific agent",
+        "timeoutRetry": "Timeout {timeout} min · retry {attempts}",
+        "githubOperation": "{operation}",
+        "targetExpr": "{text}",
+        "httpRequest": "{method} {url}",
+        "command": "{program} {args}",
+        "createTask": "{text}",
+        "callWorkflow": "{text}",
+        "setVar": "{name} = …",
+        "mapFields": "Maps {count} fields",
+        "condition": "{text}",
+        "branches": "Branches: {names}",
+        "joinAll": "Continue when all branches arrive",
+        "joinAny": "Continue when any branch arrives",
+        "waitEvent": "Wait for {event}",
+        "waitDuration": "Wait {minutes} minutes",
+        "humanPrompt": "{text}"
+      },
+      "issues": {
+        "self": "Self loops are not allowed",
+        "edgeDuplicate": "Duplicate connection",
+        "portMultiEdge": "This output port is already connected; one port allows a single outgoing edge",
+        "cycle": "This would create a cycle; blocked",
+        "triggerMissing": "Missing a start node",
+        "triggerMultiple": "Only one start node is allowed",
+        "endMissing": "Missing a finish node",
+        "endMultiple": "Only one finish node is allowed",
+        "typeUnknown": "Unknown node type {type}",
+        "edgeDangling": "Connection endpoints do not exist",
+        "sourcePortInvalid": "Source port {port} does not exist",
+        "targetPortInvalid": "Target port {port} does not exist",
+        "unreachableFromTrigger": "Not reachable from the start node",
+        "cannotReachEnd": "Cannot reach the finish node",
+        "noInput": "Node has no incoming edge",
+        "noOutput": "Node has no outgoing edge",
+        "cfg": {
+          "scheduleInterval": "Fill in the schedule interval (minutes)",
+          "githubEvent": "Select a GitHub event",
+          "githubActions": "Select at least one action",
+          "githubIntegration": "Select a GitHub integration",
+          "instruction": "Fill in the agent instruction",
+          "githubOperation": "Select an operation",
+          "httpUrl": "Fill in the request URL",
+          "commandProgram": "Fill in the program",
+          "taskTitle": "Fill in the task title",
+          "callTemplate": "Select the template to call",
+          "varName": "Fill in the variable name",
+          "mappingRows": "Add at least one field mapping",
+          "conditionRules": "Add at least one condition rule",
+          "conditionConflict": "all and any cannot be combined",
+          "conditionRule": "Condition rule incomplete (path and operator required)",
+          "branches": "Add at least one branch",
+          "joinMode": "Select a join mode",
+          "waitMode": "Select a wait mode",
+          "waitMinutes": "Fill in the wait duration (minutes)",
+          "waitEvent": "Select the GitHub event to wait for",
+          "humanPromptRequired": "Fill in the prompt text",
+          "retryAttempts": "Retry attempts must be at least 1",
+          "duplicateBranch": "Branch names must be unique",
+          "duplicateName": "Node names must be unique",
+          "reservedBranchName": "Branch name 'default' is reserved; use another name",
+          "switchCondition": "Each branch's condition group needs at least one rule",
+          "scheduleProject": "Select the project fired runs land in"
+        }
+      },
+      "fieldPicker": {
+        "title": "Insert data path",
+        "filter": "Search paths…",
+        "noHit": "No matching paths"
+      },
+      "startPicker": {
+        "title": "Choose a starting template",
+        "hint": "Choosing replaces the current canvas content",
+        "presetTag": "Preset",
+        "opt": {
+          "blank": {
+            "name": "Blank template",
+            "desc": "Only the fixed Start and Finish nodes; add the rest from the library"
+          },
+          "manual": {
+            "name": "Manual Agent Task",
+            "desc": "Manual start → agent executes the instruction → finish"
+          },
+          "schedule": {
+            "name": "Scheduled Patrol & Auto-Fix",
+            "desc": "Run the patrol command on schedule → condition → agent fixes on failure"
+          },
+          "issue-fix": {
+            "name": "GitHub Issue Auto-Fix",
+            "desc": "Issue trigger → condition → agent fix → test → create PR → wait for review"
+          },
+          "webhook": {
+            "name": "Webhook Request Handling",
+            "desc": "Receive webhook → agent processes the request → finish"
+          }
+        }
+      },
+      "inspector": {
+        "nodeName": "Node name",
+        "triggerKind": "Trigger kind",
+        "timeoutMinutes": "Timeout (min)",
+        "retryAttempts": "Retry attempts",
+        "retryBackoff": "Retry backoff (s)",
+        "inputMap": "Input mapping",
+        "inputMapKey": "Field",
+        "inputMapValue": "Data path",
+        "addRow": "Add row",
+        "remove": "Remove",
+        "dirsPlaceholder": "Comma separated, e.g. src,docs",
+        "readonlyDirs": "Read-only dirs",
+        "readonlyDirsHint": "Directories/files the agent can read but never modify",
+        "fullControlDirs": "Full-control dirs",
+        "fullControlDirsHint": "Directories the agent can read and write freely",
+        "instruction": "Agent instruction",
+        "assigneeMode": "Agent selection",
+        "assigneeAny": "Any idle agent",
+        "assigneeSpecific": "Bind a specific agent",
+        "assigneeAgent": "Specific agent",
+        "assigneeAgentEmpty": "No agents in this workspace yet. Create one on the Agents page first.",
+        "triggerManualHint": "This workflow starts manually from the run page; no extra configuration needed.",
+        "webhookHint": "Webhook trigger configuration opens in a later stage; the node type is reserved.",
+        "scheduleInterval": "Interval (minutes)",
+        "githubIntegration": "GitHub integration",
+        "githubEvent": "Event type",
+        "githubActions": "Trigger actions",
+        "ghOperation": "Operation",
+        "ghOp": {
+          "add_comment": "Comment on issue",
+          "add_labels": "Add issue labels",
+          "remove_labels": "Remove issue labels",
+          "assign_issue": "Assign issue",
+          "unassign_issue": "Unassign issue",
+          "close_issue": "Close issue",
+          "reopen_issue": "Reopen issue",
+          "create_pull_request": "Create pull request",
+          "request_reviewers": "Request PR reviewers"
+        },
+        "ghField": {
+          "issue": "Target issue (number expression)",
+          "pr": "Target PR (number expression)",
+          "title": "PR title",
+          "head": "Head branch",
+          "base": "Base branch",
+          "body": "Body",
+          "labels": "Labels (comma separated)",
+          "assignees": "Assignees (comma separated)",
+          "reviewers": "Reviewers (comma separated)",
+          "comment_issue": "Issue to comment on as well"
+        },
+        "httpMethod": "Method",
+        "httpUrl": "Request URL",
+        "httpHeaders": "Headers",
+        "httpQuery": "Query params",
+        "httpBody": "Body",
+        "cmdProgram": "Program",
+        "cmdArgs": "Arguments",
+        "cmdArgsHint": "Space separated; no shell interpretation, special characters pass through as-is",
+        "cmdWorkdir": "Working directory",
+        "createTaskTitle": "Task title",
+        "createTaskDesc": "Task description",
+        "callTemplate": "Target template",
+        "selectPlaceholder": "-- Select --",
+        "callDepthHint": "Sub-workflows nest at most 5 levels; the same template may not reappear in the call chain.",
+        "setVarName": "Variable name",
+        "setVarValue": "Variable value",
+        "mapRows": "Field mapping",
+        "mapTarget": "Target variable",
+        "mapSource": "Data path",
+        "condGroup": "Rule combination",
+        "condGroupAll": "All match (AND)",
+        "condGroupAny": "Any matches (OR)",
+        "condRules": "Condition rules",
+        "condPath": "Data path",
+        "condValue": "Compare value",
+        "addRule": "Add condition",
+        "branchNames": "Branch names",
+        "switchRules": "Branches & conditions",
+        "branchHintSwitch": "Each branch is a group of conditions; evaluated in order, the first match routes, otherwise the default branch is taken",
+        "branchHintParallel": "Each branch is an output port; all branches activate at execution time",
+        "addBranch": "Add branch",
+        "joinMode": "Join mode",
+        "joinModeAll": "All branches (all)",
+        "joinModeAny": "Any branch (any)",
+        "joinAllHint": "Continue when all incoming edges resolve and activate; used for parallel joins.",
+        "joinAnyHint": "Continue when all incoming edges resolve and at least one activates; used for conditional joins.",
+        "waitMode": "Wait mode",
+        "waitModeDuration": "Duration",
+        "waitModeEvent": "GitHub event",
+        "waitMinutes": "Wait duration (minutes)",
+        "waitEvent": "Event type",
+        "waitFilterHint": "Event filters (e.g. PR number) open in a later stage.",
+        "humanPrompt": "Prompt text",
+        "humanFields": "Requested fields",
+        "humanFieldsHint": "Submitted values become the node output",
+        "endHint": "An edge into the Completed port finishes the task successfully; an edge into the Failed port fails it. Unconnected failure ports mean the task fails directly.",
+        "failureHintConnected": "Failure port is connected: after failure (retries exhausted) the flow routes downstream.",
+        "failureHintUnconnected": "Failure port is not connected: the task fails directly once retries are exhausted.",
+        "deleteNode": "Delete node",
+        "close": "Close",
+        "callTemplateEmpty": "No workflow templates in this workspace yet. Create a template first.",
+        "githubIntegrationEmpty": "No GitHub integrations yet. Create one on the project page first.",
+        "useIntegration": "Use integration",
+        "integrationDefault": "Default (first in project)",
+        "scheduleProject": "Target Project",
+        "scheduleProjectHint": "Fired runs land in this project",
+        "scheduleProjectEmpty": "No projects yet; create one first"
+      }
     },
-    "run": {
-      "title": "Start Workflow Task",
-      "basedOn": "Based on: {name}",
-      "subtitle": "Fill in the requirements and trigger the execution engine; AI agents will take over the following nodes automatically.",
-      "triggering": "Triggering execution engine...",
-      "triggerButton": "Trigger Execution Engine",
-      "stepOneHeader": "Complete the first node: {title}",
-      "stepOneTitle": "Requirement Input",
-      "titleLabel": "Task title",
-      "titlePlaceholder": "e.g. Implement user registration page (frontend + backend)",
-      "projectLabel": "Target project",
-      "noProjects": "No projects yet. Create one in Project Settings first",
-      "goCreateProject": "Create a project on the \"Project Settings\" page first",
-      "taskTypeLabel": "Task type",
-      "typeStory": "Story (user story)",
-      "typeBug": "Bug (defect)",
-      "typeTask": "Task (general)",
-      "priorityLabel": "Priority",
-      "prioUrgent": "Urgent",
-      "prioHigh": "High",
-      "prioMedium": "Medium",
-      "prioLow": "Low",
-      "dueDateLabel": "Due date",
-      "labelsLabel": "Labels (comma separated):",
-      "labelsPlaceholder": "e.g. frontend, auth, OAuth2",
-      "labelsHint": "Up to 10 labels",
-      "constraintsLabel": "Constraints & warnings (red lines):",
-      "constraintsPlaceholder": "e.g. Must support standard OAuth2; tokens must be stored encrypted...",
-      "constraintsHint": "These constraints are injected into the AI agent's system prompt as red lines",
-      "descRequiredLabel": "Detailed requirements",
-      "descPlaceholder": "Enter the detailed requirement context here. AI agents will use this document to understand, design and implement..."
-    },
-    "stats": {
-      "title": "Template Usage Stats",
-      "refCount": "References",
-      "tasksUnit": "tasks",
-      "avgCompletion": "Avg. completion time",
-      "endToEnd": "end to end",
-      "nodeCountLabel": "Node count",
-      "stepsUnit": "steps",
-      "noStats": "No statistics yet",
-      "noStatsHint": "Stats are generated automatically once tasks from this template complete"
-    },
+    "runBack": "Back to list",
+    "runPageTitle": "Start run",
+    "runProjectLabel": "Project",
+    "runProjectEmpty": "No projects yet. Please create a project first.",
+    "runTitleLabel": "Title",
+    "runTitleRequired": "Title is required",
+    "runRequirementLabel": "Requirement",
+    "runRequirementPlaceholder": "Describe what you need…",
+    "runJsonLabel": "Advanced: custom input JSON",
+    "runJsonInvalid": "Invalid JSON format",
+    "runSubmit": "Start run",
+    "runSubmitFailed": "Failed to start run",
     "list": {
       "page": {
         "title": "Workflow Templates",
@@ -287,9 +581,6 @@
         "createButton": "New Custom Template"
       },
       "builtInTag": "Built-in",
-      "nodeCount": "{count} nodes",
-      "reviewCount": "Review {count}",
-      "manualCount": "Manual {count}",
       "preview": "Preview",
       "stats": "Stats",
       "edit": "Edit",
@@ -297,16 +588,80 @@
       "run": "Run",
       "customTemplates": "Custom Templates",
       "noCustomTemplates": "No custom templates in this workspace yet.",
-      "createFirst": "Create the first template",
-      "builtInTemplates": "Built-in Templates"
+      "builtInTemplates": "Built-in Templates",
+      "customTag": "Custom",
+      "emptyTitle": "No workflow templates yet",
+      "emptyDescription": "Create a template to turn multi-agent handoffs into a reusable standard.",
+      "trigger": {
+        "manual": "Manual trigger",
+        "schedule": "Every {minutes} min",
+        "github": "GitHub {event} · {actions}",
+        "webhook": "Webhook trigger"
+      },
+      "enabledOn": "Enabled",
+      "enabledOff": "Disabled",
+      "statsRef": "References",
+      "statsTasksUnit": "tasks",
+      "statsAvgCompletion": "Avg completion",
+      "statsEndToEnd": "end-to-end",
+      "statsNodeCount": "Nodes",
+      "statsStepsUnit": "steps",
+      "statsNoStats": "No stats yet; generated after tasks run"
     },
     "view": {
       "back": "Back",
-      "loading": "Loading…",
-      "loadFailed": "Failed to load template",
-      "assigneeAny": "Any idle agent",
-      "assigneeSpecific": "Bound agent",
-      "assigneeHuman": "Human member"
+      "run": {
+        "status": {
+          "waiting": "Waiting",
+          "ready": "Ready",
+          "running": "Running",
+          "succeeded": "Succeeded",
+          "failed": "Failed",
+          "skipped": "Skipped",
+          "cancelled": "Cancelled",
+          "manual_intervention": "Needs attention"
+        },
+        "waitingFor": "Waiting for {event}",
+        "attemptCount": "{count} attempts",
+        "taskStatus": {
+          "active": "Active",
+          "completed": "Completed",
+          "failed": "Failed",
+          "cancelled": "Cancelled"
+        },
+        "detail": {
+          "empty": "Click a node on the canvas to inspect its execution",
+          "waitExpires": "Expires at: {time}",
+          "attempts": "Attempts",
+          "attemptNo": "Attempt {no}",
+          "attemptStatus": {
+            "running": "Running",
+            "succeeded": "Succeeded",
+            "failed": "Failed",
+            "cancelled": "Cancelled"
+          },
+          "input": "Node input",
+          "output": "Node output"
+        },
+        "humanPendingTitle": "This node awaits human input",
+        "submitAction": "Submit",
+        "cancelNodeAction": "Cancel Node",
+        "waitKind": {
+          "duration": "Timed wait",
+          "event": "Event wait",
+          "human": "Human input"
+        }
+      },
+      "retry": "Retry",
+      "enabledOn": "Enabled",
+      "enabledOff": "Disabled",
+      "builtInTag": "Built-in",
+      "noParam": "No task or template specified",
+      "backToList": "Back to templates",
+      "preview": {
+        "detailEmpty": "Click a node to inspect its config",
+        "config": "Node Config"
+      }
     }
   },
   "market": {
@@ -382,8 +737,7 @@
     "skillPlusMcpTypes": "Skill + MCP types",
     "tabSkills": "Skills ({count})",
     "tabMcp": "MCP Servers ({count})",
-    "searchSkillsPlaceholder": "Search skills by name or category...",
-    "searchMcpPlaceholder": "Search MCP by name or type...",
+    "searchPlaceholder": "Search skills or MCP...",
     "addSkill": "New Skill",
     "addMcp": "New MCP",
     "usedByAgents": "Used by {count} agents",
@@ -399,7 +753,23 @@
     "errDeleteSkill": "Failed to delete skill: ",
     "errDeleteMcp": "Failed to delete MCP server: ",
     "errToggleMcp": "Failed to update MCP status: ",
-    "skillModal": {
+    "category": {
+      "frontend": "Frontend",
+      "backend": "Backend",
+      "data": "Data",
+      "security": "Security",
+      "ops": "Ops",
+      "docs": "Docs",
+      "performance": "Performance",
+      "quality": "Quality",
+      "design": "Design",
+      "storage": "Storage",
+      "code": "Code",
+      "database": "Database",
+      "service": "Service",
+      "uncategorized": "Uncategorized"
+    },
+    "skillForm": {
       "editTitle": "Edit Skill",
       "addTitle": "New Skill",
       "nameLabel": "Skill name",
@@ -413,7 +783,7 @@
       "save": "Save",
       "saving": "Saving"
     },
-    "mcpModal": {
+    "mcpForm": {
       "editTitle": "Edit MCP Server",
       "addTitle": "New MCP Server",
       "nameLabel": "Server name",
@@ -431,22 +801,6 @@
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving"
-    },
-    "category": {
-      "frontend": "Frontend",
-      "backend": "Backend",
-      "data": "Data",
-      "security": "Security",
-      "ops": "Ops",
-      "docs": "Docs",
-      "performance": "Performance",
-      "quality": "Quality",
-      "design": "Design",
-      "storage": "Storage",
-      "code": "Code",
-      "database": "Database",
-      "service": "Service",
-      "uncategorized": "Uncategorized"
     }
   },
   "agents": {
@@ -475,7 +829,8 @@
       "gitHint": "The Git commit identity (user.name / user.email) the instance commits with; required.",
       "providerLabel": "Runs with",
       "cancel": "Cancel",
-      "submit": "Create"
+      "submit": "Create",
+      "targetLabel": "Target daemon"
     },
     "personaBadge": "Memory key {key} · shares memory with instances of the same key (same machine)",
     "personaLabel": "Memory key (immutable after creation)",
@@ -532,7 +887,14 @@
       "historyLabel": "Recent execution history",
       "historyCompleted": "Completed",
       "historyIntervention": "Needs intervention",
-      "historyInProgress": "In progress"
+      "historyInProgress": "In progress",
+      "gitLabel": "Git Identity"
+    },
+    "meta": {
+      "online": "Online",
+      "busy": "Busy",
+      "waiting": "Paused/Pending",
+      "offline": "Offline"
     }
   },
   "daemons": {
@@ -540,10 +902,8 @@
     "noDevice": "No device info reported",
     "agentsCount": "{count} agents",
     "heartbeat": "Heartbeat",
-    "noAgents": "No instances on this machine yet — click \"Add Agent\" under a detected tool below.",
+    "noAgents": "No agents on this machine yet — click \"Add Agent\" in the group header to create one.",
     "noProviders": "No tool detection reported yet — available coding tools are reported automatically once connected.",
-    "noInstances": "No instances yet — click \"Add Agent\" to create one under this tool.",
-    "instancesCount": "{count} instances",
     "providerMissing": "Tool not detected",
     "deleteButton": "Delete",
     "deleteFailed": "Delete failed, please retry",
@@ -593,11 +953,8 @@
       "confirmDelete": "Delete"
     },
     "empty": {
-      "title": "No daemons connected yet",
-      "desc": "A daemon (agentd) runs on your work machine — one per machine. It registers with a token and reports machine/tool status.",
-      "step1": "Click \"Connect Daemon\" — you will get a daemon token (shown only once)",
-      "step2": "Install agentd on the machine and run teammate-agentd workspace add <token> to add the connection",
-      "step3": "Start agentd to register, then create instances on the \"AI Agents\" page and configure instructions/skills/MCP"
+      "title": "Connect a daemon",
+      "desc": "Connect a daemon to create AI agents"
     }
   },
   "members": {
@@ -634,45 +991,29 @@
       "cancel": "Cancel",
       "confirm": "Confirm",
       "errChange": "Failed to change role: "
-    }
+    },
+    "confirmRemoveConfirm": "Remove",
+    "cancelRemove": "Cancel"
   },
   "reviews": {
-    "title": "Review Queue",
-    "subtitle": "{count} tasks awaiting review · automatic self-review risk detection",
-    "filterAll": "All",
-    "filterRejected": "Rejected",
-    "filterPending": "Pending Review",
-    "emptyTitle": "No tasks awaiting review",
-    "emptyDesc": "All tasks have passed review, or there are no review tasks",
+    "title": "Manual Todos",
+    "subtitle": "{count} tasks await human input",
+    "emptyTitle": "No tasks awaiting human input",
+    "emptyDesc": "Tasks appear here while they wait for human input",
     "unknownNode": "Unknown node",
     "unassigned": "Unassigned",
-    "statusRejected": "Rejected",
-    "statusPending": "Pending Review",
-    "rejectCount": "Rejected {count} times",
     "currentNode": "Current node:",
-    "reviewer": "Reviewer:",
-    "selfReviewBadge": "Self-review risk",
-    "selfReviewRisk": "Self-review risk: {agent} participated in both coding and review",
-    "suggestChange": "Consider changing the reviewer",
-    "approve": "Approve",
-    "reject": "Reject",
+    "executor": "Executor:",
     "progress": "Progress {completed}/{total}",
-    "rejectDialog": {
-      "title": "Reject Task",
-      "reasonLabel": "Rejection reason",
-      "reasonPlaceholder": "Explain the rejection reason in detail...",
-      "cancel": "Cancel",
-      "confirm": "Confirm Reject"
-    }
+    "description": "Description",
+    "constraints": "Constraints",
+    "goHandle": "Go Handle",
+    "goHandleHint": "Submit or cancel in the task detail form"
   },
   "agentDetail": {
     "loading": "Loading agent info...",
     "notFound": "Agent not found",
     "backToList": "Back to list",
-    "statusRunning": "Running",
-    "statusIdle": "Idle",
-    "statusError": "Error",
-    "statusCompleted": "Completed",
     "identity": "Identity Instruction",
     "identityEmpty": "No identity instruction set",
     "knowledge": "Knowledge Base",
@@ -751,24 +1092,6 @@
   },
   "dashboard": {
     "loadError": "Failed to load task data, retrying automatically…",
-    "reassignDialog": {
-      "title": "Reassign Node",
-      "description": "Choose the AI agent to take over this node. The node will reset to unclaimed and be reserved for the selected agent.",
-      "noAgents": "No AI agents in this project yet",
-      "confirm": "Reassign"
-    },
-    "agentStatus": {
-      "online": "Online",
-      "busy": "Busy",
-      "offline": "Offline"
-    },
-    "rejectDialog": {
-      "title": "Reject Node",
-      "selectTarget": "Select the node to reject to",
-      "reasonLabel": "Rejection reason",
-      "reasonPlaceholder": "Explain the rejection reason in detail...",
-      "confirmTo": "Confirm reject to node {targetNode}"
-    },
     "editTask": {
       "title": "Edit Task",
       "titleLabel": "Title",
@@ -777,10 +1100,10 @@
       "save": "Save changes"
     },
     "priority": {
-      "urgent": "🔴 Urgent",
-      "high": "🟠 High",
-      "medium": "🟡 Medium",
-      "low": "🟢 Low"
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
     },
     "subTasks": {
       "header": "Subtasks ({count})",
@@ -807,69 +1130,46 @@
       "header": "Node Summary — {nodeName}"
     },
     "dataFlow": {
-      "header": "Data Flow",
-      "action": {
-        "approve": "Approve",
-        "reject": "Reject",
-        "manual": "Manual",
-        "reclaim": "Resume",
-        "timeout": "Timeout"
-      },
-      "transitionTitle": "Node Transitions",
+      "header": "Execution History",
+      "transitionTitle": "Attempts",
+      "attemptNo": "Attempt {no}",
+      "statusRunning": "Running",
+      "statusSucceeded": "Succeeded",
+      "statusFailed": "Failed",
+      "statusCancelled": "Cancelled",
       "nodeFallback": "Node #{index}",
       "gitTransfer": "Git Handoff",
       "continuationRight": "Continuation Right",
-      "reservedFor": "Reserved for"
-    },
-    "claimButton": {
-      "claimNode": "+ Claim this node"
-    },
-    "reviewComment": {
-      "nodeApproved": "Node approved",
-      "adminInterrupt": "Admin forced interrupt",
-      "markManual": "Marked as needs manual intervention"
+      "reservedFor": "Reserved for",
+      "executorAgent": "Executor: {name}",
+      "executorKind": "Executor kind: {kind}"
     },
     "status": {
-      "completed": "Completed",
+      "waiting": "Waiting",
+      "ready": "Ready",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "skipped": "Skipped",
       "cancelled": "Cancelled",
-      "manualIntervention": "Needs Intervention",
-      "rejected": "Needs Rework",
-      "inProgress": "In Progress",
-      "pending": "Unclaimed"
+      "manualIntervention": "Needs Human"
     },
     "overdue": "Overdue",
-    "rejectCount": "Rejected {count} times",
     "actions": {
       "cancelTask": "Cancel Task",
-      "deleteTask": "Delete Task",
-      "resume": "Resume",
-      "reassign": "Reassign",
-      "approve": "✅ Approve",
-      "rejectTo": "❌ Reject to...",
-      "manualIntervention": "🚩 Needs Intervention",
-      "interrupt": "⏹ Interrupt",
-      "markManual": "🚩 Mark Needs Intervention"
+      "deleteTask": "Delete Task"
     },
     "workflow": {
       "progress": "Workflow Progress"
     },
-    "nodeStatus": {
-      "active": "Active",
-      "needsRework": "Needs Rework",
-      "blocked": "Blocked",
-      "timeout": "Timeout: {minutes}min"
-    },
-    "manualIntervention": {
-      "title": "Needs Manual Intervention"
-    },
     "taskDescription": "Task Description",
     "terminal": {
       "nodeLabel": "Node #{index}",
-      "noLogs": "No execution logs for this node yet..."
+      "noLogs": "No execution logs for this node yet...",
+      "live": "Live"
     },
     "nodeActions": {
       "title": "Current Node Actions",
-      "status": "Status:",
       "readonlyDirs": "Read-only dirs:",
       "fullControl": "Full control:",
       "executor": "Executor:"
@@ -882,8 +1182,6 @@
       "dueDate": "Due Date",
       "labels": "Labels",
       "labelCount": "{count}",
-      "rejectCount": "Rejections",
-      "rejectCountValue": "{count} times",
       "progress": "Progress"
     },
     "gitBranch": {
@@ -896,30 +1194,26 @@
     "tokenUsage": {
       "title": "Token Usage"
     },
-    "continuationBadge": {
-      "waiting": "Waiting for {agentName} to renew ( {seconds}s left)"
-    },
     "taskColumn": {
       "empty": "No tasks"
     },
     "badge": {
       "urgent": "Urgent",
-      "review": "Review"
+      "human": "Manual"
     },
     "taskCard": {
-      "priorityRenewal": "{agentName} priority renewal {seconds}s",
-      "awaitingClaim": "Awaiting claim",
-      "nodeTimeout": "Node timeout: {minutes}min",
-      "rejectedCount": "Rejected {count} times"
+      "awaitingAgent": "Awaiting executor"
     },
     "filters": {
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
-      "manualIntervention": "Needs Intervention",
-      "rejected": "Needs Rework",
-      "inProgress": "In Progress",
-      "pending": "Unclaimed",
-      "completed": "Completed",
+      "manualIntervention": "Needs Human",
+      "failed": "Failed",
+      "running": "Running",
+      "ready": "Ready",
+      "waiting": "Waiting",
+      "succeeded": "Succeeded",
+      "skipped": "Skipped",
       "cancelled": "Cancelled",
       "taskCount": "{count} tasks in total"
     },
@@ -929,12 +1223,9 @@
         "type": "Type",
         "priority": "Priority",
         "status": "Status",
-        "currentNode": "Current Node",
         "executor": "Executor",
-        "progress": "Progress",
-        "actions": "Actions"
-      },
-      "claim": "Claim"
+        "chain": "Chain"
+      }
     },
     "tabs": {
       "active": "Active",
@@ -944,31 +1235,58 @@
       "placeholder": "Search task ref or title..."
     },
     "projects": {
-      "allProjects": "📁 All Projects"
+      "allProjects": "All Projects"
     },
     "agents": {
-      "allAgents": "🤖 All Agents"
+      "allAgents": "All agents"
     },
     "view": {
-      "kanban": "Kanban View"
+      "kanban": "Kanban View",
+      "list": "List view"
     },
     "kanbanColumn": {
-      "manualIntervention": "🚩 Needs Intervention",
-      "inProgress": "🔧 In Progress",
-      "pending": "⏳ Unclaimed",
-      "completed": "✅ Completed"
+      "pending": "Pending",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "manualIntervention": "Needs Human"
     },
     "common": {
-      "cancel": "Cancel",
-      "unassigned": "Unassigned"
+      "cancel": "Cancel"
     },
     "runCanvas": {
-      "executing": "running",
-      "waiting": "waiting",
-      "done": "done",
-      "rejected": "rejected",
-      "manualIntervention": "manual pending",
-      "current": "current"
+      "refreshing": "Refreshing…"
+    },
+    "title": "Task Monitor",
+    "retryLoad": "Retry",
+    "empty": {
+      "title": "No tasks in this project yet",
+      "description": "Launch a task from a workflow template; it will progress node by node."
+    },
+    "stats": {
+      "inProgress": "Running",
+      "pendingClaim": "To run",
+      "needManual": "Need manual",
+      "onlineAgents": "Agents online"
+    },
+    "attention": {
+      "empty": "No items waiting for manual handling",
+      "more": "{count} more waiting"
+    },
+    "cockpit": {
+      "trackTitle": "Tasks ({count})",
+      "close": "Close focus, back to tasks"
+    },
+    "chain": {
+      "ariaLabel": "Task node collaboration chain",
+      "unnamedNode": "Unnamed node",
+      "unassigned": "Unassigned",
+      "noNodes": "No node info"
+    },
+    "humanSubmit": {
+      "title": "Waiting for human input",
+      "submit": "Submit",
+      "cancelNode": "Cancel Node"
     }
   },
   "settings": {
@@ -1062,7 +1380,8 @@
       "defaultCannotDelete": "The default workspace cannot be deleted",
       "deleteConfirm": "Are you sure you want to delete this workspace? This action cannot be undone.",
       "deleteFailed": "Delete failed",
-      "deleting": "Deleting..."
+      "deleting": "Deleting...",
+      "deleteCancel": "Cancel"
     }
   },
   "themeImporter": {
