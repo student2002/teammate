@@ -100,6 +100,12 @@ DI wiring: `db.Connect()` → `store.New(db)` → `service.New(db, hub, redis)` 
 - **Frontend path alias:** `@/*` maps to `web/*` root (not `web/src/*`)
 - **Tailwind v4 CSS-first config:** no `tailwind.config.js`; theming via `data-theme` attribute + CSS custom properties. Themes are pluggable modules under `web/lib/themes/<id>/` (metadata in `index.ts`, vars in `theme.css`); register a new theme by adding one line to `web/lib/themes/registry.ts`. Components use semantic utilities (`bg-surface`, `text-fg-muted`, `border-line`, `bg-primary/15`) — never raw palette classes
 - **Frontend UI language:** all labels and user-facing text are zh-CN
+- **Frontend 禁止假数据冒充真实数据（用户指令沉淀）：** 下拉/列表等展示工作区数据的控件必须接真实接口或显示空态提示，不得硬编码演示数据冒充（曾发生：Inspector 的"指定 Agent"下拉硬编码三个假 agent，误导用户以为工作区有 agent）。明确标注的示例/预制内容（如编辑器起始模板选择器的预制流水线、运行视图样例）允许保留，但必须带显式的"预制/样板"标识，与真实数据在 UI 上可区分
+- **审查清单:渲染类缺陷维度（用户指令沉淀,经盲审验证有效）：** 独立审查涉及画布/布局/样式/视图的 diff 时,必须执行专项检查:①逐个追"字段缺失兜底值"(x ?? 0、|| 0 等)的真实数据流,判断兜底是否掩盖数据缺失并导致布局退化(如全部节点叠同一坐标、自动布局被跳过);②同款布局/渲染逻辑多处实现时逐处比对一致性;③视图布局逻辑必须有"缺数据输入"场景的单测;④修复任何一处必须 grep 全仓同款写法;⑤涉及渲染的改动,交付证据必须含真实浏览器渲染走查。静态检查(lint/tsc/单测全绿)不能替代渲染走查
+- **页面交互不用弹窗,一律内联展开（用户指令沉淀）：** 整个 web 在做"弹窗内联化"(见提交 feat: web 弹窗内联化),新增交互(运行表单/确认/输入等)必须用页面内联展开或行内确认(InlineConfirm),不得引入遮罩弹窗;曾发生:发起运行的输入做成遮罩弹窗被教主叫停,改为卡片内联展开
+- **交付前必须在部署栈真实跑通（用户指令沉淀）：** 编码任务的完成标准不是"单测绿+页面能开"，交付涉及后端引擎/流水线行为的改动前，必须在部署栈真实触发一次全链路（建模板→触发运行→逐节点断言结果），跑不通不得交付（教主原话："起码要跑通才给我"）
+- **"参考 X"默认指功能层，展示形态改动须单独确认（用户指令沉淀）：** 教主说"参考 n8n/ComfyUI"时指功能与语义（节点能力、执行行为、交互能力），不等于授权改展示形态；改动"参数是否内联在卡片上编辑"这类既定形态前必须单独问清，曾发生：把"参考 n8n"扩大理解为"删卡片内联编辑改双击面板"被叫停，最终结论是卡片内联编辑与双击面板并存
+- **用户点名参考实现时，先读参考源码再动手（用户指令沉淀）：** 用户指定"参考 X 的做法"（如 ComfyUI 节点卡）时，必须先找到并阅读参考代码确认具体交互与布局，再照做；不得只凭对参考产品的印象自行发挥（曾发生：凭想象把端口标签做成卡片外挂文字，与 ComfyUI 实际的"端口名在节点内、每端口独立一行"不符，返工一轮）。同时，用户一条消息里的追加要求（"另外/也/顺便"引出的）逐条列出逐条落实，交付前对照原消息逐条自查，不得漏接
 - **Frontend state:** single flat Zustand store in `web/lib/store.ts` — no slices, no React Query/SWR
 - **Frontend API:** plain `fetch` wrapper in `web/lib/api.ts`; auth via Bearer token from localStorage
 - **Data mapping:** `web/lib/mappers.ts` transforms snake_case API → camelCase frontend types
