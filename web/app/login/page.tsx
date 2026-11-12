@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/api";
@@ -11,12 +12,21 @@ import ThemeSwitcher from "@/lib/themes/ThemeSwitcher";
 import BrandMark from "@/lib/product/BrandMark";
 import Button from "@/lib/ui/Button";
 import { useAppStore } from "@/lib/store";
+import { useMediaQuery } from "@/lib/use-media-query";
+
+// 登录页装饰场景独立 chunk,与 Dashboard 数据场景解耦
+const AmbientAgentNetwork = dynamic(
+  () => import("@/lib/agent-network/AmbientAgentNetwork"),
+  { ssr: false }
+);
 
 export default function LoginPage() {
   const t = useTranslations("login");
   const router = useRouter();
   const setUser = useAppStore((s) => s.setUser);
   const loadInitialData = useAppStore((s) => s.loadInitialData);
+  // 装饰场景仅在品牌区可见(≥1024px)时挂载,小屏不加载 Three.js chunk
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -84,7 +94,13 @@ export default function LoginPage() {
     <div className="min-h-screen flex bg-bg">
       {/* 品牌区：1024px 以上显示 */}
       <div className="hidden lg:flex lg:w-[45%] min-[1440px]:w-[55%] cockpit-grid border-r border-line relative">
-        <div className="m-auto max-w-md px-10 xl:px-14 py-16 animate-fade-in">
+        {/* 纯装饰抽象粒子背景:aria-hidden 且不接收指针事件,不承载任何数据含义 */}
+        {isDesktop && (
+          <div className="absolute inset-0 pointer-events-none opacity-60" aria-hidden="true">
+            <AmbientAgentNetwork />
+          </div>
+        )}
+        <div className="relative z-10 m-auto max-w-md px-10 xl:px-14 py-16 animate-fade-in">
           <div className="w-12 h-12 rounded-[var(--radius-card)] bg-gradient-to-br from-primary to-accent-strong flex items-center justify-center text-fg">
             <BrandMark size={26} />
           </div>

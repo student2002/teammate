@@ -362,12 +362,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadProjectData: async (projectId: string) => {
+    // 请求期间可能切走工作区:响应返回时若工作区已变,丢弃结果,
+    // 避免旧工作区的任务列表(或失败清空)写入新工作区
+    const wsAtStart = get().currentWorkspaceId;
     try {
       const result = (await api.listTasks(projectId, "all")) as TaskWithNodesList;
+      if (get().currentWorkspaceId !== wsAtStart) return;
       const agents = get().agents;
       const mappedTasks = (result || []).map((item) => mapTaskFromApi(item, agents));
       set({ tasks: mappedTasks, loadError: false });
     } catch {
+      if (get().currentWorkspaceId !== wsAtStart) return;
       // 保留 last-good 数据供看板/面板继续使用;仅当现有数据属于其它项目
       // (切换项目失败)时才清空,避免跨项目脏数据
       const current = get().tasks;

@@ -85,22 +85,25 @@ export default function MembersPage() {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !currentWorkspaceId) return;
     setInviting(true);
     setInviteError(null);
+    setInviteSuccess(null);
     try {
-      const result = await api.createMember(currentWorkspaceId, {
+      // 邀请接口返回的是 invitation(含待接受的令牌),不是成员对象;
+      // 被邀请人接受邀请后才进入成员列表,因此这里只做成功提示
+      await api.createMember(currentWorkspaceId, {
         name: inviteName.trim() || inviteEmail.split("@")[0],
         email: inviteEmail.trim(),
         role: inviteRole, // 小写，与后端一致
       });
-      setMembers((prev) => [...prev, result as Member]);
+      setInviteSuccess(tInvite("success"));
       setInviteEmail("");
       setInviteName("");
       setInviteRole("member");
-      setShowInvite(false);
     } catch (err) {
       setInviteError(tInvite("errInvite") + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -163,7 +166,14 @@ export default function MembersPage() {
         meta={<span className="text-xs text-fg-faint">{t("memberCount", { count: members.length })}</span>}
         actions={
           canManageMembers && (
-            <Button variant="primary" onClick={() => setShowInvite(!showInvite)}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowInvite(!showInvite);
+                setInviteSuccess(null);
+                setInviteError(null);
+              }}
+            >
               <Plus className="w-4 h-4 mr-1.5" /> {t("add")}
             </Button>
           )
@@ -180,6 +190,11 @@ export default function MembersPage() {
           {inviteError && (
             <div className="px-3 py-2 bg-danger/10 border border-danger/20 rounded-[var(--radius-control)] text-sm text-danger-fg">
               {inviteError}
+            </div>
+          )}
+          {inviteSuccess && (
+            <div className="px-3 py-2 bg-success/10 border border-success/20 rounded-[var(--radius-control)] text-sm text-success-fg">
+              {inviteSuccess}
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

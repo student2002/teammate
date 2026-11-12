@@ -21,6 +21,7 @@ import type { MappedTask } from "@/lib/types";
 import TaskBoard, { type BoardColumn, type BoardColumnType } from "@/lib/dashboard/TaskBoard";
 import TaskList from "@/lib/dashboard/TaskList";
 import TaskCockpit from "@/lib/dashboard/TaskCockpit";
+import AgentNetworkPanel from "@/lib/agent-network/AgentNetworkPanel";
 import { useTranslations } from "next-intl";
 
 const boardTypeMap: Record<string, BoardColumnType> = {
@@ -361,6 +362,14 @@ export default function DashboardPage() {
         <StatBlock dot="bg-warning-fg" label={t("stats.needManual")} value={manualCount} />
         <StatBlock dot="bg-success-fg" label={t("stats.onlineAgents")} value={onlineAgents} />
       </div>
+
+      {/* 3D Agent 协作网络:真实 Agent/任务数据,点击节点联动上下文,"查看相关任务"设 filterAgent */}
+      <AgentNetworkPanel
+        agents={agents}
+        tasks={tasks}
+        projectId={currentProjectId}
+        onViewTasks={setFilterAgent}
+      />
 
       {/* 注意队列 */}
       {attentionTasks.length === 0 ? (

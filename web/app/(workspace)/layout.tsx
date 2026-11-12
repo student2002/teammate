@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import ContextBar from "./ContextBar";
 import Button from "@/lib/ui/Button";
+import TaskCommandDock from "@/lib/task-command/TaskCommandDock";
 import { useAppStore } from "@/lib/store";
 
 export default function WorkspaceLayout({
@@ -144,9 +145,13 @@ export default function WorkspaceLayout({
           </div>
         )}
 
-        {/* 页面内容：页面自己管理滚动 */}
-        <div className="flex-1 overflow-y-auto page-enter">
-          {children}
+        {/* 页面内容与任务指挥台组成可伸缩布局:
+            桌面端指挥台为右侧栏(展开推开内容),移动端指挥台在上、内联展开推开内容 */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0">
+          <div className="flex-1 min-w-0 overflow-y-auto page-enter order-2 md:order-1">
+            {children}
+          </div>
+          <TaskCommandDock className="order-1 md:order-2 shrink-0" />
         </div>
       </div>
     </div>

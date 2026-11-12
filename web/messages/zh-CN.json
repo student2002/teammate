@@ -982,7 +982,8 @@
       "roleViewerDesc": "只读访问",
       "cancel": "取消",
       "submit": "添加成员",
-      "errInvite": "邀请成员失败: "
+      "errInvite": "邀请成员失败: ",
+      "success": "邀请已发送,对方接受后将出现在成员列表"
     },
     "changeRole": {
       "title": "修改角色",
@@ -1396,5 +1397,96 @@
     "installFailed": "安装失败",
     "conflict": "同名主题已存在,请先删除或换一个 id",
     "deleteFailed": "删除失败"
+  },
+  "agentNetwork": {
+    "title": "协作网络",
+    "collapse": "收起",
+    "expand": "展开",
+    "agentsCount": "{count} 个 Agent",
+    "empty": {
+      "title": "当前工作区尚未配置 Agent",
+      "description": "在 Agent 页接入守护进程并创建 Agent 后,这里会展示真实的 Agent 协作关系与任务交接流光"
+    },
+    "fallback": {
+      "taskCount": "{count} 个进行中任务"
+    },
+    "context": {
+      "none": "未选中 Agent",
+      "noneHint": "点击网络中的节点,查看该 Agent 的当前状态与进行中任务",
+      "status": "状态",
+      "activeTasks": "进行中任务",
+      "noActiveTasks": "该 Agent 暂无进行中任务",
+      "moreTasks": "还有 {count} 个任务",
+      "viewTasks": "查看相关任务",
+      "clear": "清除选择"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "busy": "忙碌",
+      "paused": "已暂停",
+      "pending": "待命"
+    }
+  },
+  "taskCommand": {
+    "title": "任务指挥台",
+    "draftHint": "有未完成的发布草稿",
+    "collapse": "收起",
+    "viewerNotice": "当前角色为只读,无法发布任务",
+    "intro": {
+      "headline": "发布任务",
+      "description": "描述你希望团队完成的工作。我会把原始需求交给工作流,并在发布前让你确认。"
+    },
+    "start": "开始",
+    "steps": {
+      "requirement": "描述任务",
+      "project": "选择工程",
+      "workflow": "选择工作流",
+      "review": "发布预览"
+    },
+    "requirement": {
+      "placeholder": "描述你希望团队完成的工作…",
+      "hint": "原始需求将原样交给工作流,不会自动解析或改写",
+      "quickFix": "修复问题",
+      "quickFeature": "实现功能",
+      "quickAnalysis": "分析任务",
+      "continue": "下一步:选择工程"
+    },
+    "project": {
+      "empty": "当前工作区还没有工程",
+      "emptyAction": "前往工程设置",
+      "current": "当前",
+      "continue": "下一步:选择工作流"
+    },
+    "workflow": {
+      "empty": "没有可手动运行的工作流",
+      "emptyDescription": "需要已启用且包含手动触发节点的工作流模板",
+      "emptyAction": "前往工作流页",
+      "version": "版本",
+      "continue": "下一步:发布预览"
+    },
+    "review": {
+      "titleLabel": "任务标题",
+      "projectLabel": "目标工程",
+      "workflowLabel": "工作流",
+      "requirementLabel": "需求全文",
+      "warning": "确认后会立即创建并启动真实任务",
+      "confirm": "确认发布",
+      "back": "返回修改"
+    },
+    "submitting": "正在创建并启动任务…",
+    "succeeded": {
+      "title": "任务已发布",
+      "taskId": "任务 ID",
+      "viewRun": "查看运行",
+      "next": "发布下一个任务"
+    },
+    "failed": {
+      "title": "发布失败",
+      "generic": "发布失败,请稍后重试",
+      "retry": "重试",
+      "back": "返回修改",
+      "draftKept": "草稿已保留,可直接重试或返回修改"
+    }
   }
 }

@@ -982,7 +982,8 @@
       "roleViewerDesc": "Read-only access",
       "cancel": "Cancel",
       "submit": "Add Member",
-      "errInvite": "Failed to invite member: "
+      "errInvite": "Failed to invite member: ",
+      "success": "Invitation sent — they will appear in the member list once accepted"
     },
     "changeRole": {
       "title": "Change Role",
@@ -1396,5 +1397,96 @@
     "installFailed": "Install failed",
     "conflict": "A theme with this id already exists",
     "deleteFailed": "Delete failed"
+  },
+  "agentNetwork": {
+    "title": "Collaboration Network",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "agentsCount": "{count} agents",
+    "empty": {
+      "title": "No agents configured for this workspace",
+      "description": "Once a daemon is connected and agents are created on the Agents page, real agent collaboration and task handoff flows will appear here"
+    },
+    "fallback": {
+      "taskCount": "{count} active tasks"
+    },
+    "context": {
+      "none": "No agent selected",
+      "noneHint": "Click a node in the network to view its status and active tasks",
+      "status": "Status",
+      "activeTasks": "Active tasks",
+      "noActiveTasks": "No active tasks for this agent",
+      "moreTasks": "{count} more tasks",
+      "viewTasks": "View related tasks",
+      "clear": "Clear selection"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "busy": "Busy",
+      "paused": "Paused",
+      "pending": "Pending"
+    }
+  },
+  "taskCommand": {
+    "title": "Task Command",
+    "draftHint": "Unpublished draft",
+    "collapse": "Collapse",
+    "viewerNotice": "Read-only role: publishing is disabled",
+    "intro": {
+      "headline": "Publish a task",
+      "description": "Describe the work you want the team to do. The raw requirement goes to a workflow, and you confirm everything before publishing."
+    },
+    "start": "Start",
+    "steps": {
+      "requirement": "Describe task",
+      "project": "Choose project",
+      "workflow": "Choose workflow",
+      "review": "Review"
+    },
+    "requirement": {
+      "placeholder": "Describe the work you want the team to complete…",
+      "hint": "The raw requirement is passed to the workflow as-is, without automatic parsing or rewriting",
+      "quickFix": "Bug fix",
+      "quickFeature": "Feature",
+      "quickAnalysis": "Analysis",
+      "continue": "Next: choose project"
+    },
+    "project": {
+      "empty": "No projects in this workspace yet",
+      "emptyAction": "Go to project settings",
+      "current": "current",
+      "continue": "Next: choose workflow"
+    },
+    "workflow": {
+      "empty": "No manually runnable workflows",
+      "emptyDescription": "A workflow template must be enabled and contain a manual trigger node",
+      "emptyAction": "Go to workflows",
+      "version": "Version",
+      "continue": "Next: review"
+    },
+    "review": {
+      "titleLabel": "Task title",
+      "projectLabel": "Target project",
+      "workflowLabel": "Workflow",
+      "requirementLabel": "Requirement",
+      "warning": "Confirming will immediately create and start a real task",
+      "confirm": "Confirm publish",
+      "back": "Back to edit"
+    },
+    "submitting": "Creating and starting the task…",
+    "succeeded": {
+      "title": "Task published",
+      "taskId": "Task ID",
+      "viewRun": "View run",
+      "next": "Publish next task"
+    },
+    "failed": {
+      "title": "Publish failed",
+      "generic": "Publish failed, please retry later",
+      "retry": "Retry",
+      "back": "Back to edit",
+      "draftKept": "Draft kept — you can retry or go back to edit"
+    }
   }
 }
